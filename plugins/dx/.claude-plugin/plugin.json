@@ -1,0 +1,10 @@
+{
+  "name": "dx",
+  "description": "Developer experience for Claude Code: a status band with model, effort, directory, context and usage limits, subagents and background tasks",
+  "author": { "name": "IMSike" },
+  "homepage": "https://github.com/IMSike/CC-Plugins/blob/main/docs/en/plugins/dx.md",
+  "repository": "https://github.com/IMSike/CC-Plugins",
+  "license": "MIT",
+  "keywords": ["statusline", "status", "usage", "rate-limits", "subagents", "background-tasks", "mod"],
+  "types": "./types/index.d.ts"
+}

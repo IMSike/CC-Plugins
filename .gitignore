@@ -1,0 +1,21 @@
+# Types Claude Code writes beside each plugin it loads from a folder
+plugins/*/.claude-plugin/types/
+
+# Local tooling
+node_modules/
+
+# Secrets
+*.secret
+*.secrets.json
+.env
+
+# OS / editors
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+
+# Maintainer's notes (to-do, verification reports): kept out of the repository
+.maintainer/

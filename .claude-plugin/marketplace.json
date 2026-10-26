@@ -1,0 +1,15 @@
+{
+  "name": "cc-plugins",
+  "description": "Claude Code plugins offered by OS-Setup",
+  "owner": {
+    "name": "IMSike"
+  },
+  "plugins": [
+    {
+      "name": "dx",
+      "source": "./plugins/dx",
+      "description": "Developer experience: a status band with model, effort, directory, context and usage limits, subagents and background tasks",
+      "category": "development"
+    }
+  ]
+}
