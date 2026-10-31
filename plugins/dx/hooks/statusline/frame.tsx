@@ -16,6 +16,9 @@ export type FrameProps = {
   perimeter: number
   // The frame's color as hex: what the glints lighten.
   hex: string
+  // Whether the glints run, and how much faster than normal (settings).
+  glints: boolean
+  speed: number
 }
 type FrameState = { lit: string }
 
@@ -41,13 +44,15 @@ export function lightAt(index: number, head: number, perimeter: number): number 
   return Math.max(lightOf(index, head, perimeter), lightOf(index, head + perimeter / 2, perimeter))
 }
 
-function headAt(perimeter: number): number {
-  return ((Date.now() % LAP_MS) / LAP_MS) * perimeter
+function headAt(perimeter: number, speed: number): number {
+  const lap = LAP_MS / speed
+  return ((Date.now() % lap) / lap) * perimeter
 }
 
 // The light of each frame cell, joined: what changes when a redraw is due.
 function litOf(props: FrameProps): string {
-  const head = headAt(props.perimeter)
+  if (!props.glints) return ''
+  const head = headAt(props.perimeter, props.speed)
   let offset = 0
   let lit = ''
   for (const run of props.runs) {
@@ -75,13 +80,13 @@ const Frame: ClientModule<FrameProps, FrameState> = (props, surface) => {
   const latest = instances.get(surface)
   if (latest !== undefined) latest.props = props
 
-  const head = headAt(props.perimeter)
+  const head = headAt(props.perimeter, props.speed)
   const cells: { text: string; color: string; bold?: true; dim?: true }[] = []
   let offset = 0
   for (const run of props.runs) {
     const chars = Array.from(run.text)
     chars.forEach((char, cell) => {
-      const light = run.frame && char !== ' ' ? lightAt(props.start + props.step * (offset + cell), head, props.perimeter) : 0
+      const light = props.glints && run.frame && char !== ' ' ? lightAt(props.start + props.step * (offset + cell), head, props.perimeter) : 0
       const color = light > 0 ? lighten(props.hex, light) : run.color
       const last = cells[cells.length - 1]
       if (last !== undefined && last.color === color && last.bold === run.bold && last.dim === run.dim) last.text += char

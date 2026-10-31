@@ -13,6 +13,6 @@
 | Page | Contents |
 |---|---|
 | [Adding a plugin](adding-plugins.md) | Layout, manifest, hooks module, state, tests, marketplace entry |
-| [Architecture decisions](adr/) | [0001](adr/0001-function-hook-mods.md) plugins as function-hook mods · [0002](adr/0002-plugin-versions.md) plugin versions · [0003](adr/0003-system-process-list.md) background tasks and the process list |
+| [Architecture decisions](adr/) | [0001](adr/0001-function-hook-mods.md) plugins as function-hook mods · [0002](adr/0002-plugin-versions.md) plugin versions · [0003](adr/0003-system-process-list.md) background tasks and the process list · [0004](adr/0004-settings-and-notes.md) settings and notes |
 
 See also the [contribution guide](../../CONTRIBUTING.md).

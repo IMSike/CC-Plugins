@@ -10,7 +10,7 @@ A [Claude Code](https://code.claude.com) plugin marketplace: the plugins [OS-Set
 
 | Plugin | Contents |
 |---|---|
-| [`dx`](docs/en/plugins/dx.md) | Developer experience: a status band above the prompt with the model, the effort, the current directory, and gauges for the context and the 5-hour and 7-day usage limits, colored by level; an icon per subagent and background task, a click away from its transcript or output |
+| [`dx`](docs/en/plugins/dx.md) | Developer experience: a status band above the prompt with the model, the effort, the current directory, and gauges for the context and the 5-hour and 7-day usage limits, colored by level; an icon per subagent and background task, a click away from its transcript or output; the turn's duration; personal notes and settings panes |
 
 ## Installation
 

@@ -1,7 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On } from 'claude-code'
+import type { EngineInterface, On, RenderElement } from 'claude-code'
 
-import type { Activity, Task, TaskView } from '../../types'
+import type { Activity, PanelView, Task, TaskView } from '../../types'
+import { MONITOR, ROBOT, TERMINAL } from './crew'
+import { DEFAULT_SETTINGS } from './options'
+import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from './panes'
 import {
   cliAgentUnder,
   encodeCommand,
@@ -22,13 +25,15 @@ import type { ProcessTree } from './tasks'
 // or, as a safety net, from the system's process list, read only when a task
 // is due for a check: soon after it starts (to tell an agent CLI in it), then
 // further and further apart (ADR 0003).
+// What the band shows, set in ./settings: the panes' icons here.
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-1' })
+
 export const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
   shape: 'activity-1',
 })
 
 // The task shown in the terminal pane, its output read every PANE_MS.
 const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-1' })
-export const PANE = 'dx-task'
 const PANE_MS = 1000
 const PANE_LINES = 200
 
@@ -85,12 +90,11 @@ async function outputPath($: EngineInterface, id: string, result: unknown): Prom
   return `${tasksDir}/${id}.output`
 }
 
-// Reads the shown task's output, while its pane is open.
+// Reads the shown task's output, while the panel shows it.
 async function refreshPane($: EngineInterface): Promise<void> {
   const view = await read($, taskView)
   if (view === null) return
-  const panes = await $.ui.panes().catch(() => [])
-  if (!panes.some(pane => pane.id === PANE)) {
+  if (!(await isShowing($, 'task'))) {
     await update($, taskView, () => null)
     return
   }
@@ -184,22 +188,78 @@ export async function startActivity($: EngineInterface): Promise<void> {
   $.clock.every(PANE_MS, () => refreshPane($))
 }
 
-// Opens the terminal pane on a task (a click on its icon), or closes it when
-// it already shows that task.
-export async function showTask($: EngineInterface, id: string): Promise<void> {
+// Shows a task's terminal in the panel. A click on the task's icon (`toggle`)
+// closes the panel instead when it already shows that task.
+export async function showTask($: EngineInterface, id: string, toggle = true): Promise<void> {
   const shown = await read($, taskView)
-  const panes = await $.ui.panes().catch(() => [])
-  if (shown?.id === id && panes.some(pane => pane.id === PANE)) {
-    await $.ui.close({ id: PANE }).catch(() => undefined)
+  if (toggle && shown?.id === id && (await isShowing($, 'task'))) {
+    await closePanel($)
     await update($, taskView, () => null)
     return
   }
   const task = (await read($, activity)).tasks.find(one => one.id === id)
   if (task === undefined) return
-  const name = task.agent === 'claude' ? 'Claude CLI' : task.agent === 'cursor' ? 'Cursor CLI' : task.kind === 'monitor' ? 'Monitor' : 'Terminal'
   await update($, taskView, () => ({ id, command: task.command, output: task.output, lines: [] }))
-  await $.ui.open({ id: PANE, title: `${name} · ${task.command.slice(0, 60)}` })
+  await showPanel($, 'task')
   await refreshPane($)
+}
+
+// What `$.ui.resolve` takes: a pane's render event.
+type PaneRender = Parameters<EngineInterface['ui']['resolve']>[0]
+// Characters of a command its tab shows.
+const TAB_COMMAND = 24
+
+// The rows a row of labels takes, wrapped in `columns` with a cell between.
+function wrappedRows(labels: readonly string[], columns: number): number {
+  let rows = 1
+  let used = 0
+  for (const label of labels) {
+    const width = Math.min(columns, Array.from(label).length)
+    if (used > 0 && used + 1 + width > columns) {
+      rows += 1
+      used = width
+    } else {
+      used += (used > 0 ? 1 : 0) + width
+    }
+  }
+  return rows
+}
+
+// The panel's tabs, atop each of its contents: the notes, the settings, and a
+// terminal per background task, the one in front marked; `rows`, what they
+// take with their margin.
+export async function paneTabs($: EngineInterface, e: PaneRender, current: PanelView, columns: number): Promise<{ tabs: RenderElement; rows: number }> {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const { tasks } = await read($, activity)
+  const view = await read($, taskView)
+  const { notesIcon, settingsIcon } = await read($, settings)
+  const labels: string[] = []
+  const tab = (key: string, label: string, isCurrent: boolean, press: () => Promise<void>) => {
+    labels.push(label)
+    return (
+      <Button key={key} plain hover={{ bold: true }} onPress={() => (isCurrent ? undefined : press())}>
+        <Text color={isCurrent ? 'claude' : 'subtle'} inverse={isCurrent} bold={isCurrent} wrap="truncate-end">{label}</Text>
+      </Button>
+    )
+  }
+  const notesTab = tab('pane-notes', ` ${notesIcon}  ${TITLES.notes} `, current === 'notes', () => showPanel($, 'notes'))
+  const settingsTab = tab('pane-settings', ` ${settingsIcon}  ${TITLES.settings} `, current === 'settings', () => showPanel($, 'settings'))
+  // A wide glyph is followed by its own cell, then the space.
+  const terminals = tasks.map(task => {
+    const icon = task.agent !== undefined ? `${ROBOT}  ` : task.kind === 'monitor' ? `${MONITOR} ` : `${TERMINAL}  `
+    const command = task.command.split('\n')[0] ?? ''
+    const label = command.length > TAB_COMMAND ? `${command.slice(0, TAB_COMMAND - 1)}…` : command
+    return tab(`pane-task-${task.id}`, ` ${icon}${label} `, current === 'task' && view?.id === task.id, () => showTask($, task.id, false))
+  })
+
+  const tabs = (
+    <Box key="pane-tabs" flexShrink={0} flexWrap="wrap" columnGap={1} marginBottom={1}>
+      {notesTab}
+      {settingsTab}
+      {terminals}
+    </Box>
+  )
+  return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1 }
 }
 
 // Puts a subagent's transcript in view (a click on its icon), or the main
@@ -263,19 +323,22 @@ export function registerActivity(on: On): void {
 
   // The terminal pane: the command whole, wrapped, then as much of the
   // output's end as fits under it. A command taller than the pane scrolls it.
-  on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e, next) => {
+  on('ui.render', { component: 'Pane', requestId: PANEL }, async ($, e, next) => {
     const view = await read($, taskView)
-    if (view === null) return next(e)
+    if (view === null || (await panelView($)) !== 'task') return next(e)
     const { Box, Text } = $.ui.resolve(e)
+    const { tabs, rows } = await paneTabs($, e, 'task', e.props.bodyColumns)
     const columns = Math.max(10, e.props.bodyColumns)
     const commandRows = `$ ${view.command}`
       .split('\n')
       .reduce((rows, line) => rows + Math.max(1, Math.ceil(Array.from(line).length / columns)), 0)
-    const room = Math.max(1, e.props.scroll.bodyRows - commandRows - 1)
+    // Under the tabs, their margin and the rule.
+    const room = Math.max(1, e.props.scroll.bodyRows - commandRows - rows - 1)
     const lines = view.lines.slice(-room)
 
     return (
       <Box flexDirection="column">
+        {tabs}
         <Text wrap="wrap"><Text color="claude" bold>$ </Text><Text bold>{view.command}</Text></Text>
         <Text dimColor>{'─'.repeat(columns)}</Text>
         {view.output === undefined && <Text dimColor>Fichier de sortie introuvable.</Text>}

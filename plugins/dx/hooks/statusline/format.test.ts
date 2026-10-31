@@ -2,8 +2,10 @@ import { expect, test } from 'claude-code/testing'
 
 import {
   branchOf,
+  clockTime,
   compactNumber,
   countdown,
+  dayTime,
   duration,
   effortRank,
   exhaustionOf,
@@ -21,6 +23,7 @@ import {
   TRACK,
   travelMs,
   truncateStart,
+  turnDuration,
   USED,
 } from './format'
 
@@ -107,6 +110,19 @@ test('the shuttle glides from the first bead to the last consumed, then rests', 
   expect(shuttleAt(0, 5)).toBeUndefined()
   // A negative phase lands on the same course.
   expect(shuttleAt(-(travel + SHUTTLE_REST_MS), 40)).toBe(0)
+})
+
+test('a turn lasts to the second under an hour, to the minute past it', () => {
+  expect(turnDuration(0)).toBe('0m00')
+  expect(turnDuration(42_900)).toBe('0m42')
+  expect(turnDuration(64_000)).toBe('1m04')
+  expect(turnDuration(3_900_000)).toBe('1h05')
+})
+
+test('times of day are local, to the minute', () => {
+  const ms = new Date(2026, 9, 31, 9, 5).getTime()
+  expect(clockTime(ms)).toBe('09:05')
+  expect(dayTime(ms)).toBe('31/10 09:05')
 })
 
 test('a short course is a quick one, a long one is capped', () => {

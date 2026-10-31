@@ -10,7 +10,7 @@ Une marketplace de plugins [Claude Code](https://code.claude.com) : les plugins 
 
 | Plugin | Contenu |
 |---|---|
-| [`dx`](docs/fr/plugins/dx.md) | Confort de développement : un bandeau d'état au-dessus du prompt avec le modèle, l'effort, le répertoire courant, et des jauges pour le contexte et les limites d'utilisation sur 5 heures et 7 jours, colorées selon leur niveau ; une icône par sous-agent et par tâche en arrière-plan, à un clic de sa conversation ou de sa sortie |
+| [`dx`](docs/fr/plugins/dx.md) | Confort de développement : un bandeau d'état au-dessus du prompt avec le modèle, l'effort, le répertoire courant, et des jauges pour le contexte et les limites d'utilisation sur 5 heures et 7 jours, colorées selon leur niveau ; une icône par sous-agent et par tâche en arrière-plan, à un clic de sa conversation ou de sa sortie ; la durée du tour ; des panneaux de notes personnelles et de réglages |
 
 ## Installation
 

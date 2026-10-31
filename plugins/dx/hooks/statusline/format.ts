@@ -1,20 +1,34 @@
 // Pure helpers of the status band: no `$`, so they are tested on their own.
 
 // The heat scale of the gauges: green, yellow, orange, red, each blending
-// into the next, halfway at 25%, 50% and 75%. Mid-saturation tones, readable
-// on dark and light themes alike.
-const HEAT: readonly (readonly [number, readonly [number, number, number]])[] = [
-  [0, [46, 160, 67]],
-  [12.5, [46, 160, 67]],
-  [37.5, [212, 167, 44]],
-  [62.5, [227, 116, 47]],
-  [87.5, [248, 81, 73]],
-  [100, [218, 54, 81]],
-]
+// into the next, halfway at the thresholds: yellow at half the orange one,
+// then orange and red (25%, 50% and 75% by default). Mid-saturation tones,
+// readable on dark and light themes alike.
+type Rgb = readonly [number, number, number]
+const GREEN: Rgb = [46, 160, 67]
+const YELLOW: Rgb = [212, 167, 44]
+const ORANGE: Rgb = [227, 116, 47]
+const RED: Rgb = [248, 81, 73]
+const CRIMSON: Rgb = [218, 54, 81]
+export type Thresholds = readonly [orange: number, red: number]
+const DEFAULT_THRESHOLDS: Thresholds = [50, 75]
+
+function heatScale([orange, red]: Thresholds): readonly (readonly [number, Rgb])[] {
+  const yellow = orange / 2
+  return [
+    [0, GREEN],
+    [yellow / 2, GREEN],
+    [(yellow + orange) / 2, YELLOW],
+    [(orange + red) / 2, ORANGE],
+    [(red + 100) / 2, RED],
+    [100, CRIMSON],
+  ]
+}
 
 // Hex color of the heat scale at `percent`, quantized to steps of 2.5% so that
 // neighbouring cells share a color and are drawn as one run.
-export function heat(percent: number): string {
+export function heat(percent: number, thresholds: Thresholds = DEFAULT_THRESHOLDS): string {
+  const HEAT = heatScale(thresholds)
   const at = Math.round(Math.min(100, Math.max(0, percent)) / 2.5) * 2.5
   let index = 1
   while (index < HEAT.length - 1 && (HEAT[index]?.[0] ?? 100) < at) index += 1
@@ -85,14 +99,23 @@ function merged(runs: Run[]): Run[] {
 // for what is consumed ahead of it. `shuttle`, a position along the part
 // consumed, in cells, lights the cells around it. The track's color is the
 // caller's: the theme's.
-export function gauge(percent: number, width: number, track: string, pace?: number, shuttle?: number): Run[] {
+// `solid` draws every cell in that color instead of the heat gradient.
+export function gauge(
+  percent: number,
+  width: number,
+  track: string,
+  pace?: number,
+  shuttle?: number,
+  solid?: string,
+  thresholds: Thresholds = DEFAULT_THRESHOLDS,
+): Run[] {
   const cells = Math.max(0, Math.floor(width))
   const filled = filledCells(percent, cells)
   const budget = pace === undefined ? -1 : filledCells(pace, cells)
 
   const runs: Run[] = []
   for (let cell = 0; cell < cells; cell += 1) {
-    const color = heat(((cell + 0.5) / cells) * 100)
+    const color = solid ?? heat(((cell + 0.5) / cells) * 100, thresholds)
     if (cell < filled) {
       const light = shuttle === undefined ? 0 : glow(shuttle - cell)
       runs.push({
@@ -182,6 +205,29 @@ export function duration(seconds: number): string {
   if (days > 0) return `${days}j${hours}h`
   if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}`
   return `${minutes}m`
+}
+
+// A turn's duration, to the second under an hour: `0m42`, `1m04`, `1h05`.
+export function turnDuration(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const hours = Math.floor(total / 3600)
+  const minutes = Math.floor((total % 3600) / 60)
+  const seconds = total % 60
+
+  if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}`
+  return `${minutes}m${String(seconds).padStart(2, '0')}`
+}
+
+// The local time of day, `14:32`.
+export function clockTime(ms: number): string {
+  const date = new Date(ms)
+  return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+// The local day and time, `31/10 14:32`.
+export function dayTime(ms: number): string {
+  const date = new Date(ms)
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')} ${clockTime(ms)}`
 }
 
 // Time left until `resetsAt` (ISO 8601), as a duration.

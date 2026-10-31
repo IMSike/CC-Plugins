@@ -1,6 +1,7 @@
 import type { ClientModule } from 'claude-code'
 
 import { filledCells, gauge, shuttleAt } from './format'
+import type { Thresholds } from './format'
 
 // A gauge drawn on the surface's own thread, so that its shuttle moves without
 // the band being redrawn: the frame clock ticks here, and the hooks module only
@@ -13,6 +14,14 @@ export type GaugeProps = {
   // Milliseconds the shuttle's cycle is shifted by, so that the gauges of the
   // band do not move together.
   phase: number
+  // Whether the shuttle runs (a setting).
+  shuttle: boolean
+  // One color for every cell instead of the heat gradient, or null.
+  solid: string | null
+  // Where the heat gradient turns orange, then red.
+  thresholds: Thresholds
+  // How much faster than normal the shuttle runs.
+  speed: number
 }
 
 type GaugeState = {
@@ -39,9 +48,9 @@ const Gauge: ClientModule<GaugeProps, GaugeState> = (props, surface) => {
       const state = surface.state
       if (state === undefined) return
 
-      state.clock.elapsed += FRAME_MS
-      const { percent, width } = state.clock.props
-      const shuttle = rounded(shuttleAt(state.clock.elapsed, filledCells(percent, width)))
+      state.clock.elapsed += FRAME_MS * state.clock.props.speed
+      const { percent, width, shuttle: runs } = state.clock.props
+      const shuttle = runs ? rounded(shuttleAt(state.clock.elapsed, filledCells(percent, width))) : null
       // Resting, nothing moves: no redraw.
       if (shuttle !== state.shuttle) surface.setState({ ...state, shuttle })
     })
@@ -50,7 +59,7 @@ const Gauge: ClientModule<GaugeProps, GaugeState> = (props, surface) => {
   }
 
   const shuttle = surface.state?.shuttle ?? undefined
-  const runs = gauge(props.percent, props.width, 'subtle', props.pace ?? undefined, shuttle)
+  const runs = gauge(props.percent, props.width, 'subtle', props.pace ?? undefined, props.shuttle ? shuttle : undefined, props.solid ?? undefined, props.thresholds)
 
   return (
     <Box>

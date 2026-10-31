@@ -17,9 +17,9 @@ test('one icon per subagent and task, in a fixed order', () => {
   expect(crewItems(crew)).toEqual([
     { glyph: '✻', color: 'claude', spin: true, open: 'a2' },
     { glyph: '✻', color: 'claude', dim: true, open: 'a1' },
-    { glyph: ROBOT, color: 'claude', tail: 'b3' },
-    { glyph: ROBOT, color: CURSOR_GREY, tail: 'b4' },
-    { glyph: TERMINAL, color: 'subtle', tail: 'b1' },
+    { glyph: ROBOT, color: 'claude', wide: true, tail: 'b3' },
+    { glyph: ROBOT, color: CURSOR_GREY, wide: true, tail: 'b4' },
+    { glyph: TERMINAL, color: 'subtle', wide: true, tail: 'b1' },
     { glyph: MONITOR, color: 'subtle', tail: 'b2' },
   ])
 })
@@ -29,8 +29,8 @@ test('past MAX_ICONS of a kind, a count stands for the rest', () => {
   const items = crewItems({ agents: [], tasks })
   expect(items).toHaveLength(MAX_ICONS + 1)
   expect(items.at(-1)).toEqual({ glyph: '+3', color: 'subtle', dim: true })
-  // Five icons, `+3`, a space between each.
-  expect(crewWidth(items)).toBe(MAX_ICONS + 2 + MAX_ICONS)
+  // Five wide icons, `+3`, a space between each.
+  expect(crewWidth(items)).toBe(2 * MAX_ICONS + 2 + MAX_ICONS)
 })
 
 test("the spinner turns there and back, without macOS's emoji-prone ✳", () => {
