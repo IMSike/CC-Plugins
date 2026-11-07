@@ -4,6 +4,10 @@ plugins/*/.claude-plugin/types/
 # Local tooling
 node_modules/
 
+# Claude Code: agents' worktrees and personal settings (.claude/settings.json stays shareable)
+.claude/worktrees/
+.claude/settings.local.json
+
 # Secrets
 *.secret
 *.secrets.json
