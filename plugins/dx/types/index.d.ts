@@ -101,9 +101,10 @@ export type BandSettings = {
   // a count stands for the rest of a kind.
   maxAgentIcons: number
   maxTaskIcons: number
-  // The glyphs of the notes and settings icons.
+  // The glyphs of the notes and settings icons, and of a monitor's.
   notesIcon: string
   settingsIcon: string
+  monitorIcon: string
   // The notes tab a pane opens on, unless the last one shown is taken up again.
   notesTab: NoteTab
   resumeNotesTab: boolean

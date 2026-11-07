@@ -29,7 +29,7 @@ On screen, colors tell apart what plain text cannot: on `5h`, the `◉` are the 
   - The `5h` and `7d` lines only appear with a Claude subscription (the API reports no limits otherwise); `ctx` shows `—` until the first response.
   - The band takes five rows. It is drawn in the terminal and the desktop app; other surfaces (VS Code, mobile) do not show it.
   - It is not the status line: it sits **above** the prompt, and a `statusLine` configured in `settings.json` keeps being shown under it. Remove `statusLine` to avoid seeing the same figures twice.
-  - The frame, the gauges, the effort meter and the branch use characters (`╭ ◎ ◉ ▰ ⎇`) present in common terminal fonts (Cascadia, Nerd Fonts); the robot and terminal icons, and the default notes and settings icons, need a [Nerd Font](https://www.nerdfonts.com).
+  - The frame, the gauges, the effort meter and the branch use characters (`╭ ◎ ◉ ▰ ⎇`) present in common terminal fonts (Cascadia, Nerd Fonts); the robot and terminal icons, and the default notes, settings and monitor icons, need a [Nerd Font](https://www.nerdfonts.com).
   - While Claude Code shows a survey in that band, the survey takes its place.
 - **Fold / unfold**: `ctrl+x ctrl+a`, or click `[-]`.
 
@@ -40,7 +40,7 @@ The left of the bottom border holds an icon for each subagent and background tas
 - **Effect**:
   - **Subagent**: `✻` in Claude's color, turning like Claude Code's own spinner (`· ✢ * ✶ ✻ ✽`, there and back, 200 ms a step) while it works, still and dim while it waits.
   - **Agent CLI** run in a background shell: a robot, in Claude's color for Claude Code, grey for Cursor.
-  - **Background shell** (`run_in_background`): a terminal icon, grey; a `Monitor`: `◉`.
+  - **Background shell** (`run_in_background`): a terminal icon, grey; a `Monitor`: a pulse (nf-oct-pulse), grey, or the glyph chosen in the settings.
   - **Click a subagent**: its transcript takes the main view, as from the tasks list; its icon is underlined meanwhile. Click it again to come back to the main conversation.
   - **Click a shell or an agent CLI**: the side panel shows its command, whole, wrapped over as many lines as it needs, then the end of its output, read again every second. Click the icon again to close the side panel.
   - An icon leaves the border when its subagent finishes, or its task is stopped or ends.
@@ -60,7 +60,7 @@ The `⚙` icon shows the settings in the side panel; a second click closes it. A
   - **Animations**: the frame's glints, the gauges' shuttle, the subagents' spinner; their speed (slow, normal, fast).
   - **Colors**, each picked from a list of named colors or typed as hex (`#58a6ff`): the frame (the theme's warning color, yellow, by default), the effort meter and the branch (Claude's color by default), the gauges (the heat gradient by default, or one color), the bottom border's text (dim by default). The band shows a change at once.
   - **Gauge thresholds**: where the heat gradient turns orange (50% by default) and red (75%), by steps of 5; yellow sits halfway to orange.
-  - **Icons**: the glyphs of the notes and settings icons (nf-fa-edit and nf-oct-gear by default), among a few Unicode and Nerd Font ones; one the terminal's font lacks draws as a blank or a box.
+  - **Icons**: the glyphs of the notes and settings icons (nf-fa-edit and nf-oct-gear by default), and of a monitor's (nf-oct-pulse by default; also an eye, a radar, a broadcast, a bell), among a few Unicode and Nerd Font ones; one the terminal's font lacks draws as a blank or a box.
   - **Notes**: the tab the pane opens on; whether it takes up the last tab shown instead (on by default); how many other sessions' notes are listed (8 by default).
   - **Behavior**: hide the `5h` gauge while its window has not started (on by default); off, its row is drawn empty. Animate only while Claude works (off by default): the glints and the shuttles rest otherwise; with **… ou qu'un sous-agent ou un shell est actif** (checked along with it by default), they also run while a subagent works or a background task runs. The subagents' spinner turns only while its subagent works in any case.
   - **Réinitialiser** puts every setting back to its default.

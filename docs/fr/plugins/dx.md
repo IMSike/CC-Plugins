@@ -29,7 +29,7 @@ Installation : `/plugin install dx@cc-plugins` (après `/plugin marketplace add 
   - Les lignes `5h` et `7d` n'apparaissent qu'avec un abonnement Claude (l'API ne signale pas de limites sinon) ; `ctx` affiche `—` jusqu'à la première réponse.
   - Le bandeau occupe cinq lignes. Il est dessiné dans le terminal et l'application de bureau ; les autres surfaces (VS Code, mobile) ne l'affichent pas.
   - Ce n'est pas la barre d'état : il se place **au-dessus** du prompt, et une `statusLine` configurée dans `settings.json` reste affichée en dessous. Retirer `statusLine` pour ne pas voir deux fois les mêmes chiffres.
-  - Le cadre, les jauges, la jauge d'effort et la branche utilisent des caractères (`╭ ◎ ◉ ▰ ⎇`) présents dans les polices de terminal courantes (Cascadia, Nerd Fonts) ; les icônes de robot et de terminal, et les icônes de notes et de réglages par défaut, demandent une [Nerd Font](https://www.nerdfonts.com).
+  - Le cadre, les jauges, la jauge d'effort et la branche utilisent des caractères (`╭ ◎ ◉ ▰ ⎇`) présents dans les polices de terminal courantes (Cascadia, Nerd Fonts) ; les icônes de robot et de terminal, et les icônes de notes, de réglages et de moniteur par défaut, demandent une [Nerd Font](https://www.nerdfonts.com).
   - Quand Claude Code affiche un sondage dans ce bandeau, le sondage prend sa place.
 - **Replier / déplier** : `ctrl+x ctrl+a`, ou cliquer sur `[-]`.
 
@@ -40,7 +40,7 @@ La gauche de la bordure du bas porte une icône par sous-agent et par tâche en 
 - **Effet** :
   - **Sous-agent** : `✻` à la couleur de Claude, qui tourne comme le spinner de Claude Code (`· ✢ * ✶ ✻ ✽`, aller et retour, 200 ms par image) pendant qu'il travaille, immobile et pâle pendant qu'il attend.
   - **Agent en ligne de commande** lancé dans un shell en arrière-plan : un robot, à la couleur de Claude pour Claude Code, gris pour Cursor.
-  - **Shell en arrière-plan** (`run_in_background`) : une icône de terminal, grise ; un `Monitor` : `◉`.
+  - **Shell en arrière-plan** (`run_in_background`) : une icône de terminal, grise ; un `Monitor` : un pouls (nf-oct-pulse), gris, ou le glyphe choisi dans les réglages.
   - **Clic sur un sous-agent** : sa conversation prend la vue principale, comme depuis la liste des tâches ; son icône est soulignée pendant ce temps. Un nouveau clic ramène à la conversation principale.
   - **Clic sur un shell ou un agent en ligne de commande** : le panneau latéral affiche sa commande, entière, repliée sur autant de lignes qu'il faut, puis la fin de sa sortie, relue chaque seconde. Un nouveau clic sur l'icône referme le panneau latéral.
   - Une icône quitte la bordure quand son sous-agent termine, ou que sa tâche est arrêtée ou se termine.
@@ -60,7 +60,7 @@ L'icône `⚙` affiche les réglages dans le panneau latéral ; un second clic l
   - **Animations** : les reflets du cadre, la navette des jauges, le spinner des sous-agents ; leur vitesse (lente, normale, rapide).
   - **Couleurs**, chacune choisie dans une liste de couleurs nommées ou saisie en hex (`#58a6ff`) : le cadre (la couleur d'avertissement du thème, jaune, par défaut), la jauge d'effort et la branche (la couleur de Claude par défaut), les jauges (le dégradé de chaleur par défaut, ou une couleur), le texte de la bordure du bas (discret par défaut). Le bandeau montre un changement aussitôt.
   - **Seuils des jauges** : où le dégradé de chaleur passe à l'orange (50 % par défaut) et au rouge (75 %), par pas de 5 ; le jaune se place à mi-chemin de l'orange.
-  - **Icônes** : les glyphes des icônes de notes et de réglages (nf-fa-edit et nf-oct-gear par défaut), parmi quelques glyphes Unicode et Nerd Font ; un glyphe absent de la police du terminal s'affiche vide ou en carré.
+  - **Icônes** : les glyphes des icônes de notes et de réglages (nf-fa-edit et nf-oct-gear par défaut), et celui d'un moniteur (nf-oct-pulse par défaut ; aussi un œil, un radar, une antenne, une cloche), parmi quelques glyphes Unicode et Nerd Font ; un glyphe absent de la police du terminal s'affiche vide ou en carré.
   - **Notes** : l'onglet sur lequel le panneau s'ouvre ; s'il reprend plutôt le dernier onglet ouvert (activé par défaut) ; le nombre de notes d'autres sessions listées (8 par défaut).
   - **Comportement** : masquer la jauge `5h` tant que sa fenêtre n'a pas commencé (activé par défaut) ; désactivé, sa ligne est dessinée vide. Animer seulement pendant que Claude travaille (désactivé par défaut) : les reflets et les navettes sont au repos le reste du temps ; avec **… ou qu'un sous-agent ou un shell est actif** (coché avec lui par défaut), ils tournent aussi pendant qu'un sous-agent travaille ou qu'une tâche en arrière-plan tourne. Le spinner des sous-agents ne tourne de toute façon que pendant que son sous-agent travaille.
   - **Réinitialiser** remet chaque réglage à sa valeur par défaut.

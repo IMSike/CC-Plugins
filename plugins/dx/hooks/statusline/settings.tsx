@@ -18,6 +18,7 @@ import {
   hexOf,
   INFO_COLORS,
   MAX_ICONS_RANGE,
+  MONITOR_ICONS,
   NOTE_TABS,
   NOTES_ICONS,
   NOTES_OTHERS_RANGE,
@@ -34,7 +35,7 @@ import type { StepperProps } from './stepper'
 
 // The settings pane: what the band shows, animates and is colored with, kept
 // in `$.store` across sessions and read into `$.state` for the drawings.
-export const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-1' })
+export const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
 
 const STORE_KEY = 'settings'
 // The toggles go in two columns from this inner width.
@@ -305,6 +306,7 @@ export function registerSettings(on: On): void {
         {section('icons', 'Icônes', [
           ...icons('notes-icon', 'Notes', NOTES_ICONS, value.notesIcon, (current, notesIcon) => ({ ...current, notesIcon })),
           ...icons('settings-icon', 'Réglages', SETTINGS_ICONS, value.settingsIcon, (current, settingsIcon) => ({ ...current, settingsIcon })),
+          ...icons('monitor-icon', 'Moniteurs', MONITOR_ICONS, value.monitorIcon, (current, monitorIcon) => ({ ...current, monitorIcon })),
         ])}
         {section('notes', 'Notes', [
           <Box key="notes-tab" columnGap={1}>

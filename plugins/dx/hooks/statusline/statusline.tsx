@@ -33,7 +33,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
 })
 
 // What the band shows, animates and is colored with, set in ./settings.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-1' })
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
 
 // The main loop's last turn, and a tick each second while it runs, so its
 // duration is redrawn.
@@ -253,7 +253,7 @@ export function registerStatusline(on: On): void {
     // Its icons, one per subagent and background task: Buttons, since only a
     // press may change the view, drawn in the row itself as the top border's.
     const crew = await read($, activity)
-    const crewList = show.crew ? crewItems(crew, options.maxAgentIcons, options.maxTaskIcons) : []
+    const crewList = show.crew ? crewItems(crew, options.maxAgentIcons, options.maxTaskIcons, options.monitorIcon) : []
     const crewColumns = crewWidth(crewList)
     const spinFrame = await read($, spin)
     const viewed = e.props.view.agentId

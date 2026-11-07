@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderElement } from 'claude-code'
 
 import type { Activity, PanelView, Task, TaskView } from '../../types'
-import { MONITOR, ROBOT, TERMINAL } from './crew'
+import { ROBOT, TERMINAL } from './crew'
 import { DEFAULT_SETTINGS } from './options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from './panes'
 import type { PressProps } from './press'
@@ -27,7 +27,7 @@ import type { ProcessTree } from './tasks'
 // is due for a check: soon after it starts (to tell an agent CLI in it), then
 // further and further apart (ADR 0003).
 // What the band shows, set in ./settings: the panes' icons here.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-1' })
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
 
 export const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
   shape: 'activity-1',
@@ -245,7 +245,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
   const { Box, Button, Text } = elements
   const { tasks } = await read($, activity)
   const view = await read($, taskView)
-  const { notesIcon, settingsIcon } = await read($, settings)
+  const { notesIcon, settingsIcon, monitorIcon } = await read($, settings)
   const labels: string[] = []
   const tab = (key: string, label: string, isCurrent: boolean, action: TabPress) => {
     labels.push(label)
@@ -273,7 +273,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
   const settingsTab = tab('pane-settings', ` ${settingsIcon}  ${TITLES.settings} `, current === 'settings', { view: 'settings' })
   // A wide glyph is followed by its own cell, then the space.
   const terminals = tasks.map(task => {
-    const icon = task.agent !== undefined ? `${ROBOT}  ` : task.kind === 'monitor' ? `${MONITOR} ` : `${TERMINAL}  `
+    const icon = task.agent !== undefined ? `${ROBOT}  ` : task.kind === 'monitor' ? `${monitorIcon}  ` : `${TERMINAL}  `
     const command = task.command.split('\n')[0] ?? ''
     const label = command.length > TAB_COMMAND ? `${command.slice(0, TAB_COMMAND - 1)}…` : command
     return tab(`pane-task-${task.id}`, ` ${icon}${label} `, current === 'task' && view?.id === task.id, { task: task.id })

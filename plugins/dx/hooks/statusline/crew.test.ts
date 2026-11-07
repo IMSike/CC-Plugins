@@ -24,6 +24,11 @@ test('one icon per subagent and task, in a fixed order', () => {
   ])
 })
 
+test('a monitor is drawn with the glyph chosen for it', () => {
+  const crew: Activity = { agents: [], tasks: [task('b1', 'monitor'), task('b2', 'shell')] }
+  expect(crewItems(crew, MAX_ICONS, MAX_ICONS, '◎').map(item => item.glyph)).toEqual([TERMINAL, '◎'])
+})
+
 test('past MAX_ICONS of a kind, a count stands for the rest', () => {
   const tasks = Array.from({ length: MAX_ICONS + 3 }, (_, index) => task(`b${index}`, 'shell'))
   const items = crewItems({ agents: [], tasks })

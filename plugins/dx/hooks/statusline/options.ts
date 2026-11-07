@@ -1,4 +1,5 @@
 import type { BandSettings, BottomFact, NoteTab } from '../../types'
+import { MONITOR } from './crew'
 
 // The settings pane's model: defaults, choices, and the reading of what
 // `$.store` holds.
@@ -29,6 +30,20 @@ export const SETTINGS_ICONS: readonly (readonly [string, string])[] = [
   ['\u{F1DE}', 'nf-fa-sliders'],
   ['\u{EB51}', 'nf-cod-settings_gear'],
   ['☰', 'U+2630'],
+]
+// A monitor watches a stream for events: a pulse, an eye, a radar, a bell.
+export const MONITOR_ICONS: readonly (readonly [string, string])[] = [
+  [MONITOR, 'nf-oct-pulse'],
+  ['\u{EBB0}', 'nf-cod-pulse'],
+  ['\u{F441}', 'nf-oct-eye'],
+  ['\u{EA70}', 'nf-cod-eye'],
+  ['\u{F06E}', 'nf-fa-eye'],
+  ['\u{F0437}', 'nf-md-radar'],
+  ['\u{F43C}', 'nf-oct-broadcast'],
+  ['\u{EAA2}', 'nf-cod-bell'],
+  ['◉', 'U+25C9'],
+  ['◎', 'U+25CE'],
+  ['⦿', 'U+29BF'],
 ]
 
 const BOTTOM_FACTS: readonly BottomFact[] = ['duration', 'end', 'total', 'tokens']
@@ -70,6 +85,7 @@ export const DEFAULT_SETTINGS: BandSettings = {
   maxTaskIcons: 5,
   notesIcon: '\u{F044}',
   settingsIcon: '\u{F423}',
+  monitorIcon: MONITOR,
   notesTab: 'global',
   resumeNotesTab: true,
   notesOthers: 8,
@@ -210,6 +226,7 @@ export function settingsOf(stored: unknown): BandSettings {
     maxTaskIcons: numberOf(value.maxTaskIcons, MAX_ICONS_RANGE) ?? DEFAULT_SETTINGS.maxTaskIcons,
     notesIcon: oneOf(value.notesIcon, NOTES_ICONS) ?? DEFAULT_SETTINGS.notesIcon,
     settingsIcon: oneOf(value.settingsIcon, SETTINGS_ICONS) ?? DEFAULT_SETTINGS.settingsIcon,
+    monitorIcon: oneOf(value.monitorIcon, MONITOR_ICONS) ?? DEFAULT_SETTINGS.monitorIcon,
     notesTab: oneOf(value.notesTab, NOTE_TABS) ?? DEFAULT_SETTINGS.notesTab,
     resumeNotesTab: typeof value.resumeNotesTab === 'boolean' ? value.resumeNotesTab : DEFAULT_SETTINGS.resumeNotesTab,
     notesOthers: numberOf(value.notesOthers, NOTES_OTHERS_RANGE) ?? DEFAULT_SETTINGS.notesOthers,

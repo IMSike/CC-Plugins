@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
-import { DEFAULT_SETTINGS, hexOf, settingsOf, thresholdsOf } from './options'
+import { MONITOR } from './crew'
+import { DEFAULT_SETTINGS, hexOf, MONITOR_ICONS, settingsOf, thresholdsOf } from './options'
 
 test('a color typed loosely is read as hex, anything else is refused', () => {
   expect(hexOf('#D4A72C')).toBe('#d4a72c')
@@ -30,12 +31,19 @@ test('the bottom order keeps each fact once, the missing ones after', () => {
 })
 
 test('numbers and choices out of bounds take their defaults', () => {
-  const read = settingsOf({ maxAgentIcons: 0, notesOthers: 2.5, speed: 'warp', notesIcon: 'x', notesTab: 'session' })
+  const read = settingsOf({ maxAgentIcons: 0, notesOthers: 2.5, speed: 'warp', notesIcon: 'x', monitorIcon: 'x', notesTab: 'session' })
   expect(read.maxAgentIcons).toBe(DEFAULT_SETTINGS.maxAgentIcons)
   expect(read.notesOthers).toBe(DEFAULT_SETTINGS.notesOthers)
   expect(read.speed).toBe('normal')
   expect(read.notesIcon).toBe(DEFAULT_SETTINGS.notesIcon)
+  expect(read.monitorIcon).toBe(DEFAULT_SETTINGS.monitorIcon)
   expect(read.notesTab).toBe('session')
+})
+
+test("a monitor's icon is a pulse unless another offered one is chosen", () => {
+  expect(DEFAULT_SETTINGS.monitorIcon).toBe(MONITOR)
+  expect(MONITOR_ICONS[0]).toEqual([MONITOR, 'nf-oct-pulse'])
+  expect(settingsOf({ monitorIcon: '◉' }).monitorIcon).toBe('◉')
 })
 
 test('the red threshold stays above the orange one', () => {

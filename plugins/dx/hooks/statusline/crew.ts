@@ -4,10 +4,10 @@ import type { Activity } from '../../types'
 // task, up to a number of a kind (MAX_ICONS by default), then a count.
 
 export const MAX_ICONS = 5
-// Nerd Font glyphs: a robot, a terminal.
+// Nerd Font glyphs: a robot, a terminal, a pulse (a monitor's by default).
 export const ROBOT = '\u{F06A9}'
 export const TERMINAL = '\u{F489}'
-export const MONITOR = '◉'
+export const MONITOR = '\u{F469}'
 export const CURSOR_GREY = '#8b949e'
 
 // Claude Code's spinner, there and back; `*` where macOS draws ✳, which
@@ -40,8 +40,9 @@ export function capped(items: CrewItem[], max = MAX_ICONS): CrewItem[] {
 }
 
 // Working subagents first, then waiting ones, agent CLIs, shells, monitors.
-// Up to `agents` subagent icons of a kind, `tasks` task icons of a kind.
-export function crewItems(crew: Activity, agents = MAX_ICONS, tasks = MAX_ICONS): CrewItem[] {
+// Up to `agents` subagent icons of a kind, `tasks` task icons of a kind; a
+// monitor drawn as `monitor`.
+export function crewItems(crew: Activity, agents = MAX_ICONS, tasks = MAX_ICONS, monitor = MONITOR): CrewItem[] {
   const working = crew.agents.filter(agent => isWorking(agent.status))
   const waiting = crew.agents.filter(agent => !isWorking(agent.status))
   const plain = (kind: string) => crew.tasks.filter(task => task.kind === kind && task.agent === undefined)
@@ -52,7 +53,7 @@ export function crewItems(crew: Activity, agents = MAX_ICONS, tasks = MAX_ICONS)
     ...capped(cli('claude').map(task => ({ glyph: ROBOT, color: 'claude', tail: task.id })), tasks),
     ...capped(cli('cursor').map(task => ({ glyph: ROBOT, color: CURSOR_GREY, tail: task.id })), tasks),
     ...capped(plain('shell').map(task => ({ glyph: TERMINAL, color: 'subtle', tail: task.id })), tasks),
-    ...capped(plain('monitor').map(task => ({ glyph: MONITOR, color: 'subtle', tail: task.id })), tasks),
+    ...capped(plain('monitor').map(task => ({ glyph: monitor, color: 'subtle', tail: task.id })), tasks),
   ]
 }
 
