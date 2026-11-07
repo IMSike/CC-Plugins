@@ -319,7 +319,7 @@ export function registerActivity(on: On): void {
 
   on('tool.call', { tool: 'Bash' }, async ($, e, next) => {
     const ran = await next(e)
-    const id = ran.deny === undefined ? (ran.result as { backgroundTaskId?: string } | undefined)?.backgroundTaskId : undefined
+    const id = ran.deny === undefined && !ran.isError ? ran.result?.backgroundTaskId : undefined
     if (id !== undefined) await followTask($, id, 'shell', e.command, ran.result).catch(() => undefined)
 
     return ran
@@ -327,8 +327,8 @@ export function registerActivity(on: On): void {
 
   on('tool.call', { tool: 'Monitor' }, async ($, e, next) => {
     const ran = await next(e)
-    const id = ran.deny === undefined ? (ran.result as { taskId?: string } | undefined)?.taskId : undefined
-    const command = String((e as unknown as { command?: string }).command ?? '')
+    const id = ran.deny === undefined && !ran.isError ? ran.result?.taskId : undefined
+    const command = e.command ?? ''
     if (id !== undefined) await followTask($, id, 'monitor', command, ran.result).catch(() => undefined)
 
     return ran
@@ -337,6 +337,7 @@ export function registerActivity(on: On): void {
   // An async agent's result names its output file: the folder every task's is in.
   on('tool.call', { tool: 'Agent' }, async ($, e, next) => {
     const ran = await next(e)
+    // Cast: of the kinds of Agent result, only some name a file.
     const file = (ran.result as { outputFile?: string } | undefined)?.outputFile
     if (ran.deny === undefined && file !== undefined) tasksDir = file.replace(/[\\/][^\\/]+$/, '')
 
@@ -345,8 +346,7 @@ export function registerActivity(on: On): void {
 
   on('tool.call', { tool: 'TaskStop' }, async ($, e, next) => {
     const ran = await next(e)
-    const input = e as unknown as { task_id?: string; shell_id?: string }
-    const id = input.task_id ?? input.shell_id
+    const id = e.task_id ?? e.shell_id
     if (ran.deny === undefined && id !== undefined) await removeTasks($, new Set([id])).catch(() => undefined)
 
     return ran
