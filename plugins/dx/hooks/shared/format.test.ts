@@ -8,6 +8,7 @@ import {
   dayTime,
   duration,
   effortRank,
+  errorText,
   exhaustionOf,
   filledCells,
   GAP,
@@ -221,4 +222,10 @@ test('the branch is read from .git/HEAD', () => {
   expect(branchOf('ref: refs/heads/feat/status-band')).toBe('feat/status-band')
   expect(branchOf('1ec6454f0e6c3b1d2a9f8e7d6c5b4a3928170615\n')).toBe('1ec6454')
   expect(branchOf('garbage')).toBeUndefined()
+})
+
+test('an error reads as its message, anything else as a string', () => {
+  expect(errorText(new Error('disk full'))).toBe('disk full')
+  expect(errorText('store over 4 MiB')).toBe('store over 4 MiB')
+  expect(errorText(undefined)).toBe('undefined')
 })

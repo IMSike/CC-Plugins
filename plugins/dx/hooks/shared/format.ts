@@ -305,3 +305,8 @@ export function branchOf(head: string): string | undefined {
   if (/^[0-9a-f]{40,64}$/i.test(text)) return text.slice(0, 7)
   return undefined
 }
+
+// What went wrong, as text: an Error's message, anything else as a string.
+export function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
