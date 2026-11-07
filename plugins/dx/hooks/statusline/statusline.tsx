@@ -8,7 +8,6 @@ import { ensureNotes } from '../notes/notes-load'
 import { loadSettings, toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import {
-  branchOf,
   clockTime,
   compactNumber,
   countdown,
@@ -25,6 +24,8 @@ import {
 import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
 import type { FrameProps, FrameRun } from './frame'
 import type { GaugeProps } from './gauge'
+import { branchFrom } from './git'
+import type { HeadPaths } from './git'
 
 // Change the tag when StatusSnapshot's fields change: it declines what an
 // earlier version stored, which outlives a reload.
@@ -72,8 +73,6 @@ const RESET_COLUMNS = 8
 const MIN_BAR_COLUMNS = 10
 // The gauges' shuttles leave one after the other, this far apart.
 const SHUTTLE_STAGGER_MS = 1400
-// How far up from the session's directory a `.git` is looked for.
-const MAX_DEPTH = 32
 
 // The effort a main-loop request was really sent with (after a downgrade for
 // the model), kept until the setting or the model changes again.
@@ -86,32 +85,13 @@ function gaugeOf(usage: SessionUsage, kind: string): Gauge | undefined {
   return { percent: window.percentUsed, resetsAt: window.resetsAt }
 }
 
-function parentOf(dir: string): string {
-  return dir.replace(/[\\/]+[^\\/]*$/, '')
-}
+// Where the HEAD of the repository holding each directory is, kept from one
+// refresh to the next (./git).
+const heads: HeadPaths = new Map()
 
-// The branch of the repository holding `cwd`: its `.git/HEAD`, or for a
-// worktree or a submodule the HEAD its `.git` file points to.
-async function branchFrom($: EngineInterface, cwd: string): Promise<string | undefined> {
-  let dir = cwd.replace(/[\\/]+$/, '')
-  for (let depth = 0; depth < MAX_DEPTH && dir !== ''; depth += 1) {
-    const head = await $.fs.read(`${dir}/.git/HEAD`).catch(() => undefined)
-    if (head !== undefined) return branchOf(head)
-
-    const link = await $.fs.read(`${dir}/.git`).catch(() => undefined)
-    const gitdir = link === undefined ? undefined : /^gitdir:\s*(.+)$/m.exec(link)?.[1]?.trim()
-    if (gitdir !== undefined) {
-      const absolute = /^([a-z]:)?[\\/]/i.test(gitdir) ? gitdir : `${dir}/${gitdir}`
-      const linked = await $.fs.read(`${absolute}/HEAD`).catch(() => undefined)
-      return linked === undefined ? undefined : branchOf(linked)
-    }
-
-    const parent = parentOf(dir)
-    if (parent === dir) break
-    dir = parent
-  }
-
-  return undefined
+// The file at `path`, or undefined when it cannot be read.
+function readFile($: EngineInterface, path: string): Promise<string | undefined> {
+  return $.fs.read(path).catch(() => undefined)
 }
 
 async function refresh($: EngineInterface): Promise<void> {
@@ -135,7 +115,7 @@ async function refresh($: EngineInterface): Promise<void> {
     model: modelLabel(model),
     effort: effort.turn ?? configured,
     cwd: shortenPath(cwd, home),
-    branch: await branchFrom($, cwd),
+    branch: await branchFrom(path => readFile($, path), cwd, heads),
     context: usage.context.percent,
     contextTokens: usage.context.tokens,
     contextWindow: usage.context.window,

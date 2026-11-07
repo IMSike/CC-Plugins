@@ -28,6 +28,7 @@ Installation : `/plugin install dx@cc-plugins` (après `/plugin marketplace add 
 - **Implications** :
   - Les lignes `5h` et `7j` n'apparaissent qu'avec un abonnement Claude (l'API ne signale pas de limites sinon) ; `ctx` affiche `—` jusqu'à la première réponse.
   - Le bandeau occupe jusqu'à cinq lignes : une par jauge affichée, et ses deux bordures. Il est dessiné dans le terminal et l'application de bureau ; les autres surfaces (VS Code, mobile) ne l'affichent pas.
+  - L'emplacement du dépôt est cherché une fois par répertoire, son `HEAD` relu à chaque rafraîchissement : un changement de branche s'affiche, mais un dépôt créé après le début de la session (`git init`) n'affiche sa branche qu'à la session suivante ou après un rechargement.
   - Ce n'est pas la barre d'état : il se place **au-dessus** du prompt, et une `statusLine` configurée dans `settings.json` reste affichée en dessous. Retirer `statusLine` pour ne pas voir deux fois les mêmes chiffres.
   - Le cadre, les jauges, la jauge d'effort et la branche utilisent des caractères (`╭ ◎ ◉ ▰ ⎇`) présents dans les polices de terminal courantes (Cascadia, Nerd Fonts) ; les icônes de robot et de terminal, et les icônes de notes, de réglages et de moniteur par défaut, demandent une [Nerd Font](https://www.nerdfonts.com).
   - Quand Claude Code affiche un sondage dans ce bandeau, le sondage prend sa place.
