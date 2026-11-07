@@ -19,7 +19,7 @@ Options studied:
 
 ## Decision
 
-Settings and notes are kept in `$.store`, and read into `$.state` when the session starts, so the band and the panes draw from them. Another session may write them meanwhile: a settings change starts from what the store holds and the settings pane reloads them as it opens; a note is read from the store as its sheet opens, the last one written winning.
+Settings and notes are kept in `$.store`, and read into `$.state` when the session starts, so the band and the panes draw from them. Another session may write them meanwhile: a settings change starts from what the store holds and the settings pane reloads them as it opens; a note is read from the store as its sheet opens, the last one written winning. Since then, the note shown is also read again every second while the notes pane is open, so another session's change shows within about a second.
 
 - **Settings**: one key, `settings`. A value stored by an earlier version is read field by field: a missing or invalid field takes its default.
 - **Notes**: `notes.global`, `notes.project.<project root>`, `notes.session.<session id>`, each `{ text, updatedAt }`. The notes are edited in a `Client` of the pane (a plain notepad: Enter starts a new line, where an `Input` would submit and clear itself), which posts each change to the hooks module; each one is written at once. An emptied note deletes its key; nothing is deleted on its own, session notes included: the session tab lists the other sessions' notes, to open or delete. One more key, `notesTab`, keeps the last tab shown, which the next pane takes up when the setting says so.

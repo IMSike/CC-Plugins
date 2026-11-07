@@ -19,13 +19,15 @@ Options étudiées :
 
 ## Décision
 
-Chaque élément cliquable du panneau latéral (ses onglets, les onglets des notes, **← Session actuelle**, **Supprimer cette note**, les notes des autres sessions, **↻ Réessayer**, et chaque contrôle des réglages) est dessiné par un même module, `press.tsx` : un libellé dans le style donné, le pointeur au-dessus y ajoutant un style de survol ; un relâchement au-dessus, après un appui au-dessus, poste `{}`. Chaque panneau répond selon la clé de l'instance, qu'il associe à une action en dessinant.
+Chaque élément cliquable du panneau latéral (ses onglets, les onglets des notes, **← Session actuelle**, **Supprimer cette note**, les notes des autres sessions, **↻ Réessayer**, et chaque contrôle des réglages sauf les deux ci-dessous) est dessiné par un même module, `press.tsx` : un libellé dans le style donné, le pointeur au-dessus y ajoutant un style de survol ; un relâchement au-dessus, après un appui au-dessus, poste `{}`. Chaque panneau répond selon la clé de l'instance, qu'il associe à une action en dessinant.
 
-Les icônes du bandeau (notes, réglages, sous-agents, shells) restent des `Button` : elles ouvrent le panneau ou changent la vue principale, ce que seul l'appui d'une personne peut faire.
+Deux contrôles des réglages font exception : les compteurs numériques sont dessinés par un module à eux, `stepper.tsx`, qui garde lui aussi le pointeur mais change la valeur dès l'appui et poste le nombre atteint ; la couleur hex personnalisée est un `Input`, saisi au clavier. Sur une surface sans `Client`, les onglets du panneau se rabattent sur des `Button`.
+
+Les icônes du bandeau (notes, réglages, sous-agents, agents en ligne de commande, shells, moniteurs) restent des `Button` : elles ouvrent le panneau ou changent la vue principale, ce que seul l'appui d'une personne peut faire.
 
 ## Conséquences
 
 - Un clic dans le panneau ne sélectionne jamais de texte, quels que soient les mouvements du pointeur ou le rythme des clics.
-- Les éléments du panneau ne s'atteignent plus au clavier (Tab, Entrée) : seul le pointeur les active. La feuille des notes garde son clavier.
-- Un élément agit au relâchement au-dessus de son libellé, comme un `Button` ; un relâchement ailleurs ne fait rien.
+- Les éléments du panneau ne s'atteignent plus au clavier (Tab, Entrée) : seul le pointeur les active. La feuille des notes et le champ de couleur hex gardent leur clavier.
+- Un élément agit au relâchement au-dessus de son libellé, comme un `Button` ; un relâchement ailleurs ne fait rien. Un compteur agit à l'appui.
 - À réévaluer si l'API permet à un `Button` de garder le pointeur, ou traite ce que poste un `Client` comme venant de la personne.

@@ -19,13 +19,15 @@ Options studied:
 
 ## Decision
 
-Every press inside the side panel (its tabs, the notes' tabs, **← Session actuelle**, **Supprimer cette note**, the other sessions' notes, **↻ Réessayer**, and every control of the settings) is drawn by one module, `press.tsx`: a label in the given style, the pointer over it adding a hover style; a release over it, after a press over it, posts `{}`. Each pane answers by the instance's key, which it maps to an action when drawing.
+Every press inside the side panel (its tabs, the notes' tabs, **← Session actuelle**, **Supprimer cette note**, the other sessions' notes, **↻ Réessayer**, and every control of the settings but the two below) is drawn by one module, `press.tsx`: a label in the given style, the pointer over it adding a hover style; a release over it, after a press over it, posts `{}`. Each pane answers by the instance's key, which it maps to an action when drawing.
 
-The band's icons (notes, settings, subagents, shells) stay `Button`s: they open the panel or change the main view, which only a person's press may do.
+Two controls of the settings are exceptions: the number steppers are drawn by a module of their own, `stepper.tsx`, which holds the pointer too but steps on the press itself and posts the number it lands on; the custom hex color is an `Input`, typed on the keyboard. On a surface with no `Client`, the panel's tabs fall back to `Button`s.
+
+The band's icons (notes, settings, subagents, agent CLIs, shells, monitors) stay `Button`s: they open the panel or change the main view, which only a person's press may do.
 
 ## Consequences
 
 - A click in the panel never selects text, however the pointer moves or the clicks come.
-- The panel's presses are no longer reached with the keyboard (Tab, Enter): the pointer alone presses them. The notes' sheet keeps its keyboard.
-- A press is acted on at its release over the label, as a `Button` is; a release outside does nothing.
+- The panel's presses are no longer reached with the keyboard (Tab, Enter): the pointer alone presses them. The notes' sheet and the hex color field keep their keyboard.
+- A press is acted on at its release over the label, as a `Button` is; a release outside does nothing. A stepper acts on the press.
 - To be reassessed if the API lets a `Button` hold the pointer, or treats a `Client`'s post as the person's.
