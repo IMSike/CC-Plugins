@@ -24,21 +24,34 @@ export const BAND = {
 
 // The engine beneath the plugin: a session on Opus started an hour ago, in a
 // repository on `dev`; context at 12%, 5-hour window at 20% resetting in 3h24,
-// 7-day window at 90% resetting in 1j15h. `agents` are the session's agents,
-// `files` more files to read, by the end of their path, `stored` what dx's
-// store holds; without `fiveHour`, the 5-hour window has not started. The
-// calls in `refused` are refused, as by a session not there yet; `session.id`
-// and its start are `session`'s, which a test changes as a `/clear` does.
-export function engine(
-  on: On,
-  rateLimits = true,
-  agents: unknown[] = [],
-  files: Record<string, string> = {},
-  stored: Record<string, unknown> = {},
-  fiveHour = true,
-  refused: ReadonlySet<string> = new Set(),
-  session: { id: string; startedAt?: number } = { id: 's1' },
-) {
+// 7-day window at 90% resetting in 1j15h. Each option changes that.
+export type EngineOptions = {
+  // false: no rate limits reported.
+  rateLimits?: boolean
+  // The session's agents.
+  agents?: unknown[]
+  // More files to read, by the end of their path.
+  files?: Record<string, string>
+  // What dx's store holds.
+  stored?: Record<string, unknown>
+  // false: the 5-hour window has not started.
+  fiveHour?: boolean
+  // Calls refused, as by a session not there yet.
+  refused?: ReadonlySet<string>
+  // `session.id` and its start, which a test changes as a `/clear` does.
+  session?: { id: string; startedAt?: number }
+}
+
+export function engine(on: On, options: EngineOptions = {}) {
+  const {
+    rateLimits = true,
+    agents = [],
+    files = {},
+    stored = {},
+    fiveHour = true,
+    refused = new Set<string>(),
+    session = { id: 's1' },
+  } = options
   // dx's store, read back by the tests.
   const store = new Map(Object.entries(stored))
   on('store.get', (_, e) => ({ value: store.get(e.key) }))

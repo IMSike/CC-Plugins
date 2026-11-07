@@ -62,7 +62,7 @@ test('a note or a setting written by another session is taken up, not overwritte
 
 test('the crew animation setting turns the working one on with it', async ($, on) => {
   mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, { settings: { animateWithCrew: false } })
+  const store = engine(on, { stored: { settings: { animateWithCrew: false } } })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 

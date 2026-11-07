@@ -5,7 +5,7 @@ import { BAND, click, engine, NOTES_PANE, NOW, OUTPUT, PANE, SETTINGS_PANE, shel
 
 test("a background shell's icon opens its command and output, and closes them", async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], OUTPUT)
+  engine(on, { files: OUTPUT })
   const panes = shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
@@ -26,7 +26,7 @@ test("a background shell's icon opens its command and output, and closes them", 
 
 test("the panel's tabs lead from the notes to a terminal and the settings", async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], OUTPUT)
+  engine(on, { files: OUTPUT })
   const panes = shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
@@ -56,7 +56,7 @@ test("the panel's tabs lead from the notes to a terminal and the settings", asyn
 // tab; a Nerd Font glyph, drawn over two cells, two.
 test("the panel's tabs space each icon by its width", async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], OUTPUT, { settings: { monitorIcon: '◉', notesIcon: '✎' } })
+  engine(on, { files: OUTPUT, stored: { settings: { monitorIcon: '◉', notesIcon: '✎' } } })
   shell(on)
   on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -76,7 +76,7 @@ test("the panel's tabs space each icon by its width", async ($, on) => {
 
 test('a stopped shell leaves the border', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], OUTPUT)
+  engine(on, { files: OUTPUT })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })

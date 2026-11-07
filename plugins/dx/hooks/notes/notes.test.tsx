@@ -7,7 +7,7 @@ import { entryBytes, STORE_MAX_BYTES } from './store-size'
 
 test('the notes open on the last tab shown, or on the one set', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], {}, { notesTab: 'session' })
+  engine(on, { stored: { notesTab: 'session' } })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   expect((await pane.find({ type: 'Text', text: /^ Session $/, in: 'notes:tab-session' }))?.props.inverse).toBe(true)
@@ -16,7 +16,7 @@ test('the notes open on the last tab shown, or on the one set', async ($, on) =>
 
 test('the notes open on the tab set when the last one is not taken up', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], {}, { notesTab: 'session', settings: { notesTab: 'project', resumeNotesTab: false } })
+  engine(on, { stored: { notesTab: 'session', settings: { notesTab: 'project', resumeNotesTab: false } } })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   expect((await pane.find({ type: 'Text', text: /^ Projet $/, in: 'notes:tab-project' }))?.props.inverse).toBe(true)
@@ -25,7 +25,7 @@ test('the notes open on the tab set when the last one is not taken up', async ($
 
 test('notes are kept per tab, out of the conversation', async ($, on) => {
   mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, { 'notes.session.old': { text: 'ancienne piste\nsuite', updatedAt: NOW - 86400_000 } })
+  const store = engine(on, { stored: { 'notes.session.old': { text: 'ancienne piste\nsuite', updatedAt: NOW - 86400_000 } } })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   // Every change is kept at once; Enter types a new line, and the text stays shown.
@@ -54,7 +54,7 @@ test('notes are kept per tab, out of the conversation', async ($, on) => {
 
 test('a note another session changes is shown in the open pane, and kept from there', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, { 'notes.global': { text: 'liste', updatedAt: NOW - 1000 } })
+  const store = engine(on, { stored: { 'notes.global': { text: 'liste', updatedAt: NOW - 1000 } } })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
@@ -79,7 +79,7 @@ test('a note another session changes is shown in the open pane, and kept from th
 test('notes that failed to load at the start load when the panel opens on them', async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set(['session.id'])
-  engine(on, true, [], {}, { 'notes.global': { text: 'pain', updatedAt: NOW - 1000 } }, true, refused)
+  engine(on, { stored: { 'notes.global': { text: 'pain', updatedAt: NOW - 1000 } }, refused })
   const panes = shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   refused.clear()
@@ -97,7 +97,7 @@ test('notes that failed to load at the start load when the panel opens on them',
 test('notes that failed to load load when the open panel goes from the settings to them', async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set(['session.root'])
-  engine(on, true, [], {}, {}, true, refused)
+  engine(on, { refused })
   const panes = shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   refused.clear()
@@ -115,7 +115,7 @@ test('notes that failed to load load when the open panel goes from the settings 
 test('notes that cannot load say so in the panel, with a retry', async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set(['session.id'])
-  engine(on, true, [], {}, {}, true, refused)
+  engine(on, { refused })
   shell(on)
   const logged: { text: string; to?: string }[] = []
   on('ui.log', (_, e) => {
@@ -175,7 +175,7 @@ async function clearSession(
   refused: ReadonlySet<string> = new Set(),
 ) {
   mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, { notesTab: 'session' }, true, refused, session)
+  const store = engine(on, { stored: { notesTab: 'session' }, refused, session })
   shell(on)
   const emptied = emptyNotes(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -246,11 +246,14 @@ test('a tab chosen right after a /clear is shown', async ($, on) => {
 test('a session launched right after a /clear elsewhere keeps its own note', async ($, on) => {
   mock.clock(on, { now: NOW })
   const session = { id: 'b1', startedAt: NOW - 2000 }
-  const store = engine(on, true, [], {}, {
-    notesTab: 'session',
-    'notes.session.a1': { text: 'note de A', updatedAt: NOW - 5000 },
-    'notes.cleared': { from: 'a1', at: NOW - 3000, view: { tab: 'session' } },
-  }, true, new Set(), session)
+  const store = engine(on, {
+    stored: {
+      notesTab: 'session',
+      'notes.session.a1': { text: 'note de A', updatedAt: NOW - 5000 },
+      'notes.cleared': { from: 'a1', at: NOW - 3000, view: { tab: 'session' } },
+    },
+    session,
+  })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(store.get('notes.link.b1')).toBeUndefined()
@@ -341,7 +344,7 @@ test('two /clears in a row keep the session note', async ($, on) => {
 test('a note the store refuses says so in the pane, until a save succeeds', async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set<string>()
-  const store = engine(on, true, [], {}, {}, true, refused)
+  const store = engine(on, { refused })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   await pane.post({ tab: 'global', session: 's1', text: 'pain' }, { in: 'note-global-s1' })
@@ -385,7 +388,7 @@ test('a note posted while the notes cannot load says it was not saved', async ($
 test('a note that would fill the store is refused, the store left as it was', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const big = { text: 'x'.repeat(3.8 * 1024 * 1024 - 200), updatedAt: NOW - 1000 }
-  const store = engine(on, true, [], {}, { 'notes.session.old': big })
+  const store = engine(on, { stored: { 'notes.session.old': big } })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   await pane.post({ tab: 'global', session: 's1', text: 'court' }, { in: 'note-global-s1' })
@@ -414,7 +417,7 @@ test("the other sessions' notes scroll, as many listed as set", async ($, on) =>
   for (const [index, id] of ['a', 'b', 'c', 'd', 'e'].entries()) {
     stored[`notes.session.${id}`] = { text: `note ${id}`, updatedAt: NOW - (index + 1) * 60_000 }
   }
-  engine(on, true, [], {}, stored)
+  engine(on, { stored })
   // The pane's window, beneath dx: the moves dx passes on.
   const moved: number[] = []
   on('ui.scroll', (_, e) => {
@@ -474,14 +477,16 @@ test("the other sessions' notes scroll, as many listed as set", async ($, on) =>
 // session's own note emptied keeps its links.
 test("deleting another session's note deletes the links to it", async ($, on) => {
   mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, {
-    notesTab: 'session',
-    'notes.session.old': { text: 'ancienne piste', updatedAt: NOW - 86400_000 },
-    'notes.link.old2': 'old',
-    'notes.link.old3': 'old',
-    'notes.link.x2': 'x1',
-    'notes.link.s1': 's0',
-    'notes.session.s0': { text: 'piste s0', updatedAt: NOW - 1000 },
+  const store = engine(on, {
+    stored: {
+      notesTab: 'session',
+      'notes.session.old': { text: 'ancienne piste', updatedAt: NOW - 86400_000 },
+      'notes.link.old2': 'old',
+      'notes.link.old3': 'old',
+      'notes.link.x2': 'x1',
+      'notes.link.s1': 's0',
+      'notes.session.s0': { text: 'piste s0', updatedAt: NOW - 1000 },
+    },
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
@@ -541,7 +546,7 @@ function nearlyFull(): Record<string, unknown> {
 // left may not hold, and says why; a shortening always passes.
 test('typing past the store room is refused as typed, until room is made', async ($, on) => {
   mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, nearlyFull())
+  const store = engine(on, { stored: nearlyFull() })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
@@ -584,7 +589,7 @@ test('typing past the store room is refused as typed, until room is made', async
 // editor left open taking the new limit.
 test('room another session makes lets typing go on, the editor left open', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, nearlyFull())
+  const store = engine(on, { stored: nearlyFull() })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
@@ -609,7 +614,7 @@ test('room another session makes lets typing go on, the editor left open', async
 test("a refused save is said with its note, another note's save leaving it", async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set<string>()
-  engine(on, true, [], {}, {}, true, refused)
+  engine(on, { refused })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   refused.add('store.set')

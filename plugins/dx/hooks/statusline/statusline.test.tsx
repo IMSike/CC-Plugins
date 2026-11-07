@@ -79,7 +79,7 @@ test("the band's durations write their days as the 7-day gauge's label", async (
   mock.clock(on, { now: NOW })
   // A session started 39 hours ago: its total runs over a day.
   const session = { id: 's1', startedAt: NOW - 39 * 3600_000 }
-  engine(on, true, [], {}, {}, true, new Set(), session)
+  engine(on, { session })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
@@ -90,7 +90,7 @@ test("the band's durations write their days as the 7-day gauge's label", async (
 test("with the 7-day gauge labeled `7d`, the band's days are `d`", async ($, on) => {
   mock.clock(on, { now: NOW })
   const session = { id: 's1', startedAt: NOW - 39 * 3600_000 }
-  engine(on, true, [], {}, { settings: { sevenDayLabel: '7d' } }, true, new Set(), session)
+  engine(on, { stored: { settings: { sevenDayLabel: '7d' } }, session })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
@@ -100,7 +100,7 @@ test("with the 7-day gauge labeled `7d`, the band's days are `d`", async ($, on)
 
 test('without a subscription, only the context gauge is shown', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, false)
+  engine(on, { rateLimits: false })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
@@ -145,7 +145,7 @@ async function lit(ui: Mounted) {
 
 test('a shuttle glides along the gauge, then rests', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, false)
+  engine(on, { rateLimits: false })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   // 120 columns: the context gauge is long enough for a shuttle.
@@ -162,7 +162,7 @@ test('a shuttle glides along the gauge, then rests', async ($, on) => {
 
 test('the shuttle rests while nothing works, when the setting says so', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, false, [], OUTPUT, { settings: { animateOnlyWorking: true, animateWithCrew: true } })
+  engine(on, { rateLimits: false, files: OUTPUT, stored: { settings: { animateOnlyWorking: true, animateWithCrew: true } } })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const wide = { ...BAND, props: { ...BAND.props, bodyColumns: 120 } }
@@ -187,7 +187,7 @@ test('the shuttle rests while nothing works, when the setting says so', async ($
 
 test("a subagent's icon turns and opens its transcript, then the main one again", async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [{ id: 'a1', type: 'Explore', status: 'running' }])
+  engine(on, { agents: [{ id: 'a1', type: 'Explore', status: 'running' }] })
   const asked = views(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
@@ -230,7 +230,7 @@ function cellsOf(element: Drawn): number {
 
 test('each bottom icon is pressable on the cell after its glyph, as the top ones', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  engine(on, true, [{ id: 'a1', type: 'Explore', status: 'running' }], OUTPUT)
+  engine(on, { agents: [{ id: 'a1', type: 'Explore', status: 'running' }], files: OUTPUT })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
@@ -323,7 +323,7 @@ test("the bottom border's facts follow the order set, in the color set", async (
 
 test('stored settings hide elements, and may keep an idle 5-hour row', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [], {}, { settings: { show: { branch: false }, hideIdleFiveHour: false } }, false)
+  engine(on, { stored: { settings: { show: { branch: false }, hideIdleFiveHour: false } }, fiveHour: false })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)

@@ -4,10 +4,13 @@ import { BAND, engine, frameColors, NOTES_PANE, NOW } from './shared/testing'
 
 test('the session start loads every feature', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, true, [{ id: 'a1', type: 'Explore', status: 'running' }], {}, {
-    settings: { frameColor: '#58a6ff' },
-    notesTab: 'session',
-    'notes.session.s1': { text: 'piste en cours', updatedAt: NOW - 1000 },
+  engine(on, {
+    agents: [{ id: 'a1', type: 'Explore', status: 'running' }],
+    stored: {
+      settings: { frameColor: '#58a6ff' },
+      notesTab: 'session',
+      'notes.session.s1': { text: 'piste en cours', updatedAt: NOW - 1000 },
+    },
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
