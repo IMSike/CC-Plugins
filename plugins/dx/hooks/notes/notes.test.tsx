@@ -166,10 +166,16 @@ function emptyNotes(on: On): () => void {
 
 // A session with a note, then a `/clear`: the engine goes on under `s2`, its
 // clock started over, dx's notes emptied when `empty`; `session`, the
-// engine's, which a test changes again.
-async function clearSession($: Engine, on: On, empty: boolean, session: { id: string; startedAt?: number } = { id: 's1' }) {
+// engine's, which a test changes again, and `refused`, the calls it refuses.
+async function clearSession(
+  $: Engine,
+  on: On,
+  empty: boolean,
+  session: { id: string; startedAt?: number } = { id: 's1' },
+  refused: ReadonlySet<string> = new Set(),
+) {
   mock.clock(on, { now: NOW })
-  const store = engine(on, true, [], {}, { notesTab: 'session' }, true, new Set(), session)
+  const store = engine(on, true, [], {}, { notesTab: 'session' }, true, refused, session)
   shell(on)
   const emptied = emptyNotes(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -354,6 +360,23 @@ test('a note the store refuses says so in the pane, until a save succeeds', asyn
   expect(store.get('notes.global')).toEqual({ text: 'pain, lait, œufs', updatedAt: NOW })
   expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
   expect(await pane.find({ type: 'Text', text: /✓/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// The notes emptied by a `/clear`, then their load failing as a change is
+// posted: the change is not kept, and the pane says so once they load again.
+test('a note posted while the notes cannot load says it was not saved', async ($, on) => {
+  const refused = new Set<string>()
+  const store = await clearSession($, on, true, { id: 's1' }, refused)
+  const pane = await $.ui.mount(NOTES_PANE)
+  refused.add('session.root')
+  await pane.post({ tab: 'session', session: 's1', text: 'piste s1, perdue' }, { in: 'note-session-s1' })
+  expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeDefined()
+  refused.clear()
+  await click(pane, 'notes:retry')
+  expect((await pane.find({ type: 'Text', text: '⚠ non enregistré' }))?.props.color).toBe('error')
+  expect(await pane.find({ type: 'Text', text: /^notes non chargées : .*session not ready$/ })).toBeDefined()
   await pane.unmount()
 })
 

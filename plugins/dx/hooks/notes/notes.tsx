@@ -90,10 +90,14 @@ async function kept($: EngineInterface, key: string, note: Note | null): Promise
 async function write($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
   const now = await $.clock.now()
   const note: Note | null = text === '' ? null : { text, updatedAt: now }
-  // The pane may draw notes read afresh, not kept yet: kept first.
+  // The pane may draw notes read afresh, not kept yet: kept first. Not
+  // loaded, the key is not known: said, never dropped silently.
   await ensureNotes($)
   const value = await read($, notes)
-  if (value === null) return
+  if (value === null) {
+    const error = await read($, notesError)
+    return unsaved($, `notes non chargées${error === null ? '' : ` : ${error}`}`)
+  }
   const key = keyOf(value, tab, session)
   const reason = await kept($, key, note)
   await unsaved($, reason)
