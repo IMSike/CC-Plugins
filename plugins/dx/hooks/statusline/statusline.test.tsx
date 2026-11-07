@@ -863,6 +863,37 @@ test('a session started after a /clear takes nothing of it', async ($, on) => {
   await pane.unmount()
 })
 
+// Two changes posted one after the other, the first one's save held up until
+// the second is posted: the engine runs both at once, the last one stays.
+test('a note keeps the last change posted, an earlier save slower', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let hold: Promise<void> | undefined
+  let release = () => {}
+  on('state.get', async (_, e, next) => {
+    if (e.plugin === 'dx' && e.key === 'notes' && hold !== undefined) {
+      const held = hold
+      hold = undefined
+      await held
+    }
+
+    return next(e)
+  })
+  const store = engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  hold = new Promise(resolve => {
+    release = resolve
+  })
+  await pane.post({ tab: 'global', session: 's1', text: 'pain' }, { in: 'note-global-s1' })
+  await pane.post({ tab: 'global', session: 's1', text: 'pain, lait' }, { in: 'note-global-s1' })
+  release()
+  // Both saves done, in real time: the hooks' runs outlive the posts.
+  const { setTimeout } = globalThis as unknown as { setTimeout: (done: () => void, ms: number) => void }
+  await new Promise<void>(resolve => setTimeout(resolve, 100))
+  expect(store.get('notes.global')).toEqual({ text: 'pain, lait', updatedAt: NOW })
+  await pane.unmount()
+})
+
 // Two `/clear`s in a row, nothing loading the notes between them: the note
 // goes on from the first session still.
 test('two /clears in a row keep the session note', async ($, on) => {

@@ -48,8 +48,20 @@ function keyOf(value: Notes, tab: NoteTab, session: string): string {
   return tab === 'global' ? GLOBAL_KEY : tab === 'project' ? PROJECT_PREFIX + value.root : SESSION_PREFIX + session
 }
 
+// The saves in flight, one after another: each change the editor posts is a
+// `ui.message` of its own, which the engine may run while an earlier one still
+// waits on the store, its older text then written last.
+let saving: Promise<void> = Promise.resolve()
+
+// Keeps a note as it now reads, once the saves before it are done.
+function save($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
+  const run = saving.then(() => write($, tab, session, text))
+  saving = run.catch(() => undefined)
+  return run
+}
+
 // Keeps a note as it now reads, at once: an emptied one is deleted.
-async function save($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
+async function write($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
   const now = await $.clock.now()
   const note: Note | null = text === '' ? null : { text, updatedAt: now }
   // The pane may draw notes read afresh, not kept yet: kept first.
