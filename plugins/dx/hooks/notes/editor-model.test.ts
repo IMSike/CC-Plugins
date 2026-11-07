@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clicked, drawn, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, refusalOf, rowOf, rowsOf } from './editor-model'
+import { clicked, drawn, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, refusalOf, rowOf, rowsOf, thousands } from './editor-model'
 import type { Editor } from './editor-model'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
@@ -131,6 +131,15 @@ test("an edit past the store's room is refused, a shortening never", () => {
 
 test('the longest note is written with its thousands set apart', () => {
   expect(NOTE_MAX_SHOWN).toBe('95 000')
+  expect(thousands(150_000)).toBe('150 000')
+  expect(thousands(999)).toBe('999')
+})
+
+test('the editor takes a note up to what a Client takes, once serialized', () => {
+  expect(fitsEditor({ text: 'x'.repeat(NOTE_MAX_CHARS) })).toBe(true)
+  expect(fitsEditor({ text: 'x'.repeat(150_000) })).toBe(false)
+  // Each line break is written `\n`, two characters.
+  expect(fitsEditor({ text: '\n'.repeat(60_000) })).toBe(false)
 })
 
 // An editor showing `text`, having posted `sent` since the hooks drew `given`.

@@ -1,6 +1,15 @@
 import { expect, test } from 'claude-code/testing'
 
-import { othersOf, othersStart } from './others'
+import { firstLine, othersOf, othersStart } from './others'
+
+test("a row shows its note's first line, cut to the pane", () => {
+  expect(firstLine('piste\nsuite', 40)).toBe('piste')
+  expect(firstLine('abcdef', 3)).toBe('abc')
+  expect(firstLine('x'.repeat(200_000), 50_000)).toHaveLength(1000)
+  // A character beyond the BMP is kept whole or left out, never split.
+  expect(firstLine('😀😀😀', 2)).toBe('😀😀')
+  expect(firstLine('a😀', 1)).toBe('a')
+})
 
 test("the other sessions' notes, latest first, this session's left out", () => {
   const note = (updatedAt: number) => ({ text: 'x', updatedAt })

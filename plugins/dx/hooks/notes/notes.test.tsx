@@ -629,3 +629,30 @@ test("a refused save is said with its note, another note's save leaving it", asy
   expect(await pane.find({ type: 'Text', text: /store over 4 MiB/ })).toBeDefined()
   await pane.unmount()
 })
+
+// A note longer than a Client takes, written before notes had a limit or by
+// another copy of dx: the pane still draws, its row in the list cut to the
+// pane, the note kept as stored with a message in place of the editor, and
+// another session's note still deleted from there.
+test('a note too long for the editor keeps the pane drawn, and is kept as stored', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const long = { text: 'z'.repeat(150_000), updatedAt: NOW - 1000 }
+  const store = engine(on, { stored: { notesTab: 'session', 'notes.session.old': long, 'notes.global': long } })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  const row = await pane.find({ key: 'notes:session-old' })
+  expect(JSON.stringify(row).length).toBeLessThan(1000)
+
+  await click(pane, 'notes:session-old')
+  expect(await pane.find({ key: 'note-session-old' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /Note trop longue pour être modifiée ici \(150 000 caractères\)/ })).toBeDefined()
+  expect(store.get('notes.session.old')).toEqual(long)
+  await click(pane, 'notes:delete')
+  expect(store.get('notes.session.old')).toBeUndefined()
+
+  await click(pane, 'notes:tab-global')
+  expect(await pane.find({ key: 'note-global-s1' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /Note trop longue/ })).toBeDefined()
+  expect(store.get('notes.global')).toEqual(long)
+  await pane.unmount()
+})

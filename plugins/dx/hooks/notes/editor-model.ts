@@ -9,8 +9,21 @@ export type Editor = { text: string; cursor: number; top: number }
 // under the 100,000 characters a Client's props may take, and so do its
 // posts to the hooks module.
 export const NOTE_MAX_CHARS = 95_000
-// NOTE_MAX_CHARS as the pane writes it, its thousands set apart by a space.
-export const NOTE_MAX_SHOWN = String(NOTE_MAX_CHARS).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+// The most a Client's props may take, serialized as JSON.
+const CLIENT_PROPS_MAX = 100_000
+
+// A count as the pane writes it, its thousands set apart by a space.
+export function thousands(count: number): string {
+  return String(count).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
+}
+export const NOTE_MAX_SHOWN = thousands(NOTE_MAX_CHARS)
+
+// Whether the editor can take `props`: a note longer than NOTE_MAX_CHARS
+// (stored before notes had a limit, or by another copy of dx), or one whose
+// line breaks and quotes take it past the limit once serialized, cannot.
+export function fitsEditor(props: unknown): boolean {
+  return JSON.stringify(props).length <= CLIENT_PROPS_MAX
+}
 
 // Why an edit is not applied: the note past NOTE_MAX_CHARS, or past what the
 // store's room left holds (`max`, which the hooks module gives).

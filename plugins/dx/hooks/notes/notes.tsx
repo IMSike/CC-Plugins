@@ -8,9 +8,9 @@ import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
 import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
 import type { PressPart, PressProps, PressStyle } from '../shared/press'
 import type { EditorProps } from './editor'
-import { NOTE_MAX_CHARS, NOTE_MAX_SHOWN } from './editor-model'
+import { fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
-import { othersOf, othersStart } from './others'
+import { firstLine, othersOf, othersStart } from './others'
 import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
 
 // The notes pane: three notes of the person's own, one for every session, one
@@ -386,6 +386,17 @@ export function registerNotes(on: On): void {
       tab: view.tab,
       session,
     }
+    // A note the editor cannot take is said so in its place, kept as stored:
+    // drawn, the Client would fail the whole pane.
+    const sheet = fitsEditor(editor)
+      ? <Client key={`note-${view.tab}-${session}`} module="./editor.tsx" props={editor} height={rows} />
+      : (
+        <Box key="too-long" height={rows}>
+          <Text color="warning" wrap="wrap">
+            {`Note trop longue pour être modifiée ici (${thousands(editor.text.length)} caractères) : elle reste enregistrée telle quelle.`}
+          </Text>
+        </Box>
+      )
 
     const tabs = NOTE_TABS.map(([tab, label]) => {
       const isShown = tab === view.tab
@@ -411,7 +422,7 @@ export function registerNotes(on: On): void {
           </Box>
         )}
         <Box key="sheet" flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1} marginTop={1}>
-          <Client key={`note-${view.tab}-${session}`} module="./editor.tsx" props={editor} height={rows} />
+          {sheet}
         </Box>
         <Text dimColor wrap="truncate-end">{hint}</Text>
         {listed && (
@@ -433,7 +444,7 @@ export function registerNotes(on: On): void {
             {others.map(([id, one]) =>
               press(`session-${id}`, { view: { tab: 'session', other: id } }, [
                 { text: `${dayTime(one.updatedAt)}  `, dimColor: true },
-                { text: one.text.split('\n')[0] ?? '' },
+                { text: firstLine(one.text, e.props.bodyColumns) },
               ], { backgroundColor: 'subtle' }, e.props.bodyColumns),
             )}
           </Box>
