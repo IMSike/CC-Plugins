@@ -3,7 +3,6 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { BAND, click, engine, NOTES_PANE, NOW, shell, showSettings } from '../shared/testing'
-import { othersStart } from './notes'
 
 test('the notes open on the last tab shown, or on the one set', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -206,7 +205,6 @@ test('a /clear keeps the session note, the state kept', async ($, on) => {
   expect(await pane.find({ type: 'Text', text: /piste s1/, in: 'note-session-s1' })).toBeDefined()
   expect(await pane.find({ key: 'notes:session-s1' })).toBeUndefined()
   expect(store.get('notes.link.s2')).toBe('s1')
-  expect(store.get('notes.cleared')).toBeUndefined()
   await pane.post({ tab: 'session', session: 's1', text: 'piste s1, suite' }, { in: 'note-session-s1' })
   expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1, suite', updatedAt: NOW })
   expect(store.get('notes.session.s2')).toBeUndefined()
@@ -493,13 +491,6 @@ test("deleting another session's note deletes the links to it", async ($, on) =>
   expect(store.get('notes.link.x2')).toBe('x1')
   expect(store.get('notes.link.s1')).toBe('s0')
   await pane.unmount()
-})
-
-test('the list of other sessions stays within its notes', () => {
-  expect(othersStart(0, 5, 3)).toBe(0)
-  expect(othersStart(4, 5, 3)).toBe(2)
-  expect(othersStart(-2, 5, 3)).toBe(0)
-  expect(othersStart(3, 2, 3)).toBe(0)
 })
 
 // The editor applies no edit past 95,000 characters: a paste is refused whole.

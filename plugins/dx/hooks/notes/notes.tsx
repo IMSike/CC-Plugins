@@ -8,8 +8,9 @@ import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
 import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
 import type { PressPart, PressProps, PressStyle } from '../shared/press'
 import type { EditorProps } from './editor'
-import { NOTE_MAX_CHARS } from './editor-model'
+import { NOTE_MAX_CHARS, NOTE_MAX_SHOWN } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
+import { othersOf, othersStart } from './others'
 import { fitsStore, storeWritten } from './store-size'
 
 // The notes pane: three notes of the person's own, one for every session, one
@@ -24,7 +25,7 @@ const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTIN
 // The note shown, as the store last held it: drawn again when it changes there.
 const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })
 // Why the last save failed, or the last edit was refused: null once a save
-// succeeds.
+// succeeds (see `unsaved`).
 const notesUnsaved = atom({ plugin: 'dx', key: 'notesUnsaved' } as const, null as string | null, { shape: 'notes-unsaved-1' })
 // The first of the other sessions' notes listed, the list scrolled.
 const notesOthersAt = atom({ plugin: 'dx', key: 'notesOthersAt' } as const, 0, { shape: 'notes-others-at-1' })
@@ -55,19 +56,24 @@ async function openingTab($: EngineInterface): Promise<void> {
 // waits on the store, its older text then written last.
 let saving: Promise<void> = Promise.resolve()
 
-// Keeps a note as it now reads, once the saves before it are done.
-function save($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
-  const run = saving.then(() => write($, tab, session, text))
+// Runs `job` once the saves before it are done, a failed one too.
+function queued(job: () => Promise<void>): Promise<void> {
+  const run = saving.then(job)
   saving = run.catch(() => undefined)
   return run
 }
 
-// Why a note was not saved, as the pane says it.
-export const TOO_LONG = 'note trop longue (95 000 caractères au plus)'
-export const STORE_FULL = "store presque plein : supprimez d'anciennes notes"
+// Keeps a note as it now reads, once the saves before it are done.
+function save($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
+  return queued(() => write($, tab, session, text))
+}
 
-// A save failed, or an edit was refused: the pane says why until a save
-// succeeds. A handler's write, never a render's.
+// Why a note was not saved, as the pane says it.
+const TOO_LONG = `note trop longue (${NOTE_MAX_SHOWN} caractères au plus)`
+const STORE_FULL = "store presque plein : supprimez d'anciennes notes"
+
+// A save failed, an edit was refused, or the notes did not load to keep it:
+// the pane says why until a save succeeds. A handler's write, never a render's.
 async function unsaved($: EngineInterface, reason: string | null): Promise<void> {
   if ((await read($, notesUnsaved)) !== reason) await update($, notesUnsaved, () => reason)
 }
@@ -143,24 +149,12 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
 }
 
 // What each press drawn in the pane (../shared/press.tsx) does, by its key: a
-// view to show, a retry of the load, or another session's note to delete.
-// Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
-// with `notes:`, which the press hook matches.
+// view to show, a retry of the load, another session's note to delete, or
+// the list of other sessions to move by a number of rows. Rebuilt as the pane
+// draws, it holds the drawn ones alone. Every key starts with `notes:`, which
+// the press hook matches.
 type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number }
 let PRESSES = new Map<string, NotesPress>()
-
-// The other sessions' notes, latest first.
-function othersOf(value: Notes): [string, Note][] {
-  return Object.entries(value.sessions)
-    .filter(([id]) => id !== value.session)
-    .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
-}
-
-// The first of `count` notes listed, `shown` rows at a time from `at`: kept
-// within the list, its last row at the window's last.
-export function othersStart(at: number, count: number, shown: number): number {
-  return Math.max(0, Math.min(at, count - shown))
-}
 
 // Where the list of other sessions stands in the pane's tree, as last drawn:
 // its title's row and the row past its last; `offset`, the pane's window then.
@@ -216,16 +210,13 @@ export function registerNotes(on: On): void {
   })
 
   // Each change the editor posts.
-  on('ui.message', { module: /editor\.tsx$/ }, async ($, e, next) => {
-    if (e.requestId !== PANEL) return next(e)
+  on('ui.message', { module: /editor\.tsx$/, requestId: PANEL }, async ($, e, next) => {
     const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown }
     if (!isTab(data.tab) || typeof data.session !== 'string') return next(e)
     // An edit the editor did not apply, the note too long: said in its turn
     // among the saves, which a later one clears.
     if (data.refused === 'too-long') {
-      const run = saving.then(() => unsaved($, TOO_LONG))
-      saving = run.catch(() => undefined)
-      await run
+      await queued(() => unsaved($, TOO_LONG))
       return {}
     }
     if (typeof data.text !== 'string') return next(e)
@@ -335,8 +326,9 @@ export function registerNotes(on: On): void {
           : 'Cette session'
     const hint = `${subtitle} · Échap rend le clavier au prompt`
     // The panel's tabs and their margin, the notes' tabs, why a save failed,
-    // the sheet's border and margin, its hint (one row, cut), and the list of
-    // other sessions.
+    // the way back from another session's note, the sheet's border and
+    // margin, its hint (one row, cut), and the list of other sessions with
+    // its title and margin.
     const extra = panesRows + 5 + (failed !== null ? 1 : 0) + (other !== undefined ? 1 : 0) + (listed ? others.length + 2 : 0)
     const rows = Math.max(3, e.props.scroll.bodyRows - extra)
     // The list's title and rows, last in the tree.

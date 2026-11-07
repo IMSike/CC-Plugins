@@ -1,6 +1,7 @@
 // The notes editor's model: a text, a cursor in it, and the first visual row
 // shown. Lines wrap at the editor's width; the cursor moves over the visual
-// rows, as in a plain notepad.
+// rows, as in a plain notepad. Last, how ./editor takes in the text the hooks
+// draw again.
 
 export type Editor = { text: string; cursor: number; top: number }
 
@@ -8,6 +9,8 @@ export type Editor = { text: string; cursor: number; top: number }
 // under the 100,000 characters a Client's props may take, and so do its
 // posts to the hooks module.
 export const NOTE_MAX_CHARS = 95_000
+// NOTE_MAX_CHARS as the pane writes it, its thousands set apart by a space.
+export const NOTE_MAX_SHOWN = String(NOTE_MAX_CHARS).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
 
 // Whether going from `before` to `after` is refused for length: past
 // NOTE_MAX_CHARS, an edit that lengthens the note is not applied, a paste
@@ -199,4 +202,21 @@ export function clicked(editor: Editor, x: number, y: number, width: number): Ed
   const row = rows[Math.max(0, Math.min(rows.length - 1, editor.top + y))]
   if (row === undefined) return editor
   return { ...editor, cursor: Math.min(row.start + Math.max(0, x), row.end) }
+}
+
+// The editor as its surface keeps it: whether it has the keyboard; `given`,
+// the text the hooks last drew; `sent`, the texts posted since, not drawn
+// back yet.
+export type EditorState = Editor & { active: boolean; given: string; sent: string[] }
+
+// The text the hooks drew, taken in: the one shown, every post landed; one
+// this editor posted, drawn back late, the keys since standing; any other,
+// another session's, shown in place of this one's, the cursor kept within.
+export function drawn(state: EditorState, text: string): EditorState {
+  if (text === state.given) return state
+  if (text === state.text) return { ...state, given: text, sent: [] }
+  const echoed = state.sent.lastIndexOf(text)
+  if (echoed >= 0) return { ...state, given: text, sent: state.sent.slice(echoed + 1) }
+  const cursor = Math.min(state.cursor, text.length)
+  return { ...state, text, cursor, top: Math.min(state.top, text.slice(0, cursor).split('\n').length - 1), given: text, sent: [] }
 }

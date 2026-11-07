@@ -1,7 +1,7 @@
 import type { ClientModule } from 'claude-code'
 
-import { clicked, keyed, rowOf, rowsOf, tooLong } from './editor-model'
-import type { Editor } from './editor-model'
+import { clicked, drawn, keyed, rowOf, rowsOf, tooLong } from './editor-model'
+import type { EditorState } from './editor-model'
 
 // The notes editor, drawn on the surface's own thread: a click gives it the
 // keyboard (Escape hands it back), every key edits the text there, and each
@@ -17,24 +17,9 @@ export type EditorProps = {
   tab: string
   session: string
 }
-// `given`: the text the hooks last drew; `sent`: the texts posted since, not
-// drawn back yet.
-type EditorState = Editor & { active: boolean; given: string; sent: string[] }
 // Posts kept to tell an echo from another session's text: redraws fold, so
 // some never come back.
 const SENT_KEPT = 200
-
-// The text the hooks drew, taken in: the one shown, every post landed; one
-// this editor posted, drawn back late, the keys since standing; any other,
-// another session's, shown in place of this one's, the cursor kept within.
-export function drawn(state: EditorState, text: string): EditorState {
-  if (text === state.given) return state
-  if (text === state.text) return { ...state, given: text, sent: [] }
-  const echoed = state.sent.lastIndexOf(text)
-  if (echoed >= 0) return { ...state, given: text, sent: state.sent.slice(echoed + 1) }
-  const cursor = Math.min(state.cursor, text.length)
-  return { ...state, text, cursor, top: Math.min(state.top, text.slice(0, cursor).split('\n').length - 1), given: text, sent: [] }
-}
 
 // An editor opened on `text`: the cursor at its end, the keyboard elsewhere.
 function opened(text: string): EditorState {

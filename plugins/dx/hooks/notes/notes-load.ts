@@ -20,7 +20,8 @@ const SESSION_PREFIX = 'notes.session.'
 // A session id a `/clear` gave, to the session it goes on: its note's key.
 const LINK_PREFIX = 'notes.link.'
 // The `/clear` this process went through, until the next load links the new
-// session id: the session it ended, the one whose note it goes on with, and
+// session id (forgotten if the session ends otherwise first, see
+// `forgetClear`): the session it ended, the one whose note it goes on with, and
 // the tab it left. Kept in the hooks module's memory, which a `/clear` leaves
 // (the process goes on, no `session.start` fires), never in the store, which
 // every session reads: one launched meanwhile would take it for its own.
