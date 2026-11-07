@@ -5,7 +5,7 @@ import type { Activity, PanelView, Task, TaskView } from '../../types'
 import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
 import { DEFAULT_SETTINGS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
-import type { PressProps } from '../shared/press'
+import { pressBoard } from '../shared/presses'
 import {
   cliAgentUnder,
   encodeCommand,
@@ -249,38 +249,32 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
   const view = await read($, taskView)
   const { notesIcon, settingsIcon, monitorIcon } = await read($, settings)
   const labels: string[] = []
-  const presses = new Map<string, TabPress>()
+  // A surface with no Client draws a Button, the one way to press there.
+  const board = 'Client' in elements ? pressBoard<TabPress>(elements.Client, 'pane-') : undefined
   const tab = (key: string, label: string, isCurrent: boolean, action: TabPress) => {
     labels.push(label)
-    if (!isCurrent) presses.set(key, action)
-    const props: PressProps = {
-      parts: [{ text: label, color: isCurrent ? 'claude' : 'subtle', inverse: isCurrent, bold: isCurrent }],
-      hover: { bold: true },
-      truncate: Array.from(label).length > columns,
-    }
-    // As wide as drawn, cut to the pane only when longer.
-    const width = Array.from(label).length > columns ? columns : undefined
-    // A surface with no Client draws a Button, the one way to press there.
-    if (!('Client' in elements)) {
+    if (board === undefined) {
       return (
-        <Button key={key} plain hover={{ bold: true }} onPress={() => (isCurrent ? undefined : tabPressed($, action))}>
+        <Button key={`pane-${key}`} plain hover={{ bold: true }} onPress={() => (isCurrent ? undefined : tabPressed($, action))}>
           <Text color={isCurrent ? 'claude' : 'subtle'} inverse={isCurrent} bold={isCurrent} wrap="truncate-end">{label}</Text>
         </Button>
       )
     }
-    const { Client } = elements
-    return <Client key={key} module="../shared/press.tsx" props={props} width={width} height={1} />
+    // As wide as drawn, cut to the pane only when longer.
+    const width = Array.from(label).length > columns ? columns : undefined
+    const parts = [{ text: label, color: isCurrent ? 'claude' : 'subtle', inverse: isCurrent, bold: isCurrent }]
+    return board.press(key, isCurrent ? undefined : action, parts, { bold: true }, width)
   }
   // A wide glyph is followed by its own cell, then the space; a narrow one by
   // the space alone.
   const icon = (glyph: string) => `${glyph}${iconGap(glyph)}`
-  const notesTab = tab('pane-notes', ` ${icon(notesIcon)}${TITLES.notes} `, current === 'notes', { view: 'notes' })
-  const settingsTab = tab('pane-settings', ` ${icon(settingsIcon)}${TITLES.settings} `, current === 'settings', { view: 'settings' })
+  const notesTab = tab('notes', ` ${icon(notesIcon)}${TITLES.notes} `, current === 'notes', { view: 'notes' })
+  const settingsTab = tab('settings', ` ${icon(settingsIcon)}${TITLES.settings} `, current === 'settings', { view: 'settings' })
   const terminals = tasks.map(task => {
     const glyph = task.agent !== undefined ? ROBOT : task.kind === 'monitor' ? monitorIcon : TERMINAL
     const command = task.command.split('\n')[0] ?? ''
     const label = command.length > TAB_COMMAND ? `${command.slice(0, TAB_COMMAND - 1)}…` : command
-    return tab(`pane-task-${task.id}`, ` ${icon(glyph)}${label} `, current === 'task' && view?.id === task.id, { task: task.id })
+    return tab(`task-${task.id}`, ` ${icon(glyph)}${label} `, current === 'task' && view?.id === task.id, { task: task.id })
   })
 
   const tabs = (
@@ -290,7 +284,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
       {terminals}
     </Box>
   )
-  TAB_PRESSES = presses
+  TAB_PRESSES = board?.actions ?? new Map()
   return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1 }
 }
 

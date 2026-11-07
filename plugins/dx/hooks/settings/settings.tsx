@@ -30,7 +30,8 @@ import {
   thresholdsOf,
 } from '../shared/options'
 import { PANEL, panelView, togglePanel } from '../shared/panes'
-import type { PressPart, PressProps, PressStyle } from '../shared/press'
+import type { PressPart, PressStyle } from '../shared/press'
+import { pressBoard } from '../shared/presses'
 import { STEPPER_COLUMNS } from './stepper'
 import type { StepperProps } from './stepper'
 
@@ -151,17 +152,13 @@ export function registerSettings(on: On): void {
         {children}
       </Box>
     )
-    // A press that applies `edit`, drawn by ../shared/press.tsx: the terminal
-    // selects nothing however the clicks come. `width`: its cell's, the label
-    // cut there.
+    // A press that applies `edit` (../shared/presses). `width`: its cell's, the
+    // label cut there.
     // Nothing is awaited from here on: the presses drawn replace the last ones.
-    const presses = new Map<string, (current: BandSettings) => BandSettings>()
-    PRESSES = presses
-    const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) => {
-      presses.set(`settings:${key}`, edit)
-      const props: PressProps = { parts, hover, truncate: width !== undefined }
-      return <Client key={`settings:${key}`} module="../shared/press.tsx" props={props} width={width} height={1} />
-    }
+    const board = pressBoard<(current: BandSettings) => BandSettings>(Client, 'settings:')
+    PRESSES = board.actions
+    const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) =>
+      board.press(key, edit, parts, hover, width)
     const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })
     const toggle = (key: string, checked: boolean, label: string, edit: (current: BandSettings) => BandSettings, width = half) => (
       <Box key={`${key}-cell`} width={width}>

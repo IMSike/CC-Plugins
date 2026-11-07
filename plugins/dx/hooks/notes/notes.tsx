@@ -6,7 +6,7 @@ import { paneTabs } from '../activity/activity'
 import { dayTime, errorText } from '../shared/format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
 import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
-import type { PressPart, PressProps, PressStyle } from '../shared/press'
+import { pressBoard } from '../shared/presses'
 import type { EditorProps } from './editor'
 import { fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
@@ -309,15 +309,9 @@ export function registerNotes(on: On): void {
     }
     const { Box, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
-    // A press drawn by ../shared/press.tsx: the terminal selects nothing however
-    // the clicks come. `width`: the label cut there. Kept in `presses`, which
-    // takes PRESSES' place as the tree is returned.
-    const presses = new Map<string, NotesPress>()
-    const press = (key: string, action: NotesPress, parts: PressPart[], hover: PressStyle, width?: number) => {
-      presses.set(`notes:${key}`, action)
-      const props: PressProps = { parts, hover, truncate: width !== undefined }
-      return <Client key={`notes:${key}`} module="../shared/press.tsx" props={props} width={width} height={1} />
-    }
+    // The presses drawn, whose actions take PRESSES' place as the tree is
+    // returned.
+    const { actions: presses, press } = pressBoard<NotesPress>(Client, 'notes:')
 
     // Not loaded: what failed, and a retry, never a blank pane.
     if (value === null) {
