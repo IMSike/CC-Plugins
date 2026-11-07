@@ -759,10 +759,9 @@ function emptyNotes(on: On): () => void {
 
 // A session with a note, then a `/clear`: the engine goes on under `s2`, its
 // clock started over unless `startedAt` says otherwise, dx's notes emptied
-// when `empty`.
-async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW) {
+// when `empty`; `session`, the engine's, which a test changes again.
+async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW, session: { id: string; startedAt?: number } = { id: 's1' }) {
   mock.clock(on, { now: NOW })
-  const session: { id: string; startedAt?: number } = { id: 's1' }
   const store = engine(on, true, [], {}, { notesTab: 'session' }, true, new Set(), session)
   shell(on)
   const emptied = emptyNotes(on)
@@ -839,5 +838,20 @@ test('a /clear in another session leaves this one its own note', async ($, on) =
   expect(await pane.find({ key: 'session-s1' })).toBeDefined()
   expect(store.get('notes.link.s2')).toBeUndefined()
   expect(store.get('notes.cleared')).toBeDefined()
+  await pane.unmount()
+})
+
+// Two `/clear`s in a row, nothing loading the notes between them: the note
+// goes on from the first session still.
+test('two /clears in a row keep the session note', async ($, on) => {
+  const session: { id: string; startedAt?: number } = { id: 's1' }
+  const store = await clearSession($, on, false, NOW, session)
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  session.id = 's3'
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ type: 'Text', text: /piste s1/, in: 'note-session-s1' })).toBeDefined()
+  await pane.post({ tab: 'session', session: 's1', text: 'piste s1, suite' }, { in: 'note-session-s1' })
+  expect(store.get('notes.link.s3')).toBe('s1')
+  expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1, suite', updatedAt: NOW })
   await pane.unmount()
 })

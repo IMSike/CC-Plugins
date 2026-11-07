@@ -119,8 +119,9 @@ export async function ensureNotes($: EngineInterface, retry = true): Promise<voi
 // go on with them.
 export async function noteClear($: EngineInterface, ending: string): Promise<void> {
   const value = await read($, notes).catch(() => null)
-  const linked = await $.store.get(LINK_PREFIX + ending).catch(() => undefined)
-  const from = value?.id === ending ? value.session : typeof linked === 'string' ? linked : ending
+  // Not loaded since an earlier `/clear`: the session that one went on from,
+  // its marker still found, the ending session's clock not started over yet.
+  const from = value?.id === ending ? value.session : await sessionOf($, ending, false)
   const view = await read($, notesView).catch(() => undefined)
   const at = await $.clock.now()
   await $.store.set(CLEARED_KEY, { from, at, view } satisfies Cleared).catch(() => undefined)
