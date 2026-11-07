@@ -9,18 +9,23 @@ export type Gauge = {
 
 // What the status band draws, read from the engine at each refresh.
 export type StatusSnapshot = {
+  // As the band writes it: `Opus 5.5`.
   model: string
+  // The effort the last main-loop request was sent with, else the one set.
   effort?: string
+  // The working directory, the home directory written `~`.
   cwd: string
   // Git branch of the directory, or a short commit when detached.
   branch?: string
-  // Context window used, absent before the first response.
+  // Context window used, in percent, and in tokens: absent before the first
+  // response (and after a compaction, until the next one).
   context?: number
   contextTokens?: number
+  // The model's context window, in tokens.
   contextWindow: number
   fiveHour?: Gauge
   sevenDay?: Gauge
-  // `$.clock.now()` milliseconds.
+  // When the session began (`$.session.usage()`), in `$.clock.now()` milliseconds.
   startedAt: number
   // `$.clock.now()` at the refresh: makes each refresh a new value, so the
   // countdowns are redrawn even when nothing else changed.
@@ -34,7 +39,8 @@ export type CliAgent = 'claude' | 'cursor'
 export type Task = {
   id: string
   kind: 'shell' | 'monitor'
-  // The command it runs, to find its process.
+  // The command it runs: shown on its tab and in its terminal, and matched to
+  // find its process.
   command: string
   // Its shell's process, once found.
   pid?: number
@@ -42,7 +48,8 @@ export type Task = {
   agent?: CliAgent
   // The file its output is written to.
   output?: string
-  // Index of the next check in the schedule, and when it is due.
+  // Index of the next check in the schedule, and when it is due
+  // (`$.clock.now()` milliseconds).
   step: number
   dueAt: number
 }
@@ -60,6 +67,7 @@ export type TaskView = { id: string; command: string; output?: string; lines: st
 export type TurnTime = {
   // `$.clock.now()` milliseconds.
   startedAt: number
+  // Once it ends: its duration as the engine measured it, and when.
   durationMs?: number
   endedAt?: number
 }
@@ -117,7 +125,8 @@ export type BandSettings = {
   // `animateWithCrew`, also while a subagent works or a background task runs.
   animateOnlyWorking: boolean
   animateWithCrew: boolean
-  // The 7-day gauge's label: `7j` (jours, the default) or `7d` (days).
+  // The 7-day gauge's label: `7j` (jours, the default) or `7d` (days). It sets
+  // the letter of days in the band's durations too: `1j15h` or `1d15h`.
   sevenDayLabel: '7j' | '7d'
 }
 
@@ -132,8 +141,8 @@ export type Note = { text: string; updatedAt: number }
 export type NoteTab = 'global' | 'project' | 'session'
 
 // The notes, loaded from `$.store` when the session starts, and again when
-// their pane is shown, a note is written or a prompt sent while they are not
-// loaded, or loaded for another session id (after a `/clear`).
+// their pane is shown, a tab chosen, a note written or a prompt sent while
+// they are not loaded, or loaded for another session id (after a `/clear`).
 export type Notes = {
   global: Note | null
   project: Note | null
@@ -159,8 +168,10 @@ declare module 'claude-code' {
       statusline: Shaped<StatusSnapshot | null>
       activity: Shaped<Activity>
       taskView: Shaped<TaskView | null>
+      // The subagents' spinner frame, advanced while one works.
       spin: Shaped<number>
       turn: Shaped<TurnTime | null>
+      // Counted up each second while the turn runs, so its duration is redrawn.
       tick: Shaped<number>
       settings: Shaped<BandSettings>
       notes: Shaped<Notes | null>
@@ -170,8 +181,9 @@ declare module 'claude-code' {
       // The note the notes pane shows, as the store last held it: key, time,
       // and the longest it may grow to.
       notesSeen: Shaped<string | null>
-      // Why the last save of a note failed, or an edit was refused, and which
-      // note; null once that note saves.
+      // Why the last save of a note failed (the notes not loaded to keep it
+      // among the reasons), or an edit was refused, and which note; null once
+      // that note saves.
       notesUnsaved: Shaped<NotesUnsaved | null>
       // The first of the other sessions' notes listed, the list scrolled.
       notesOthersAt: Shaped<number>
