@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import { lighten } from './format'
+import { lighten } from '../shared/format'
 
 // One piece of the band's frame, two slow glints going round it, half a
 // lap apart: every piece knows where its cells sit along the frame's perimeter

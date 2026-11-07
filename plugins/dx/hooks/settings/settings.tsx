@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderChildren } from 'claude-code'
 
 import type { BandSettings, BottomFact } from '../../types'
-import { paneTabs } from './activity'
+import { paneTabs } from '../activity/activity'
 import {
   ACCENTS,
   ANIMATE_LABELS,
@@ -28,9 +28,9 @@ import {
   SHOW_LABELS,
   SPEEDS,
   thresholdsOf,
-} from './options'
-import { PANEL, panelView, togglePanel } from './panes'
-import type { PressPart, PressProps, PressStyle } from './press'
+} from '../shared/options'
+import { PANEL, panelView, togglePanel } from '../shared/panes'
+import type { PressPart, PressProps, PressStyle } from '../shared/press'
 import { STEPPER_COLUMNS } from './stepper'
 import type { StepperProps } from './stepper'
 
@@ -90,8 +90,8 @@ const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSe
   'notes-others': (current, notesOthers) => ({ ...current, notesOthers }),
 }
 
-// What each press drawn in the pane (./press.tsx) changes, by its key: set as
-// the pane draws, applied to the settings as they stand when it lands.
+// What each press drawn in the pane (../shared/press.tsx) changes, by its key:
+// set as the pane draws, applied to the settings as they stand when it lands.
 // Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
 // with `settings:`, which the press hook matches.
 let PRESSES = new Map<string, (current: BandSettings) => BandSettings>()
@@ -146,15 +146,16 @@ export function registerSettings(on: On): void {
         {children}
       </Box>
     )
-    // A press that applies `edit`, drawn by ./press.tsx: the terminal selects
-    // nothing however the clicks come. `width`: its cell's, the label cut there.
+    // A press that applies `edit`, drawn by ../shared/press.tsx: the terminal
+    // selects nothing however the clicks come. `width`: its cell's, the label
+    // cut there.
     // Nothing is awaited from here on: the presses drawn replace the last ones.
     const presses = new Map<string, (current: BandSettings) => BandSettings>()
     PRESSES = presses
     const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) => {
       presses.set(`settings:${key}`, edit)
       const props: PressProps = { parts, hover, truncate: width !== undefined }
-      return <Client key={`settings:${key}`} module="./press.tsx" props={props} width={width} height={1} />
+      return <Client key={`settings:${key}`} module="../shared/press.tsx" props={props} width={width} height={1} />
     }
     const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })
     const toggle = (key: string, checked: boolean, label: string, edit: (current: BandSettings) => BandSettings, width = half) => (

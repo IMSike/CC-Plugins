@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { PanelView } from '../../types'
-import { ensureNotes } from './notes-load'
+import { ensureNotes } from '../notes/notes-load'
 
 // dx's side panel: one pane, whose content is the notes, the settings or a
 // background task's terminal. Going from one to another redraws it in place,

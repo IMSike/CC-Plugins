@@ -2,8 +2,11 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, SessionUsage } from 'claude-code'
 
 import type { Activity, BottomFact, Gauge, StatusSnapshot, TurnTime } from '../../types'
-import { openAgent, showTask, startActivity } from './activity'
-import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from './crew'
+import { openAgent, showTask, startActivity } from '../activity/activity'
+import { loadNotes, notesTick, NOTES_POLL_MS, toggleNotes } from '../notes/notes'
+import { ensureNotes } from '../notes/notes-load'
+import { loadSettings, toggleSettings } from '../settings/settings'
+import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import {
   branchOf,
   clockTime,
@@ -18,13 +21,10 @@ import {
   shortenPath,
   truncateStart,
   turnDuration,
-} from './format'
+} from '../shared/format'
+import { DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
 import type { FrameProps, FrameRun } from './frame'
 import type { GaugeProps } from './gauge'
-import { loadNotes, notesTick, NOTES_POLL_MS, toggleNotes } from './notes'
-import { ensureNotes } from './notes-load'
-import { DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from './options'
-import { loadSettings, toggleSettings } from './settings'
 
 // Change the tag when StatusSnapshot's fields change: it declines what an
 // earlier version stored, which outlives a reload.
@@ -32,7 +32,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
   shape: 'statusline-2',
 })
 
-// What the band shows, animates and is colored with, set in ./settings.
+// What the band shows, animates and is colored with, set in ../settings/settings.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 
 // The main loop's last turn, and a tick each second while it runs, so its
@@ -54,7 +54,7 @@ async function spinTick($: EngineInterface): Promise<void> {
   if (crew.agents.some(agent => isWorking(agent.status))) await update($, spin, frame => frame + 1)
 }
 
-// What runs beside the main loop, followed by ./activity.
+// What runs beside the main loop, followed by ../activity/activity.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
   shape: 'activity-1',
 })

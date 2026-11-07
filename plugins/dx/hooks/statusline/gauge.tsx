@@ -1,7 +1,7 @@
 import type { ClientModule } from 'claude-code'
 
-import { filledCells, gauge, shuttleAt } from './format'
-import type { Thresholds } from './format'
+import { filledCells, gauge, shuttleAt } from '../shared/format'
+import type { Thresholds } from '../shared/format'
 
 // A gauge drawn on the surface's own thread, so that its shuttle moves without
 // the band being redrawn: the frame clock ticks here, and the hooks module only

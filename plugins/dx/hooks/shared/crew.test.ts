@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Activity, Task } from '../../types'
+import { lightAt } from '../statusline/frame'
 import { CURSOR_GREY, crewItems, crewLabel, crewWidth, iconGap, MAX_ICONS, MONITOR, ROBOT, SPINNER, TERMINAL } from './crew'
-import { lightAt } from './frame'
 import { MONITOR_ICONS, NOTES_ICONS, SETTINGS_ICONS } from './options'
 
 const task = (id: string, kind: Task['kind'], agent?: Task['agent']): Task => ({ id, kind, command: id, agent, step: 0, dueAt: 0 })

@@ -2,14 +2,14 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesView } from '../../types'
-import { paneTabs } from './activity'
+import { paneTabs } from '../activity/activity'
+import { dayTime } from '../shared/format'
+import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
+import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
+import type { PressPart, PressProps, PressStyle } from '../shared/press'
 import type { EditorProps } from './editor'
 import { NOTE_MAX_CHARS } from './editor-model'
-import { dayTime } from './format'
-import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
-import { isShowing, PANEL, panelView, togglePanel } from './panes'
-import type { PressPart, PressProps, PressStyle } from './press'
 import { fitsStore, storeWritten } from './store-size'
 
 // The notes pane: three notes of the person's own, one for every session, one
@@ -19,7 +19,7 @@ import { fitsStore, storeWritten } from './store-size'
 const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-2' })
 const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
-// What the band shows, set in ./settings: the notes' tab and list here.
+// What the band shows, set in ../settings/settings: the notes' tab and list here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 // The note shown, as the store last held it: drawn again when it changes there.
 const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })
@@ -138,10 +138,10 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
   await $.store.set(TAB_KEY, shown.tab).catch(() => undefined)
 }
 
-// What each press drawn in the pane (./press.tsx) does, by its key: a view to
-// show, a retry of the load, or another session's note to delete. Rebuilt as
-// the pane draws, it holds the drawn ones alone. Every key starts with
-// `notes:`, which the press hook matches.
+// What each press drawn in the pane (../shared/press.tsx) does, by its key: a
+// view to show, a retry of the load, or another session's note to delete.
+// Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
+// with `notes:`, which the press hook matches.
 type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number }
 let PRESSES = new Map<string, NotesPress>()
 
@@ -267,14 +267,14 @@ export function registerNotes(on: On): void {
     }
     const { Box, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
-    // A press drawn by ./press.tsx: the terminal selects nothing however the
-    // clicks come. `width`: the label cut there. Kept in `presses`, which takes
-    // PRESSES' place once nothing is awaited any more.
+    // A press drawn by ../shared/press.tsx: the terminal selects nothing however
+    // the clicks come. `width`: the label cut there. Kept in `presses`, which
+    // takes PRESSES' place once nothing is awaited any more.
     const presses = new Map<string, NotesPress>()
     const press = (key: string, action: NotesPress, parts: PressPart[], hover: PressStyle, width?: number) => {
       presses.set(`notes:${key}`, action)
       const props: PressProps = { parts, hover, truncate: width !== undefined }
-      return <Client key={`notes:${key}`} module="./press.tsx" props={props} width={width} height={1} />
+      return <Client key={`notes:${key}`} module="../shared/press.tsx" props={props} width={width} height={1} />
     }
 
     // Not loaded: what failed, and a retry, never a blank pane.

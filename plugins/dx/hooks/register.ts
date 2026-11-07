@@ -1,8 +1,8 @@
 import type { Register } from 'claude-code'
 
-import { registerActivity } from './statusline/activity'
-import { registerNotes } from './statusline/notes'
-import { registerSettings } from './statusline/settings'
+import { registerActivity } from './activity/activity'
+import { registerNotes } from './notes/notes'
+import { registerSettings } from './settings/settings'
 import { registerStatusline } from './statusline/statusline'
 
 // One hooks module per plugin: each feature of dx registers its own hooks here.

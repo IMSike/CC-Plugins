@@ -2,10 +2,10 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderElement } from 'claude-code'
 
 import type { Activity, PanelView, Task, TaskView } from '../../types'
-import { iconGap, ROBOT, TERMINAL } from './crew'
-import { DEFAULT_SETTINGS } from './options'
-import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from './panes'
-import type { PressProps } from './press'
+import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
+import { DEFAULT_SETTINGS } from '../shared/options'
+import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
+import type { PressProps } from '../shared/press'
 import {
   cliAgentUnder,
   encodeCommand,
@@ -27,7 +27,7 @@ import type { ProcessTree } from './tasks'
 // is due for a check: soon after it starts (to tell an agent CLI in it), then
 // further and further apart (ADR 0003).
 
-// What the band shows, set in ./settings: the panes' icons here.
+// What the band shows, set in ../settings/settings: the panes' icons here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 
 // The agents and the tasks followed, drawn on the band's bottom border.
@@ -239,8 +239,8 @@ async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
 
 // The panel's tabs, atop each of its contents: the notes, the settings, and a
 // terminal per background task, the one in front marked; `rows`, what they
-// take with their margin. Each is drawn by ./press.tsx: the terminal selects
-// nothing however the clicks come.
+// take with their margin. Each is drawn by ../shared/press.tsx: the terminal
+// selects nothing however the clicks come.
 export async function paneTabs($: EngineInterface, e: PaneRender, current: PanelView, columns: number): Promise<{ tabs: RenderElement; rows: number }> {
   const elements = $.ui.resolve(e)
   const { Box, Button, Text } = elements
@@ -268,7 +268,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
       )
     }
     const { Client } = elements
-    return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
+    return <Client key={key} module="../shared/press.tsx" props={props} width={width} height={1} />
   }
   // A wide glyph is followed by its own cell, then the space; a narrow one by
   // the space alone.
