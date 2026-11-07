@@ -67,6 +67,7 @@ L'icône `⚙` affiche les réglages dans le panneau latéral ; un second clic l
 - **Données** : gardées dans le store de dx, un fichier sous `~/.claude/plugins/store/` ([ADR 0004](../adr/0004-settings-and-notes.md)).
 - **Implications** :
   - Le panneau latéral se range à côté du transcript en mode plein écran, au-dessus du prompt sinon. C'est un seul panneau dont le contenu change (notes, réglages ou un terminal) sans se refermer, donc sans scintillement ; une ligne d'onglets en haut mène de l'un à l'autre et au terminal de chaque tâche en arrière-plan.
+  - Un clic dans le panneau (ses onglets, les onglets et liens des notes, les contrôles des réglages) ne sélectionne jamais de texte, quels que soient les mouvements du pointeur ; ils s'activent au pointeur seulement, pas au clavier. Les icônes du bandeau restent de simples boutons ([ADR 0005](../adr/0005-panel-presses.md)).
   - Un changement fait dans une session apparaît dans une autre à la prochaine ouverture de ses réglages.
   - Chaque copie du plugin (installée, chargée avec `--plugin-dir`) garde ses propres réglages.
 

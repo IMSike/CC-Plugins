@@ -88,6 +88,24 @@ function engine(
   return store
 }
 
+// A click on a pressable: a press and a release over a Client of ./press.tsx,
+// which the terminal draws for what is pressed inside the panel; a press on a
+// Button, which the band keeps.
+type Pointed = { type: 'down' | 'up'; x: number; y: number; button: 'left'; in: string }
+type Clickable = {
+  find: (query: { key: string }) => Promise<{ type: string } | undefined>
+  press: (target: { key: string }) => Promise<unknown>
+  pointer?: (event: Pointed) => Promise<void>
+}
+async function click(drawn: Clickable, key: string): Promise<void> {
+  if ((await drawn.find({ key }))?.type !== 'Client' || drawn.pointer === undefined) {
+    await drawn.press({ key })
+    return
+  }
+  await drawn.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: key })
+  await drawn.pointer({ type: 'up', x: 0, y: 0, button: 'left', in: key })
+}
+
 // The views the band asks for.
 function views(on: On) {
   const views: { agentId?: string }[] = []
@@ -286,14 +304,14 @@ test("a subagent's icon turns and opens its transcript, then the main one again"
 
   const ui = await $.ui.mount(BAND)
   expect((await ui.find({ key: 'crew-a1' }))?.text).toBe('· ')
-  await ui.press({ key: 'crew-a1' })
+  await click(ui, 'crew-a1')
   expect(asked).toEqual([{ agentId: 'a1' }])
   await ui.unmount()
 
   // Its transcript in view: the icon is underlined, a press goes back.
   const viewing = await $.ui.mount({ ...BAND, props: { ...BAND.props, view: { agentId: 'a1' } } })
   expect((await viewing.find({ type: 'Text', text: /^· $/ }))?.props.underline).toBe(true)
-  await viewing.press({ key: 'crew-a1' })
+  await click(viewing, 'crew-a1')
   expect(asked).toEqual([{ agentId: 'a1' }, {}])
   await viewing.unmount()
 })
@@ -361,7 +379,7 @@ test("a background shell's icon opens its command and output, and closes them", 
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
 
   const ui = await $.ui.mount(BAND)
-  await ui.press({ key: 'crew-b1' })
+  await click(ui, 'crew-b1')
   expect(panes).toEqual(['dx-panel'])
 
   const pane = await $.ui.mount(PANE)
@@ -369,7 +387,7 @@ test("a background shell's icon opens its command and output, and closes them", 
   expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
   await pane.unmount()
 
-  await ui.press({ key: 'crew-b1' })
+  await click(ui, 'crew-b1')
   expect(panes).toEqual([])
   await ui.unmount()
 })
@@ -382,23 +400,23 @@ test("the panel's tabs lead from the notes to a terminal and the settings", asyn
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
 
   const ui = await $.ui.mount(BAND)
-  await ui.press({ key: 'notes' })
+  await click(ui, 'notes')
   await ui.unmount()
   const notes = await $.ui.mount(NOTES_PANE)
-  expect((await notes.find({ type: 'Text', text: /  Notes $/ }))?.props.inverse).toBe(true)
+  expect((await notes.find({ type: 'Text', text: /  Notes $/, in: 'pane-notes' }))?.props.inverse).toBe(true)
   // One pane whose content changes: it is never closed on the way.
-  await notes.press({ key: 'pane-task-b1' })
+  await click(notes, 'pane-task-b1')
   expect(panes).toEqual(['dx-panel'])
   await notes.unmount()
 
   const task = await $.ui.mount(PANE)
-  expect((await task.find({ type: 'Text', text: /  npm run dev $/ }))?.props.inverse).toBe(true)
-  await task.press({ key: 'pane-settings' })
+  expect((await task.find({ type: 'Text', text: /  npm run dev $/, in: 'pane-task-b1' }))?.props.inverse).toBe(true)
+  await click(task, 'pane-settings')
   expect(panes).toEqual(['dx-panel'])
   await task.unmount()
 
   const settings = await $.ui.mount(SETTINGS_PANE)
-  expect((await settings.find({ type: 'Text', text: / Réglages $/ }))?.props.inverse).toBe(true)
+  expect((await settings.find({ type: 'Text', text: / Réglages $/, in: 'pane-settings' }))?.props.inverse).toBe(true)
   await settings.unmount()
 })
 
@@ -454,12 +472,12 @@ test('the notes and settings icons open their panes, and close them', async ($, 
   panes.push('dx-settings')
   const ui = await $.ui.mount(BAND)
   // One panel: an icon shows its content there, a second click closes it.
-  await ui.press({ key: 'notes' })
+  await click(ui, 'notes')
   expect(panes).toEqual(['dx-panel'])
   panes.push('dx-notes')
-  await ui.press({ key: 'settings' })
+  await click(ui, 'settings')
   expect(panes).toEqual(['dx-panel'])
-  await ui.press({ key: 'settings' })
+  await click(ui, 'settings')
   expect(panes).toEqual([])
   await ui.unmount()
 })
@@ -470,7 +488,7 @@ const NOTES_PANE = { ...PANE, props: { ...PANE.props, title: 'Notes', scroll: { 
 // The band's settings icon pressed: the panel on the settings.
 async function showSettings($: Engine) {
   const band = await $.ui.mount(BAND)
-  await band.press({ key: 'settings' })
+  await click(band, 'settings')
   await band.unmount()
 
   return $.ui.mount(SETTINGS_PANE)
@@ -483,8 +501,8 @@ test("the bottom border's facts follow the order set, in the color set", async (
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const pane = await showSettings($)
-  await pane.press({ key: 'up-tokens' })
-  await pane.press({ key: 'info-color-58a6ff' })
+  await click(pane, 'up-tokens')
+  await click(pane, 'info-color-58a6ff')
   await pane.unmount()
   expect((store.get('settings') as { bottomOrder: string[] }).bottomOrder).toEqual(['duration', 'end', 'tokens', 'total'])
 
@@ -500,7 +518,7 @@ test('the notes open on the last tab shown, or on the one set', async ($, on) =>
   engine(on, true, [], {}, { notesTab: 'session' })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
-  expect((await pane.find({ type: 'Text', text: /^ Session $/ }))?.props.inverse).toBe(true)
+  expect((await pane.find({ type: 'Text', text: /^ Session $/, in: 'tab-session' }))?.props.inverse).toBe(true)
   await pane.unmount()
 })
 
@@ -509,7 +527,7 @@ test('the notes open on the tab set when the last one is not taken up', async ($
   engine(on, true, [], {}, { notesTab: 'session', settings: { notesTab: 'project', resumeNotesTab: false } })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
-  expect((await pane.find({ type: 'Text', text: /^ Projet $/ }))?.props.inverse).toBe(true)
+  expect((await pane.find({ type: 'Text', text: /^ Projet $/, in: 'tab-project' }))?.props.inverse).toBe(true)
   await pane.unmount()
 })
 
@@ -520,8 +538,8 @@ test('a setting changed in its pane is kept and redraws the band', async ($, on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const pane = await showSettings($)
-  await pane.press({ key: 'show-total' })
-  await pane.press({ key: 'frame-color-58a6ff' })
+  await click(pane, 'show-total')
+  await click(pane, 'frame-color-58a6ff')
   await pane.unmount()
 
   const stored = store.get('settings') as { show: { total: boolean }; frameColor: string }
@@ -578,17 +596,17 @@ test('notes are kept per tab, out of the conversation', async ($, on) => {
   await pane.key({ key: 'lait', in: 'note-global-s1' })
   expect(store.get('notes.global')).toEqual({ text: 'pain\nlait', updatedAt: NOW })
   expect(await pane.find({ type: 'Text', text: /lait/, in: 'note-global-s1' })).toBeDefined()
-  await pane.press({ key: 'tab-project' })
+  await click(pane, 'tab-project')
   await pane.post({ tab: 'project', session: 's1', text: 'migrer la base' }, { in: 'note-project-s1' })
   expect(store.get(String.raw`notes.project.C:\Users\dev\repo\app`)).toEqual({ text: 'migrer la base', updatedAt: NOW })
-  await pane.press({ key: 'tab-global' })
+  await click(pane, 'tab-global')
   expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
 
   // The session tab lists the other sessions' notes: one opened, then deleted.
-  await pane.press({ key: 'tab-session' })
-  await pane.press({ key: 'session-old' })
+  await click(pane, 'tab-session')
+  await click(pane, 'session-old')
   expect(await pane.find({ type: 'Text', text: /ancienne piste/, in: 'note-session-old' })).toBeDefined()
-  await pane.press({ key: 'delete' })
+  await click(pane, 'delete')
   expect(store.get('notes.session.old')).toBeUndefined()
   expect(await pane.find({ key: 'session-old' })).toBeUndefined()
   await pane.unmount()
@@ -608,7 +626,7 @@ test('a note or a setting written by another session is taken up, not overwritte
   await notes.unmount()
 
   const pane = await showSettings($)
-  await pane.press({ key: 'show-total' })
+  await click(pane, 'show-total')
   await pane.unmount()
   expect(store.get('settings')).toMatchObject({ show: { branch: false, total: false } })
 })
@@ -619,7 +637,7 @@ test('a note another session changes is shown in the open pane, and kept from th
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const band = await $.ui.mount(BAND)
-  await band.press({ key: 'notes' })
+  await click(band, 'notes')
   await band.unmount()
   const pane = await $.ui.mount(NOTES_PANE)
   expect(await pane.find({ type: 'Text', text: /liste/, in: 'note-global-s1' })).toBeDefined()
@@ -644,9 +662,9 @@ test('the crew animation setting turns the working one on with it', async ($, on
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const pane = await showSettings($)
-  await pane.press({ key: 'animate-with-crew' })
+  await click(pane, 'animate-with-crew')
   expect(store.get('settings')).toMatchObject({ animateOnlyWorking: true, animateWithCrew: true })
-  await pane.press({ key: 'animate-with-crew' })
+  await click(pane, 'animate-with-crew')
   expect(store.get('settings')).toMatchObject({ animateOnlyWorking: true, animateWithCrew: false })
   await pane.unmount()
 })
@@ -660,11 +678,11 @@ test('notes that failed to load at the start load when the panel opens on them',
   refused.clear()
 
   const band = await $.ui.mount(BAND)
-  await band.press({ key: 'notes' })
+  await click(band, 'notes')
   await band.unmount()
   expect(panes).toEqual(['dx-panel'])
   const pane = await $.ui.mount(NOTES_PANE)
-  expect((await pane.find({ type: 'Text', text: /^ Global $/ }))?.props.inverse).toBe(true)
+  expect((await pane.find({ type: 'Text', text: /^ Global $/, in: 'tab-global' }))?.props.inverse).toBe(true)
   expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
   await pane.unmount()
 })
@@ -679,7 +697,7 @@ test('notes that failed to load load when the open panel goes from the settings 
 
   // The panel stays open: the notes are shown with no new open.
   const settings = await showSettings($)
-  await settings.press({ key: 'pane-notes' })
+  await click(settings, 'pane-notes')
   await settings.unmount()
   expect(panes).toEqual(['dx-panel'])
   const pane = await $.ui.mount(NOTES_PANE)
@@ -703,7 +721,7 @@ test('notes that cannot load say so in the panel, with a retry', async ($, on) =
   expect(logged.some(line => line.to === 'debug' && /notes non chargées.*session not ready/.test(line.text))).toBe(true)
 
   const band = await $.ui.mount(BAND)
-  await band.press({ key: 'notes' })
+  await click(band, 'notes')
   await band.unmount()
   const pane = await $.ui.mount(NOTES_PANE)
   // Never a blank panel: its tabs, what failed, and a retry.
@@ -712,7 +730,7 @@ test('notes that cannot load say so in the panel, with a retry', async ($, on) =
   expect(await pane.find({ type: 'Text', text: /session not ready/ })).toBeDefined()
   expect(await pane.find({ key: 'sheet' })).toBeUndefined()
   refused.clear()
-  await pane.press({ key: 'retry' })
+  await click(pane, 'retry')
   expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeUndefined()
   expect(await pane.find({ key: 'sheet' })).toBeDefined()
   await pane.unmount()
@@ -752,8 +770,8 @@ async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW) 
   const before = await $.ui.mount(NOTES_PANE)
   await before.post({ tab: 'session', session: 's1', text: 'piste s1' }, { in: 'note-session-s1' })
   // The tab shown at the `/clear`, which the stored one is not.
-  await before.press({ key: 'tab-global' })
-  await before.press({ key: 'tab-session' })
+  await click(before, 'tab-global')
+  await click(before, 'tab-session')
   store.set('notesTab', 'project')
   await before.unmount()
   expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1', updatedAt: NOW })
@@ -770,7 +788,7 @@ async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW) 
 test('a /clear keeps the session note, the state kept', async ($, on) => {
   const store = await clearSession($, on, false)
   const band = await $.ui.mount(BAND)
-  await band.press({ key: 'notes' })
+  await click(band, 'notes')
   await band.unmount()
   const pane = await $.ui.mount(NOTES_PANE)
   expect(await pane.find({ type: 'Text', text: /piste s1/, in: 'note-session-s1' })).toBeDefined()
@@ -789,7 +807,7 @@ test('a /clear keeps the session note, the state emptied with the pane open', as
   const store = await clearSession($, on, true)
   const pane = await $.ui.mount(NOTES_PANE)
   expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeUndefined()
-  expect((await pane.find({ type: 'Text', text: /^ Session $/ }))?.props.inverse).toBe(true)
+  expect((await pane.find({ type: 'Text', text: /^ Session $/, in: 'tab-session' }))?.props.inverse).toBe(true)
   expect(await pane.find({ type: 'Text', text: /piste s1/, in: 'note-session-s1' })).toBeDefined()
   expect(await pane.find({ key: 'session-s1' })).toBeUndefined()
   // Drawn without a write; kept, and linked, by the first change.
@@ -798,8 +816,8 @@ test('a /clear keeps the session note, the state emptied with the pane open', as
   expect(store.get('notes.link.s2')).toBe('s1')
   expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1, suite', updatedAt: NOW })
   expect(store.get('notes.session.s2')).toBeUndefined()
-  await pane.press({ key: 'tab-global' })
-  expect((await pane.find({ type: 'Text', text: /^ Global $/ }))?.props.inverse).toBe(true)
+  await click(pane, 'tab-global')
+  expect((await pane.find({ type: 'Text', text: /^ Global $/, in: 'tab-global' }))?.props.inverse).toBe(true)
   await pane.unmount()
 })
 
@@ -807,8 +825,8 @@ test('a /clear keeps the session note, the state emptied with the pane open', as
 test('a tab chosen right after a /clear is shown', async ($, on) => {
   await clearSession($, on, true)
   const pane = await $.ui.mount(NOTES_PANE)
-  await pane.press({ key: 'tab-project' })
-  expect((await pane.find({ type: 'Text', text: /^ Projet $/ }))?.props.inverse).toBe(true)
+  await click(pane, 'tab-project')
+  expect((await pane.find({ type: 'Text', text: /^ Projet $/, in: 'tab-project' }))?.props.inverse).toBe(true)
   await pane.unmount()
 })
 
@@ -816,7 +834,7 @@ test('a tab chosen right after a /clear is shown', async ($, on) => {
 test('a /clear in another session leaves this one its own note', async ($, on) => {
   const store = await clearSession($, on, true, NOW - 60_000)
   const pane = await $.ui.mount(NOTES_PANE)
-  await pane.press({ key: 'tab-session' })
+  await click(pane, 'tab-session')
   expect(await pane.find({ key: 'note-session-s2' })).toBeDefined()
   expect(await pane.find({ key: 'session-s1' })).toBeDefined()
   expect(store.get('notes.link.s2')).toBeUndefined()

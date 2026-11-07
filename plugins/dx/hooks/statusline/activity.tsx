@@ -5,6 +5,7 @@ import type { Activity, PanelView, Task, TaskView } from '../../types'
 import { MONITOR, ROBOT, TERMINAL } from './crew'
 import { DEFAULT_SETTINGS } from './options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from './panes'
+import type { PressProps } from './press'
 import {
   cliAgentUnder,
   encodeCommand,
@@ -225,31 +226,57 @@ function wrappedRows(labels: readonly string[], columns: number): number {
   return rows
 }
 
+// What each tab atop the panel shows when pressed, by its key: a content, or
+// a background task's terminal; none for the tab in front.
+type TabPress = { view: 'notes' | 'settings' } | { task: string }
+const TAB_PRESSES = new Map<string, TabPress>()
+
+async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
+  if ('task' in action) return showTask($, action.task, false)
+  return showPanel($, action.view)
+}
+
 // The panel's tabs, atop each of its contents: the notes, the settings, and a
 // terminal per background task, the one in front marked; `rows`, what they
-// take with their margin.
+// take with their margin. Each is drawn by ./press.tsx: the terminal selects
+// nothing however the clicks come.
 export async function paneTabs($: EngineInterface, e: PaneRender, current: PanelView, columns: number): Promise<{ tabs: RenderElement; rows: number }> {
-  const { Box, Button, Text } = $.ui.resolve(e)
+  const elements = $.ui.resolve(e)
+  const { Box, Button, Text } = elements
   const { tasks } = await read($, activity)
   const view = await read($, taskView)
   const { notesIcon, settingsIcon } = await read($, settings)
   const labels: string[] = []
-  const tab = (key: string, label: string, isCurrent: boolean, press: () => Promise<void>) => {
+  const tab = (key: string, label: string, isCurrent: boolean, action: TabPress) => {
     labels.push(label)
-    return (
-      <Button key={key} plain hover={{ bold: true }} onPress={() => (isCurrent ? undefined : press())}>
-        <Text color={isCurrent ? 'claude' : 'subtle'} inverse={isCurrent} bold={isCurrent} wrap="truncate-end">{label}</Text>
-      </Button>
-    )
+    if (isCurrent) TAB_PRESSES.delete(key)
+    else TAB_PRESSES.set(key, action)
+    const props: PressProps = {
+      parts: [{ text: label, color: isCurrent ? 'claude' : 'subtle', inverse: isCurrent, bold: isCurrent }],
+      hover: { bold: true },
+      truncate: Array.from(label).length > columns,
+    }
+    // As wide as drawn, cut to the pane only when longer.
+    const width = Array.from(label).length > columns ? columns : undefined
+    // A surface with no Client draws a Button, the one way to press there.
+    if (!('Client' in elements)) {
+      return (
+        <Button key={key} plain hover={{ bold: true }} onPress={() => (isCurrent ? undefined : tabPressed($, action))}>
+          <Text color={isCurrent ? 'claude' : 'subtle'} inverse={isCurrent} bold={isCurrent} wrap="truncate-end">{label}</Text>
+        </Button>
+      )
+    }
+    const { Client } = elements
+    return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
   }
-  const notesTab = tab('pane-notes', ` ${notesIcon}  ${TITLES.notes} `, current === 'notes', () => showPanel($, 'notes'))
-  const settingsTab = tab('pane-settings', ` ${settingsIcon}  ${TITLES.settings} `, current === 'settings', () => showPanel($, 'settings'))
+  const notesTab = tab('pane-notes', ` ${notesIcon}  ${TITLES.notes} `, current === 'notes', { view: 'notes' })
+  const settingsTab = tab('pane-settings', ` ${settingsIcon}  ${TITLES.settings} `, current === 'settings', { view: 'settings' })
   // A wide glyph is followed by its own cell, then the space.
   const terminals = tasks.map(task => {
     const icon = task.agent !== undefined ? `${ROBOT}  ` : task.kind === 'monitor' ? `${MONITOR} ` : `${TERMINAL}  `
     const command = task.command.split('\n')[0] ?? ''
     const label = command.length > TAB_COMMAND ? `${command.slice(0, TAB_COMMAND - 1)}…` : command
-    return tab(`pane-task-${task.id}`, ` ${icon}${label} `, current === 'task' && view?.id === task.id, () => showTask($, task.id, false))
+    return tab(`pane-task-${task.id}`, ` ${icon}${label} `, current === 'task' && view?.id === task.id, { task: task.id })
   })
 
   const tabs = (
@@ -271,6 +298,16 @@ export async function openAgent($: EngineInterface, id: string, viewed: string |
 
 // The tool hooks hand back the call's result whatever becomes of following it.
 export function registerActivity(on: On): void {
+  // Each tab pressed atop the panel.
+  on('ui.message', { module: /press\.tsx$/ }, async ($, e, next) => {
+    if (e.requestId !== PANEL) return next(e)
+    const action = TAB_PRESSES.get(e.element)
+    if (action === undefined) return next(e)
+    await tabPressed($, action)
+
+    return {}
+  })
+
   on('agent.spawn', async ($, e, next) => {
     const spawned = await next(e)
     await refreshAgents($).catch(() => undefined)

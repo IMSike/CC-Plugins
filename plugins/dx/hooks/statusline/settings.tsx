@@ -28,6 +28,7 @@ import {
   thresholdsOf,
 } from './options'
 import { PANEL, panelView, togglePanel } from './panes'
+import type { PressPart, PressProps, PressStyle } from './press'
 import { STEPPER_COLUMNS } from './stepper'
 import type { StepperProps } from './stepper'
 
@@ -87,6 +88,11 @@ const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSe
   'notes-others': (current, notesOthers) => ({ ...current, notesOthers }),
 }
 
+// What each press drawn in the pane (./press.tsx) changes, by its key: set as
+// the pane draws, applied to the settings as they stand when it lands.
+const PRESSES = new Map<string, (current: BandSettings) => BandSettings>()
+const BOLD: PressStyle = { bold: true }
+
 // `order` with `fact` moved one place up (-1) or down (+1).
 function moved(order: readonly BottomFact[], fact: BottomFact, by: -1 | 1): BottomFact[] {
   const from = order.indexOf(fact)
@@ -111,12 +117,22 @@ export function registerSettings(on: On): void {
     return {}
   })
 
+  // Each press in the pane.
+  on('ui.message', { module: /press\.tsx$/ }, async ($, e, next) => {
+    if (e.requestId !== PANEL) return next(e)
+    const edit = PRESSES.get(e.element)
+    if (edit === undefined) return next(e)
+    await change($, edit)
+
+    return {}
+  })
+
   on('ui.render', { component: 'Pane', requestId: PANEL }, async ($, e, next) => {
     // Input and Client are drawn there alone.
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
     const value = await read($, settings)
-    const { Box, Button, Client, Input, Text } = $.ui.resolve(e)
+    const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
     const inner = Math.max(20, e.props.bodyColumns - 4)
@@ -128,15 +144,17 @@ export function registerSettings(on: On): void {
         {children}
       </Box>
     )
-    const mark = (checked: boolean) => <Text color={checked ? 'success' : 'subtle'}>{checked ? '◉ ' : '○ '}</Text>
+    // A press that applies `edit`, drawn by ./press.tsx: the terminal selects
+    // nothing however the clicks come. `width`: its cell's, the label cut there.
+    const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) => {
+      PRESSES.set(key, edit)
+      const props: PressProps = { parts, hover, truncate: width !== undefined }
+      return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
+    }
+    const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })
     const toggle = (key: string, checked: boolean, label: string, edit: (current: BandSettings) => BandSettings, width = half) => (
       <Box key={`${key}-cell`} width={width}>
-        <Button key={key} plain hover={{ bold: true }} onPress={() => change($, edit)}>
-          <Text wrap="truncate-end">
-            {mark(checked)}
-            <Text dimColor={!checked}>{label}</Text>
-          </Text>
-        </Button>
+        {press(key, edit, [mark(checked), { text: label, dimColor: !checked }], width)}
       </Box>
     )
     // One of a few, side by side, the picked one inverse.
@@ -144,11 +162,9 @@ export function registerSettings(on: On): void {
       <Box key={key} columnGap={1}>
         {choices.map(([choice, label]) => {
           const isPicked = choice === current
-          return (
-            <Button key={`${key}-${choice}`} plain hover={{ bold: true }} onPress={() => change($, current => edit(current, choice))}>
-              <Text color={isPicked ? 'claude' : 'subtle'} inverse={isPicked} bold={isPicked}>{` ${label} `}</Text>
-            </Button>
-          )
+          return press(`${key}-${choice}`, current => edit(current, choice), [
+            { text: ` ${label} `, color: isPicked ? 'claude' : 'subtle', inverse: isPicked, bold: isPicked },
+          ])
         })}
       </Box>
     )
@@ -164,8 +180,8 @@ export function registerSettings(on: On): void {
       )
     }
     // The heat gradient's swatch: its two ends.
-    const swatch = (color: string) =>
-      color === HEAT ? [<Text color="success">█</Text>, <Text color="error">█</Text>] : [<Text color={color === DIM_TEXT ? 'subtle' : color}>██</Text>]
+    const swatch = (color: string): PressPart[] =>
+      color === HEAT ? [{ text: '█', color: 'success' }, { text: '█', color: 'error' }] : [{ text: '██', color: color === DIM_TEXT ? 'subtle' : color }]
     const colors = (
       key: string,
       title: string,
@@ -175,24 +191,26 @@ export function registerSettings(on: On): void {
     ) => {
       const isCustom = !choices.some(([color]) => color === current)
       // A choice reads as a toggle does: its mark, its color, its name.
-      const choice = (color: string, label: string, isPicked: boolean) => (
-        <Text wrap="truncate-end">
-          {mark(isPicked)}
-          {swatch(color)}
-          <Text bold={isPicked} dimColor={!isPicked}>{` ${label}`}</Text>
-        </Text>
-      )
+      const choice = (color: string, label: string, isPicked: boolean): PressPart[] => [
+        mark(isPicked),
+        ...swatch(color),
+        { text: ` ${label}`, bold: isPicked, dimColor: !isPicked },
+      ]
       return [
         <Text key={`${key}-title`} bold>{title}</Text>,
         <Box key={`${key}-choices`} flexWrap="wrap">
           {choices.map(([color, label]) => (
             <Box key={`${key}-${color.replace('#', '')}-cell`} width={CHOICE_COLUMNS}>
-              <Button key={`${key}-${color.replace('#', '')}`} plain hover={{ bold: true }} onPress={() => change($, current => edit(current, color))}>
-                {choice(color, label, color === current)}
-              </Button>
+              {press(`${key}-${color.replace('#', '')}`, current => edit(current, color), choice(color, label, color === current), CHOICE_COLUMNS)}
             </Box>
           ))}
-          {isCustom && <Box key={`${key}-custom-cell`} width={CHOICE_COLUMNS}>{choice(current, current, true)}</Box>}
+          {isCustom && (
+            <Box key={`${key}-custom-cell`} width={CHOICE_COLUMNS}>
+              <Text wrap="truncate-end">
+                {choice(current, current, true).map(({ text, ...style }) => <Text {...style}>{text}</Text>)}
+              </Text>
+            </Box>
+          )}
         </Box>,
         <Box key={`${key}-custom`} marginBottom={1}>
           <Input
@@ -222,13 +240,11 @@ export function registerSettings(on: On): void {
       <Box key={`${key}-choices`} flexWrap="wrap" marginBottom={1}>
         {choices.map(([glyph, name], index) => (
           <Box key={`${key}-${index}-cell`} width={ICON_COLUMNS}>
-            <Button key={`${key}-${index}`} plain hover={{ bold: true }} onPress={() => change($, current => edit(current, glyph))}>
-              <Text wrap="truncate-end">
-                {mark(glyph === current)}
-                <Text color="claude">{`${glyph}  `}</Text>
-                <Text dimColor={glyph !== current}>{name}</Text>
-              </Text>
-            </Button>
+            {press(`${key}-${index}`, current => edit(current, glyph), [
+              mark(glyph === current),
+              { text: `${glyph}  `, color: 'claude' },
+              { text: name, dimColor: glyph !== current },
+            ], ICON_COLUMNS)}
           </Box>
         ))}
       </Box>,
@@ -250,12 +266,12 @@ export function registerSettings(on: On): void {
         {section('bottom', 'Bordure du bas', [
           ...order.map((fact, index) => (
             <Box key={`bottom-${fact}`} columnGap={1}>
-              <Button key={`up-${fact}`} plain hover={{ bold: true }} onPress={() => change($, current => ({ ...current, bottomOrder: moved(current.bottomOrder, fact, -1) }))}>
-                <Text color={index > 0 ? 'claude' : 'subtle'}>↑</Text>
-              </Button>
-              <Button key={`down-${fact}`} plain hover={{ bold: true }} onPress={() => change($, current => ({ ...current, bottomOrder: moved(current.bottomOrder, fact, 1) }))}>
-                <Text color={index < order.length - 1 ? 'claude' : 'subtle'}>↓</Text>
-              </Button>
+              {press(`up-${fact}`, current => ({ ...current, bottomOrder: moved(current.bottomOrder, fact, -1) }), [
+                { text: '↑', color: index > 0 ? 'claude' : 'subtle' },
+              ])}
+              {press(`down-${fact}`, current => ({ ...current, bottomOrder: moved(current.bottomOrder, fact, 1) }), [
+                { text: '↓', color: index < order.length - 1 ? 'claude' : 'subtle' },
+              ])}
               {toggle(`show-${fact}`, value.show[fact], BOTTOM_LABELS[fact], current => ({ ...current, show: { ...current.show, [fact]: !current.show[fact] } }), inner - 4)}
             </Box>
           )),
@@ -321,9 +337,7 @@ export function registerSettings(on: On): void {
           </Box>,
         ])}
         <Box key="footer" justifyContent="flex-end" paddingX={1}>
-          <Button key="reset" variant="secondary" onPress={() => change($, () => DEFAULT_SETTINGS)}>
-            <Text>↺ Réinitialiser</Text>
-          </Button>
+          {press('reset', () => DEFAULT_SETTINGS, [{ text: '[ ↺ Réinitialiser ]' }], undefined, { color: 'claude' })}
         </Box>
       </Box>
     )

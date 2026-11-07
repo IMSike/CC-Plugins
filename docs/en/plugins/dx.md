@@ -67,6 +67,7 @@ The `⚙` icon shows the settings in the side panel; a second click closes it. A
 - **Data**: kept in dx's own store, a file under `~/.claude/plugins/store/` ([ADR 0004](../adr/0004-settings-and-notes.md)).
 - **Implications**:
   - The side panel sits beside the transcript in fullscreen mode, above the prompt otherwise. It is one pane whose content changes (notes, settings or a terminal) without closing, so nothing flickers; a row of tabs atop it leads from one to another and to each background task's terminal.
+  - A click in the panel (its tabs, the notes' tabs and links, the settings' controls) never selects text, however the pointer moves; they are pressed with the pointer only, not the keyboard. The band's icons stay plain buttons ([ADR 0005](../adr/0005-panel-presses.md)).
   - A change made in one session is shown in another the next time its settings are opened.
   - Each copy of the plugin (installed, loaded with `--plugin-dir`) keeps its own settings.
 

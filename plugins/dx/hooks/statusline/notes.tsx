@@ -8,6 +8,7 @@ import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
 import { clearedView, ensureNotes, GLOBAL_KEY, noteClear, noteOf, PROJECT_PREFIX, readNotes, SESSION_PREFIX, tryNotes } from './notes-load'
 import { isShowing, PANEL, panelView, togglePanel } from './panes'
+import type { PressPart, PressProps, PressStyle } from './press'
 
 // The notes pane: three notes of the person's own, one for every session, one
 // for the project, one for this session, kept in `$.store` across sessions.
@@ -89,6 +90,28 @@ export async function toggleNotes($: EngineInterface): Promise<void> {
   await togglePanel($, 'notes')
 }
 
+// Shows a tab, or another session's note, and keeps it as the last one shown.
+async function setView($: EngineInterface, shown: NotesView): Promise<void> {
+  // Kept first: notes drawn afresh after a `/clear` show the tab it left.
+  await ensureNotes($)
+  await update($, notesView, () => shown)
+  await $.store.set(TAB_KEY, shown.tab).catch(() => undefined)
+}
+
+// What each press drawn in the pane (./press.tsx) does, by its key: a view to
+// show, a retry of the load, or another session's note to delete.
+type NotesPress = { view: NotesView } | { retry: true } | { erase: string }
+const PRESSES = new Map<string, NotesPress>()
+
+async function pressed($: EngineInterface, action: NotesPress): Promise<void> {
+  if ('retry' in action) return tryNotes($)
+  if ('erase' in action) {
+    await save($, 'session', action.erase, '')
+    return setView($, { tab: 'session' })
+  }
+  return setView($, action.view)
+}
+
 export function registerNotes(on: On): void {
   on('ui.open', async ($, e, next) => {
     if (e.id === PANEL && (await panelView($)) === 'notes') await openingTab($)
@@ -110,6 +133,16 @@ export function registerNotes(on: On): void {
     const data = e.data as { tab?: unknown; session?: unknown; text?: unknown }
     if (!isTab(data.tab) || typeof data.session !== 'string' || typeof data.text !== 'string') return next(e)
     await save($, data.tab, data.session, data.text)
+
+    return {}
+  })
+
+  // Each press in the pane.
+  on('ui.message', { module: /press\.tsx$/ }, async ($, e, next) => {
+    if (e.requestId !== PANEL) return next(e)
+    const action = PRESSES.get(e.element)
+    if (action === undefined) return next(e)
+    await pressed($, action)
 
     return {}
   })
@@ -136,8 +169,15 @@ export function registerNotes(on: On): void {
         reason = error instanceof Error ? error.message : String(error)
       }
     }
-    const { Box, Button, Client, Text } = $.ui.resolve(e)
+    const { Box, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
+    // A press drawn by ./press.tsx: the terminal selects nothing however the
+    // clicks come. `width`: the label cut there.
+    const press = (key: string, action: NotesPress, parts: PressPart[], hover: PressStyle, width?: number) => {
+      PRESSES.set(key, action)
+      const props: PressProps = { parts, hover, truncate: width !== undefined }
+      return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
+    }
 
     // Not loaded: what failed, and a retry, never a blank pane.
     if (value === null) {
@@ -146,9 +186,7 @@ export function registerNotes(on: On): void {
           {panes}
           <Text key="unavailable" color="error" wrap="wrap">{`Notes indisponibles${reason === null ? '' : ` : ${reason}`}`}</Text>
           <Box key="retry-row" flexShrink={0}>
-            <Button key="retry" plain hover={{ underline: true }} onPress={() => tryNotes($)}>
-              <Text color="claude">↻ Réessayer</Text>
-            </Button>
+            {press('retry', { retry: true }, [{ text: '↻ Réessayer', color: 'claude' }], { underline: true })}
           </Box>
         </Box>
       )
@@ -181,12 +219,6 @@ export function registerNotes(on: On): void {
     // and margin, its hint (one row, cut), and the list of other sessions.
     const extra = panesRows + 5 + (other !== undefined ? 1 : 0) + (listed ? others.length + 2 : 0)
     const rows = Math.max(3, e.props.scroll.bodyRows - extra)
-    const setView = async (shown: NotesView) => {
-      // Kept first: notes drawn afresh after a `/clear` show the tab it left.
-      await ensureNotes($)
-      await update($, notesView, () => shown)
-      await $.store.set(TAB_KEY, shown.tab).catch(() => undefined)
-    }
     const editor: EditorProps = {
       text: note?.text ?? '',
       rows,
@@ -197,11 +229,9 @@ export function registerNotes(on: On): void {
 
     const tabs = NOTE_TABS.map(([tab, label]) => {
       const isShown = tab === view.tab
-      return (
-        <Button key={`tab-${tab}`} plain hover={{ bold: true }} onPress={() => setView({ tab })}>
-          <Text color={isShown ? 'claude' : 'subtle'} inverse={isShown} bold={isShown}>{` ${label} `}</Text>
-        </Button>
-      )
+      return press(`tab-${tab}`, { view: { tab } }, [
+        { text: ` ${label} `, color: isShown ? 'claude' : 'subtle', inverse: isShown, bold: isShown },
+      ], { bold: true })
     })
 
     return (
@@ -213,15 +243,8 @@ export function registerNotes(on: On): void {
         </Box>
         {other !== undefined && (
           <Box key="other" flexShrink={0} gap={2}>
-            <Button key="back" plain hover={{ underline: true }} onPress={() => setView({ tab: 'session' })}>
-              <Text color="claude">← Session actuelle</Text>
-            </Button>
-            <Button key="delete" plain hover={{ underline: true }} onPress={async () => {
-              await save($, 'session', other, '')
-              await setView({ tab: 'session' })
-            }}>
-              <Text color="error">✕ Supprimer cette note</Text>
-            </Button>
+            {press('back', { view: { tab: 'session' } }, [{ text: '← Session actuelle', color: 'claude' }], { underline: true })}
+            {press('delete', { erase: other }, [{ text: '✕ Supprimer cette note', color: 'error' }], { underline: true })}
           </Box>
         )}
         <Box key="sheet" flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1} marginTop={1}>
@@ -231,11 +254,12 @@ export function registerNotes(on: On): void {
         {listed && (
           <Box key="others" flexDirection="column" marginTop={1}>
             <Text bold color="claude">Autres sessions</Text>
-            {others.map(([id, one]) => (
-              <Button key={`session-${id}`} plain hover={{ backgroundColor: 'subtle' }} onPress={() => setView({ tab: 'session', other: id })}>
-                <Text wrap="truncate-end"><Text dimColor>{`${dayTime(one.updatedAt)}  `}</Text>{one.text.split('\n')[0]}</Text>
-              </Button>
-            ))}
+            {others.map(([id, one]) =>
+              press(`session-${id}`, { view: { tab: 'session', other: id } }, [
+                { text: `${dayTime(one.updatedAt)}  `, dimColor: true },
+                { text: one.text.split('\n')[0] ?? '' },
+              ], { backgroundColor: 'subtle' }, e.props.bodyColumns),
+            )}
           </Box>
         )}
       </Box>
