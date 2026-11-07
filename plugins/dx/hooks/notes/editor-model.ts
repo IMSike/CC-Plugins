@@ -7,7 +7,8 @@ export type Editor = { text: string; cursor: number; top: number }
 
 // The longest note: the editor's props, the text and a few fields, stay
 // under the 100,000 characters a Client's props may take, and so do its
-// posts to the hooks module.
+// posts to the hooks module, as long as few of its characters are escaped
+// once serialized (a line break or a quote counts two: see fitsEditor).
 export const NOTE_MAX_CHARS = 95_000
 // The most a Client's props may take, serialized as JSON.
 const CLIENT_PROPS_MAX = 100_000

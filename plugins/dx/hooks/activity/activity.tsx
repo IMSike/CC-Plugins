@@ -235,6 +235,8 @@ type TabPress = { view: 'notes' | 'settings' } | { task: string }
 // settings' tabs are answered by their own features.
 let taskTabs = new Map<string, string>()
 
+// A tab pressed where no Client draws (a Button's press): the notes and the
+// settings draw only where one does, so their own loading is not needed here.
 async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
   if ('task' in action) return showTask($, action.task, false)
   return showPanel($, action.view)
