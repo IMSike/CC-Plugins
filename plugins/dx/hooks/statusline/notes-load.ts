@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesView } from '../../types'
+import { forgetStoreSize } from './store-size'
 
 // The notes as ./notes draws them, loaded from `$.store` when the session
 // starts, and again when their pane is shown, a note is written or a prompt
@@ -114,6 +115,8 @@ export async function readNotes($: EngineInterface, keep = true): Promise<Notes>
 // Loads the notes. A failure is kept for the pane to show and written to the
 // debug log, never thrown: the pane loads them again when shown.
 export async function tryNotes($: EngineInterface): Promise<void> {
+  // Other sessions wrote meanwhile: the store's size measured again.
+  forgetStoreSize()
   try {
     const value = await readNotes($)
     await update($, notes, () => value)

@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import { clicked, keyed, rowOf, rowsOf } from './editor-model'
+import { clicked, keyed, rowOf, rowsOf, tooLong } from './editor-model'
 import type { Editor } from './editor-model'
 
 // The notes editor, drawn on the surface's own thread: a click gives it the
@@ -57,6 +57,12 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
       if (state === undefined || next === state) return
       if (next.text === state.text) {
         surface.setState(next)
+        return
+      }
+      // Too long: not applied, the hooks module told, which says why.
+      if (tooLong(state.text, next.text)) {
+        if (!state.active) surface.setState({ ...state, active: true })
+        surface.post({ tab: latest.props.tab, session: latest.props.session, refused: 'too-long' })
         return
       }
       surface.setState({ ...next, sent: [...next.sent, next.text].slice(-SENT_KEPT) })

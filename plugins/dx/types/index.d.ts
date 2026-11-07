@@ -165,6 +165,9 @@ declare module 'claude-code' {
       notesView: Shaped<NotesView>
       // The note the notes pane shows, as the store last held it: key and time.
       notesSeen: Shaped<string | null>
+      // Why the last save of a note failed, or an edit was refused; null once
+      // a save succeeds.
+      notesUnsaved: Shaped<string | null>
       panel: Shaped<PanelView>
     }
   }

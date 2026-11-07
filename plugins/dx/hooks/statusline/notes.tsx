@@ -4,11 +4,13 @@ import type { EngineInterface, On } from 'claude-code'
 import type { Note, Notes, NoteTab, NotesView } from '../../types'
 import { paneTabs } from './activity'
 import type { EditorProps } from './editor'
+import { NOTE_MAX_CHARS } from './editor-model'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
 import { clearedView, ensureNotes, forgetClear, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { isShowing, PANEL, panelView, togglePanel } from './panes'
 import type { PressPart, PressProps, PressStyle } from './press'
+import { fitsStore, storeWritten } from './store-size'
 
 // The notes pane: three notes of the person's own, one for every session, one
 // for the project, one for this session, kept in `$.store` across sessions.
@@ -21,6 +23,9 @@ const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'glob
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 // The note shown, as the store last held it: drawn again when it changes there.
 const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })
+// Why the last save failed, or the last edit was refused: null once a save
+// succeeds.
+const notesUnsaved = atom({ plugin: 'dx', key: 'notesUnsaved' } as const, null as string | null, { shape: 'notes-unsaved-1' })
 
 // The last tab shown, taken up again by the next pane (a setting).
 const TAB_KEY = 'notesTab'
@@ -55,7 +60,31 @@ function save($: EngineInterface, tab: NoteTab, session: string, text: string): 
   return run
 }
 
-// Keeps a note as it now reads, at once: an emptied one is deleted.
+// Why a note was not saved, as the pane says it.
+export const TOO_LONG = 'note trop longue (95 000 caractères au plus)'
+export const STORE_FULL = "store presque plein : supprimez d'anciennes notes"
+
+// A save failed, or an edit was refused: the pane says why until a save
+// succeeds. A handler's write, never a render's.
+async function unsaved($: EngineInterface, reason: string | null): Promise<void> {
+  if ((await read($, notesUnsaved)) !== reason) await update($, notesUnsaved, () => reason)
+}
+
+// Writes `note` under `key`, `null` deleting it: why it was not, or null.
+async function kept($: EngineInterface, key: string, note: Note | null): Promise<string | null> {
+  if (note !== null && note.text.length > NOTE_MAX_CHARS) return TOO_LONG
+  if (!(await fitsStore($, key, note))) return STORE_FULL
+  try {
+    await (note === null ? $.store.delete(key) : $.store.set(key, note))
+  } catch (error) {
+    return `store : ${error instanceof Error ? error.message : String(error)}`
+  }
+  storeWritten(key, note)
+  return null
+}
+
+// Keeps a note as it now reads, at once: an emptied one is deleted. A save
+// refused or failed leaves the notes as they were, the editor's text shown.
 async function write($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
   const now = await $.clock.now()
   const note: Note | null = text === '' ? null : { text, updatedAt: now }
@@ -64,6 +93,9 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
   const value = await read($, notes)
   if (value === null) return
   const key = keyOf(value, tab, session)
+  const reason = await kept($, key, note)
+  await unsaved($, reason)
+  if (reason !== null) return
   await update($, notes, current => {
     if (current === null) return current
     if (tab === 'global') return { ...current, global: note }
@@ -71,7 +103,6 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
     const { [session]: _, ...others } = current.sessions
     return { ...current, sessions: note === null ? others : { ...others, [session]: note } }
   })
-  await (note === null ? $.store.delete(key) : $.store.set(key, note)).catch(() => undefined)
 }
 
 // How often the note shown is read again from the store while its pane is
@@ -139,8 +170,17 @@ export function registerNotes(on: On): void {
   // Each change the editor posts.
   on('ui.message', { module: /editor\.tsx$/ }, async ($, e, next) => {
     if (e.requestId !== PANEL) return next(e)
-    const data = e.data as { tab?: unknown; session?: unknown; text?: unknown }
-    if (!isTab(data.tab) || typeof data.session !== 'string' || typeof data.text !== 'string') return next(e)
+    const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown }
+    if (!isTab(data.tab) || typeof data.session !== 'string') return next(e)
+    // An edit the editor did not apply, the note too long: said in its turn
+    // among the saves, which a later one clears.
+    if (data.refused === 'too-long') {
+      const run = saving.then(() => unsaved($, TOO_LONG))
+      saving = run.catch(() => undefined)
+      await run
+      return {}
+    }
+    if (typeof data.text !== 'string') return next(e)
     await save($, data.tab, data.session, data.text)
 
     return {}
@@ -206,6 +246,7 @@ export function registerNotes(on: On): void {
 
     const view = restored ?? (await read($, notesView))
     const options = await read($, settings)
+    const failed = await read($, notesUnsaved)
 
     const other = view.tab === 'session' ? view.other : undefined
     const { session, key } = shownNote(value, view)
@@ -228,9 +269,10 @@ export function registerNotes(on: On): void {
           ? `Session du ${note === null ? '?' : dayTime(note.updatedAt)}`
           : 'Cette session'
     const hint = `${subtitle} · Échap rend le clavier au prompt`
-    // The panel's tabs and their margin, the notes' tabs, the sheet's border
-    // and margin, its hint (one row, cut), and the list of other sessions.
-    const extra = panesRows + 5 + (other !== undefined ? 1 : 0) + (listed ? others.length + 2 : 0)
+    // The panel's tabs and their margin, the notes' tabs, why a save failed,
+    // the sheet's border and margin, its hint (one row, cut), and the list of
+    // other sessions.
+    const extra = panesRows + 5 + (failed !== null ? 1 : 0) + (other !== undefined ? 1 : 0) + (listed ? others.length + 2 : 0)
     const rows = Math.max(3, e.props.scroll.bodyRows - extra)
     const editor: EditorProps = {
       text: note?.text ?? '',
@@ -252,8 +294,11 @@ export function registerNotes(on: On): void {
         {panes}
         <Box key="tabs" flexShrink={0} justifyContent="space-between">
           <Box gap={1}>{tabs}</Box>
-          <Text dimColor>{note === null ? 'vide' : `✓ ${dayTime(note.updatedAt)}`}</Text>
+          {failed !== null
+            ? <Text color="error" bold>⚠ non enregistré</Text>
+            : <Text dimColor>{note === null ? 'vide' : `✓ ${dayTime(note.updatedAt)}`}</Text>}
         </Box>
+        {failed !== null && <Text key="unsaved" color="error" wrap="truncate-end">{failed}</Text>}
         {other !== undefined && (
           <Box key="other" flexShrink={0} gap={2}>
             {press('back', { view: { tab: 'session' } }, [{ text: '← Session actuelle', color: 'claude' }], { underline: true })}

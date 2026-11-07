@@ -43,6 +43,8 @@ function engine(
   const store = new Map(Object.entries(stored))
   on('store.get', (_, e) => ({ value: store.get(e.key) }))
   on('store.set', (_, e) => {
+    // A full store refuses the notes.
+    if (refused.has('store.set') && e.key.startsWith('notes.')) return { deny: 'store over 4 MiB' }
     store.set(e.key, e.value)
 
     return { value: undefined }
@@ -945,5 +947,70 @@ test('two /clears in a row keep the session note', async ($, on) => {
   await pane.post({ tab: 'session', session: 's1', text: 'piste s1, suite' }, { in: 'note-session-s1' })
   expect(store.get('notes.link.s3')).toBe('s1')
   expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1, suite', updatedAt: NOW })
+  await pane.unmount()
+})
+
+// A save the store refuses is never silent: the pane says so until one succeeds.
+test('a note the store refuses says so in the pane, until a save succeeds', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const store = engine(on, true, [], {}, {}, true, refused)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.post({ tab: 'global', session: 's1', text: 'pain' }, { in: 'note-global-s1' })
+  expect(await pane.find({ type: 'Text', text: /✓/ })).toBeDefined()
+
+  refused.add('store.set')
+  await pane.post({ tab: 'global', session: 's1', text: 'pain, lait' }, { in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  expect((await pane.find({ type: 'Text', text: '⚠ non enregistré' }))?.props.color).toBe('error')
+  expect(await pane.find({ type: 'Text', text: /store over 4 MiB/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /✓/ })).toBeUndefined()
+
+  refused.clear()
+  await pane.post({ tab: 'global', session: 's1', text: 'pain, lait, œufs' }, { in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain, lait, œufs', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /✓/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// The store near its limit: dx refuses the save before the engine would.
+test('a note that would fill the store is refused, the store left as it was', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const big = { text: 'x'.repeat(3.8 * 1024 * 1024 - 200), updatedAt: NOW - 1000 }
+  const store = engine(on, true, [], {}, { 'notes.session.old': big })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.post({ tab: 'global', session: 's1', text: 'court' }, { in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'court', updatedAt: NOW })
+  await pane.post({ tab: 'global', session: 's1', text: 'y'.repeat(500) }, { in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'court', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /store presque plein : supprimez d'anciennes notes/ })).toBeDefined()
+
+  // Room made elsewhere (another session deleted its note): measured again.
+  store.delete('notes.session.old')
+  await pane.post({ tab: 'global', session: 's1', text: 'y'.repeat(500) }, { in: 'note-global-s1' })
+  expect((store.get('notes.global') as { text: string }).text).toHaveLength(500)
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// The editor applies no edit past 95,000 characters: a paste is refused whole.
+test('a paste past the longest note is refused whole, and the pane says why', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'pain', in: 'note-global-s1' })
+  await pane.key({ key: 'x'.repeat(95_000), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /note trop longue \(95 000 caractères au plus\)/ })).toBeDefined()
+  // Within the limit again: saved, the warning gone.
+  await pane.key({ key: ' lait', in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain lait', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
   await pane.unmount()
 })

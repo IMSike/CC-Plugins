@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clicked, keyed, rowOf, rowsOf } from './editor-model'
+import { clicked, keyed, NOTE_MAX_CHARS, rowOf, rowsOf, tooLong } from './editor-model'
 import type { Editor } from './editor-model'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
@@ -104,4 +104,16 @@ test('ctrl with backspace erases the word before the cursor, ctrl with delete th
   }
   const start = at('un', 0)
   expect(keyed(start, { key: 'backspace', ctrl: true }, 40, 5)).toBe(start)
+})
+
+test('an edit past 95,000 characters is refused, a shortening never', () => {
+  const full = 'x'.repeat(NOTE_MAX_CHARS)
+  expect(NOTE_MAX_CHARS).toBe(95_000)
+  expect(tooLong('', full)).toBe(false)
+  expect(tooLong(full, `${full}y`)).toBe(true)
+  // A paste past the limit, refused whole.
+  expect(tooLong('abc', 'x'.repeat(NOTE_MAX_CHARS + 10))).toBe(true)
+  // A note longer already, from elsewhere: shortened, never lengthened.
+  expect(tooLong(`${full}yz`, `${full}y`)).toBe(false)
+  expect(tooLong(`${full}y`, `${full}yz`)).toBe(true)
 })

@@ -84,6 +84,9 @@ The `✎` icon shows the notes in the side panel, for you alone, with three tabs
   - The notes are not sent to Claude: what a pane shows never reaches its context. They are not hidden from it either: the store is a plain-text file under `~/.claude`, which Claude could read if it went looking for it.
   - A note opened in two sessions at once: what one writes shows in the other within about a second, no tab changed (dx reads the shown note again every second while the notes pane is open). If both write within the same second, the last one written wins.
   - They stay on the machine, follow you elsewhere only if `~/.claude` is synced, and belong to the copy of the plugin that wrote them.
+  - A note holds at most 95,000 characters (what Claude Code lets the editor receive and send, 100,000, less a margin). Past it, an edit that lengthens the note is not applied: a key typed is ignored, a paste refused whole, never cut; shortening the note always works.
+  - dx's whole store holds at most 3.8 MiB of JSON text (Claude Code refuses to write past 4 MiB; the margin is for the settings). dx keeps an estimate of its size, measured when the notes load and followed at each save, and measured again before refusing: a save that would go past the limit is refused, the text staying in the editor. Deleting other sessions' old notes makes room.
+  - A save never fails silently: a refused edit, a refused save or one Claude Code rejects shows **⚠ non enregistré** in red where the save time (`✓ hh:mm`) stands, the reason on the row below (**note trop longue (95 000 caractères au plus)**, **store presque plein : supprimez d'anciennes notes**, or Claude Code's own message), until a save succeeds. A text not saved is lost when another tab or note is shown.
 
 ## Turn off
 
