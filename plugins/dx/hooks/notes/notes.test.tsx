@@ -380,7 +380,7 @@ test('a note posted while the notes cannot load says it was not saved', async ($
 
 // The store near its limit: dx refuses the save before the engine would.
 test('a note that would fill the store is refused, the store left as it was', async ($, on) => {
-  mock.clock(on, { now: NOW })
+  const clock = mock.clock(on, { now: NOW })
   const big = { text: 'x'.repeat(3.8 * 1024 * 1024 - 200), updatedAt: NOW - 1000 }
   const store = engine(on, true, [], {}, { 'notes.session.old': big })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -391,8 +391,12 @@ test('a note that would fill the store is refused, the store left as it was', as
   expect(store.get('notes.global')).toEqual({ text: 'court', updatedAt: NOW })
   expect(await pane.find({ type: 'Text', text: /store presque plein : supprimez d'anciennes notes/ })).toBeDefined()
 
-  // Room made elsewhere (another session deleted its note): measured again.
+  // Room made elsewhere (another session deleted its note): a refusal stands
+  // on the last measurement for a second, then the store is measured again.
   store.delete('notes.session.old')
+  await pane.post({ tab: 'global', session: 's1', text: 'y'.repeat(501) }, { in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'court', updatedAt: NOW })
+  await clock.advance(1000)
   await pane.post({ tab: 'global', session: 's1', text: 'y'.repeat(500) }, { in: 'note-global-s1' })
   expect((store.get('notes.global') as { text: string }).text).toHaveLength(500)
   expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()

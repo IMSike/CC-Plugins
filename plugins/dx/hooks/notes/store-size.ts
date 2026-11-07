@@ -31,16 +31,29 @@ export function entryBytes(key: string, value: unknown): number {
 }
 
 // Every entry's size, by key: measured once (every key read), then kept up
-// to date by the writes that go through `sized`. Other sessions, and dx's
-// other writes, change the store unseen: the estimate is measured again at
-// each load of the notes, and before a write is refused.
+// to date by the writes that go through `storeWritten`. Other sessions, and
+// dx's other writes, change the store unseen: the estimate is measured again
+// at each load of the notes, and before a write is refused.
 let sizes: Map<string, number> | undefined
+// When `sizes` was last measured, on the engine's clock.
+let measuredAt = 0
+// The last entry `fitsStore` measured: `storeWritten`, writing that very
+// value, takes its size from here rather than turn a long note into JSON again.
+let last: { key: string; value: unknown; size: number } | undefined
+
+// How old a measurement may be for a refusal to stand on it. Near the limit,
+// each key typed is refused: measuring the whole store again for each would
+// read every entry per key. dx's own writes keep `sizes` up to date anyway;
+// only another session's (a note deleted to make room) goes unseen, and is
+// seen within this time, as often as the pane reads its note again.
+const MEASURE_MS = 1000
 
 async function measure($: EngineInterface): Promise<Map<string, number>> {
   const keys = await $.store.keys()
   const values = await Promise.all(keys.map(key => $.store.get(key)))
   const measured = new Map<string, number>()
   keys.forEach((key, index) => measured.set(key, entryBytes(key, values[index])))
+  measuredAt = await $.clock.now()
   return measured
 }
 
@@ -57,15 +70,18 @@ export function forgetStoreSize(): void {
 
 // Whether `value` may be written under `key`, the store staying under
 // STORE_MAX_BYTES; `null` stands for a deletion, always allowed. Near the
-// limit, the store is measured again before a refusal. A store that cannot be
-// read refuses nothing here: its own write says what fails.
+// limit, the store is measured again before a refusal, unless it was within
+// MEASURE_MS. A store that cannot be read refuses nothing here: its own write
+// says what fails.
 export async function fitsStore($: EngineInterface, key: string, value: unknown): Promise<boolean> {
   if (value === null) return true
   const size = entryBytes(key, value)
+  last = { key, value, size }
   const over = (of: Map<string, number>) => total(of) - (of.get(key) ?? 0) + size > STORE_MAX_BYTES
   try {
     sizes ??= await measure($)
     if (!over(sizes)) return true
+    if ((await $.clock.now()) - measuredAt < MEASURE_MS) return false
     sizes = await measure($)
     return !over(sizes)
   } catch {
@@ -77,5 +93,5 @@ export async function fitsStore($: EngineInterface, key: string, value: unknown)
 export function storeWritten(key: string, value: unknown): void {
   if (sizes === undefined) return
   if (value === null) sizes.delete(key)
-  else sizes.set(key, entryBytes(key, value))
+  else sizes.set(key, last !== undefined && last.key === key && last.value === value ? last.size : entryBytes(key, value))
 }
