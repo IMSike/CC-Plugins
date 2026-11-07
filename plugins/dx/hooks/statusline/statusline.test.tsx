@@ -510,13 +510,10 @@ test('the notes and settings icons open their panes, and close them', async ($, 
   const panes = shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
-  // An earlier version's pane, kept open across a reload.
-  panes.push('dx-settings')
   const ui = await $.ui.mount(BAND)
   // One panel: an icon shows its content there, a second click closes it.
   await click(ui, 'notes')
   expect(panes).toEqual(['dx-panel'])
-  panes.push('dx-notes')
   await click(ui, 'settings')
   expect(panes).toEqual(['dx-panel'])
   await click(ui, 'settings')

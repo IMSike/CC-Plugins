@@ -25,17 +25,8 @@ async function isOpen($: EngineInterface): Promise<boolean> {
   return panes.some(pane => pane.id === PANEL)
 }
 
-// Closes dx's open panes but `kept`: the previous version's terminal pane
-// (`dx-task`) outlives an update, left blank, nothing drawing it any more.
-async function closePanes($: EngineInterface, kept?: string): Promise<void> {
-  const panes = await $.ui.panes().catch(() => [])
-  for (const pane of panes.filter(one => one.id !== kept)) {
-    await $.ui.close({ id: pane.id }).catch(() => undefined)
-  }
-}
-
 export async function closePanel($: EngineInterface): Promise<void> {
-  await closePanes($)
+  await $.ui.close({ id: PANEL }).catch(() => undefined)
 }
 
 // Shows `view` in the panel, opened when it is not. An open panel is redrawn,
@@ -44,7 +35,6 @@ export async function closePanel($: EngineInterface): Promise<void> {
 export async function showPanel($: EngineInterface, view: PanelView): Promise<void> {
   if (view === 'notes') await ensureNotes($)
   await update($, panel, () => view)
-  await closePanes($, PANEL)
   if (!(await isOpen($))) await $.ui.open({ id: PANEL, title: TITLE, columns: PANE_COLUMNS }).catch(() => undefined)
 }
 
