@@ -18,17 +18,13 @@ export const PROJECT_PREFIX = 'notes.project.'
 export const SESSION_PREFIX = 'notes.session.'
 // A session id a `/clear` gave, to the session it goes on: its note's key.
 const LINK_PREFIX = 'notes.link.'
-// The session a `/clear` ended, when, and the tab it left, for the next load.
-const CLEARED_KEY = 'notes.cleared'
-// How far the session's new start may be from the `/clear` it follows.
-const CLEAR_MS = 10_000
-
-type Cleared = { from: string; at: number; view?: NotesView }
-
-function isView(value: unknown): value is NotesView {
-  const view = value as Partial<NotesView> | undefined
-  return (view?.tab === 'global' || view?.tab === 'project' || view?.tab === 'session') && (view.other === undefined || typeof view.other === 'string')
-}
+// The `/clear` this process went through, until the next load links the new
+// session id: the session it ended, the one whose note it goes on with, and
+// the tab it left. Kept in the hooks module's memory, which a `/clear` leaves
+// (the process goes on, no `session.start` fires), never in the store, which
+// every session reads: one launched meanwhile would take it for its own.
+type Cleared = { ending: string; from: string; view?: NotesView }
+let cleared: Cleared | undefined
 
 export function noteOf(stored: unknown): Note | null {
   const value = stored as Partial<Note> | undefined
@@ -37,15 +33,16 @@ export function noteOf(stored: unknown): Note | null {
     : null
 }
 
-// The `/clear` the engine's session `id` follows: one that ended another
-// session as this one's clock started over, which tells this process's from
-// another session started meanwhile.
-async function clearedFor($: EngineInterface, id: string): Promise<Cleared | undefined> {
-  const cleared = (await $.store.get(CLEARED_KEY).catch(() => undefined)) as Partial<Cleared> | undefined
-  if (typeof cleared?.from !== 'string' || typeof cleared.at !== 'number' || cleared.from === id) return undefined
-  const startedAt = await $.session.usage().then(usage => usage.startedAt, () => undefined)
-  if (startedAt === undefined || Math.abs(startedAt - cleared.at) > CLEAR_MS) return undefined
-  return { from: cleared.from, at: cleared.at, view: isView(cleared.view) ? cleared.view : undefined }
+// The `/clear` the engine's session `id` follows: this process's last one,
+// when it ended another session.
+function clearedFor(id: string): Cleared | undefined {
+  return cleared?.ending === id ? undefined : cleared
+}
+
+// A `session.start`: a fresh load of the plugin, never a `/clear`, so nothing
+// remembered goes on into it.
+export function forgetClear(): void {
+  cleared = undefined
 }
 
 // The session whose note the engine's session `id` shows: the one a `/clear`
@@ -54,13 +51,13 @@ async function clearedFor($: EngineInterface, id: string): Promise<Cleared | und
 async function sessionOf($: EngineInterface, id: string, keep: boolean): Promise<string> {
   const linked = await $.store.get(LINK_PREFIX + id).catch(() => undefined)
   if (typeof linked === 'string') return linked
-  const cleared = await clearedFor($, id)
-  if (cleared === undefined) return id
-  if (!keep) return cleared.from
-  if (cleared.view !== undefined) await update($, notesView, () => cleared.view as NotesView)
-  await $.store.set(LINK_PREFIX + id, cleared.from).catch(() => undefined)
-  await $.store.delete(CLEARED_KEY).catch(() => undefined)
-  return cleared.from
+  const last = clearedFor(id)
+  if (last === undefined) return id
+  if (!keep) return last.from
+  if (last.view !== undefined) await update($, notesView, () => last.view as NotesView)
+  await $.store.set(LINK_PREFIX + id, last.from).catch(() => undefined)
+  if (cleared === last) cleared = undefined
+  return last.from
 }
 
 // The tab a `/clear` left, while the session it went on from is not linked:
@@ -68,7 +65,7 @@ async function sessionOf($: EngineInterface, id: string, keep: boolean): Promise
 export async function clearedView($: EngineInterface): Promise<NotesView | undefined> {
   const id = await $.session.id().catch(() => undefined)
   if (id === undefined || typeof (await $.store.get(LINK_PREFIX + id).catch(() => undefined)) === 'string') return undefined
-  return (await clearedFor($, id))?.view
+  return clearedFor(id)?.view
 }
 
 // Every note, this session's included when the session is a resumed one.
@@ -119,10 +116,8 @@ export async function ensureNotes($: EngineInterface, retry = true): Promise<voi
 // go on with them.
 export async function noteClear($: EngineInterface, ending: string): Promise<void> {
   const value = await read($, notes).catch(() => null)
-  // Not loaded since an earlier `/clear`: the session that one went on from,
-  // its marker still found, the ending session's clock not started over yet.
+  // Not loaded since an earlier `/clear`: the session that one went on from.
   const from = value?.id === ending ? value.session : await sessionOf($, ending, false)
   const view = await read($, notesView).catch(() => undefined)
-  const at = await $.clock.now()
-  await $.store.set(CLEARED_KEY, { from, at, view } satisfies Cleared).catch(() => undefined)
+  cleared = { ending, from, view }
 }

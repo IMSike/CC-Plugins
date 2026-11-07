@@ -6,7 +6,7 @@ import { paneTabs } from './activity'
 import type { EditorProps } from './editor'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
-import { clearedView, ensureNotes, GLOBAL_KEY, noteClear, noteOf, PROJECT_PREFIX, readNotes, SESSION_PREFIX, tryNotes } from './notes-load'
+import { clearedView, ensureNotes, forgetClear, GLOBAL_KEY, noteClear, noteOf, PROJECT_PREFIX, readNotes, SESSION_PREFIX, tryNotes } from './notes-load'
 import { isShowing, PANEL, panelView, togglePanel } from './panes'
 import type { PressPart, PressProps, PressStyle } from './press'
 
@@ -31,6 +31,7 @@ function isTab(value: unknown): value is NoteTab {
 
 // Called once the session has started: every note, and the tab a pane opens on.
 export async function loadNotes($: EngineInterface): Promise<void> {
+  forgetClear()
   await tryNotes($)
   await openingTab($)
 }

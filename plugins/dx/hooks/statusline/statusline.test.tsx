@@ -758,9 +758,9 @@ function emptyNotes(on: On): () => void {
 }
 
 // A session with a note, then a `/clear`: the engine goes on under `s2`, its
-// clock started over unless `startedAt` says otherwise, dx's notes emptied
-// when `empty`; `session`, the engine's, which a test changes again.
-async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW, session: { id: string; startedAt?: number } = { id: 's1' }) {
+// clock started over, dx's notes emptied when `empty`; `session`, the
+// engine's, which a test changes again.
+async function clearSession($: Engine, on: On, empty: boolean, session: { id: string; startedAt?: number } = { id: 's1' }) {
   mock.clock(on, { now: NOW })
   const store = engine(on, true, [], {}, { notesTab: 'session' }, true, new Set(), session)
   shell(on)
@@ -776,7 +776,7 @@ async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW, 
   expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1', updatedAt: NOW })
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   session.id = 's2'
-  session.startedAt = startedAt
+  session.startedAt = NOW
   if (empty) emptied()
 
   return store
@@ -829,15 +829,37 @@ test('a tab chosen right after a /clear is shown', async ($, on) => {
   await pane.unmount()
 })
 
-// Another session, started at another time, takes nothing of the `/clear`.
-test('a /clear in another session leaves this one its own note', async ($, on) => {
-  const store = await clearSession($, on, true, NOW - 60_000)
+// A session launched right after another one's `/clear`, the marker an earlier
+// dx kept in the store still there: it keeps its own note.
+test('a session launched right after a /clear elsewhere keeps its own note', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const session = { id: 'b1', startedAt: NOW - 2000 }
+  const store = engine(on, true, [], {}, {
+    notesTab: 'session',
+    'notes.session.a1': { text: 'note de A', updatedAt: NOW - 5000 },
+    'notes.cleared': { from: 'a1', at: NOW - 3000, view: { tab: 'session' } },
+  }, true, new Set(), session)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(store.get('notes.link.b1')).toBeUndefined()
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ key: 'note-session-b1' })).toBeDefined()
+  expect(await pane.find({ key: 'session-a1' })).toBeDefined()
+  await pane.unmount()
+})
+
+// A `/clear` seen, then a fresh load of the plugin (its own `session.start`)
+// under another id: nothing of the `/clear` goes on into it.
+test('a session started after a /clear takes nothing of it', async ($, on) => {
+  const session: { id: string; startedAt?: number } = { id: 's1' }
+  const store = await clearSession($, on, true, session)
+  session.id = 'b1'
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
   await click(pane, 'tab-session')
-  expect(await pane.find({ key: 'note-session-s2' })).toBeDefined()
+  expect(await pane.find({ key: 'note-session-b1' })).toBeDefined()
   expect(await pane.find({ key: 'session-s1' })).toBeDefined()
-  expect(store.get('notes.link.s2')).toBeUndefined()
-  expect(store.get('notes.cleared')).toBeDefined()
+  expect(store.get('notes.link.b1')).toBeUndefined()
   await pane.unmount()
 })
 
@@ -845,7 +867,7 @@ test('a /clear in another session leaves this one its own note', async ($, on) =
 // goes on from the first session still.
 test('two /clears in a row keep the session note', async ($, on) => {
   const session: { id: string; startedAt?: number } = { id: 's1' }
-  const store = await clearSession($, on, false, NOW, session)
+  const store = await clearSession($, on, false, session)
   await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
   session.id = 's3'
   const pane = await $.ui.mount(NOTES_PANE)
