@@ -19,6 +19,7 @@ plugins/<name>/
 │       └── *.test.ts(x)     its tests
 ├── types/
 │   └── index.d.ts           contract: the values kept in $.state
+├── tsconfig.json            type checking against the engine's declarations
 └── README.md                short summary, linking to docs/{en,fr}/plugins/<name>.md
 ```
 

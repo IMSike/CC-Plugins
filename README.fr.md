@@ -36,7 +36,7 @@ Mises à jour : `/plugin marketplace update cc-plugins`, ou activer la mise à j
 |---|---|
 | [Plugins](docs/fr/README.md) | Ce que chaque plugin affiche ou fait, implications, comment le désactiver |
 | [Ajouter un plugin](docs/fr/adding-plugins.md) | Arborescence, manifeste, module de hooks, tests |
-| [Décisions d'architecture](docs/fr/adr/) | Pourquoi des mods, pourquoi pas de version de plugin, pourquoi lire la liste des processus |
+| [Décisions d'architecture](docs/fr/adr/) | Pourquoi des mods, pourquoi pas de version de plugin, pourquoi lire la liste des processus, pourquoi garder réglages et notes dans le store du plugin, pourquoi les éléments cliquables du panneau sont dessinés par un Client |
 
 ## Contribuer
 

@@ -19,6 +19,7 @@ plugins/<nom>/
 │       └── *.test.ts(x)     ses tests
 ├── types/
 │   └── index.d.ts           contrat : les valeurs gardées dans $.state
+├── tsconfig.json            vérification des types avec les déclarations du moteur
 └── README.md                résumé court, qui renvoie à docs/{en,fr}/plugins/<nom>.md
 ```
 
