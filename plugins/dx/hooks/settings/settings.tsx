@@ -110,8 +110,7 @@ function moved(order: readonly BottomFact[], fact: BottomFact, by: -1 | 1): Bott
 
 export function registerSettings(on: On): void {
   // Each number a stepper posts.
-  on('ui.message', { module: /stepper\.tsx$/ }, async ($, e, next) => {
-    if (e.requestId !== PANEL) return next(e)
+  on('ui.message', { module: /stepper\.tsx$/, requestId: PANEL }, async ($, e, next) => {
     const data = e.data as { setting?: unknown; value?: unknown }
     const set = typeof data.setting === 'string' ? STEPPERS[data.setting] : undefined
     if (set === undefined || typeof data.value !== 'number') return next(e)
