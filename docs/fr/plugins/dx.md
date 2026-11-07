@@ -68,7 +68,7 @@ L'icône `⚙` affiche les réglages dans le panneau latéral ; un second clic l
 - **Données** : gardées dans le store de dx, un fichier sous `~/.claude/plugins/store/` ([ADR 0004](../adr/0004-settings-and-notes.md)).
 - **Implications** :
   - Le panneau latéral se range à côté du transcript en mode plein écran à partir de 110 colonnes, au-dessus du prompt sinon. C'est un seul panneau dont le contenu change (notes, réglages ou un terminal) sans se refermer, donc sans scintillement ; une ligne d'onglets en haut mène de l'un à l'autre et au terminal de chaque tâche en arrière-plan.
-  - Un clic dans le panneau (ses onglets, les onglets et liens des notes, les contrôles des réglages) ne sélectionne jamais de texte, quels que soient les mouvements du pointeur ; ils s'activent au pointeur seulement, pas au clavier, et à son relâchement, sauf les compteurs numériques, qui agissent dès l'appui. La couleur hex personnalisée se saisit dans un simple champ de saisie. Les icônes du bandeau restent de simples boutons ([ADR 0005](../adr/0005-panel-presses.md)).
+  - Un clic dans le panneau (ses onglets, les onglets et liens des notes, les contrôles des réglages) ne sélectionne jamais de texte, quels que soient les mouvements du pointeur ; ils s'activent au pointeur seulement, pas au clavier, et à son relâchement, sauf les compteurs numériques, qui agissent dès l'appui. La couleur hex personnalisée s'écrit au clavier, dans un simple champ. Les icônes du bandeau restent de simples boutons ([ADR 0005](../adr/0005-panel-presses.md)).
   - Un changement fait dans une session apparaît dans une autre à la prochaine ouverture de ses réglages.
   - Chaque copie du plugin (installée, chargée avec `--plugin-dir`) garde ses propres réglages.
 
