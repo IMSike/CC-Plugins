@@ -255,10 +255,12 @@ export function registerStatusline(on: On): void {
     const crew = await read($, activity)
     const crewList = show.crew ? crewItems(crew, options.maxAgentIcons, options.maxTaskIcons, options.monitorIcon) : []
     const crewColumns = crewWidth(crewList)
-    const spinFrame = await read($, spin)
+    // Read only while a spinner turns: every frame redraws the band.
+    const spinning = options.animate.spinner && crewList.some(item => item.spin)
+    const spinFrame = spinning ? await read($, spin) : 0
     const viewed = e.props.view.agentId
     const icons = crewList.flatMap((item, index) => {
-      const glyph = item.spin && options.animate.spinner ? (SPINNER[spinFrame % SPINNER.length] ?? '✻') : item.glyph
+      const glyph = item.spin && spinning ? (SPINNER[spinFrame % SPINNER.length] ?? '✻') : item.glyph
       // A pressable icon's Button takes the cell after its glyph too (crewLabel).
       const label = <Text color={item.color} dimColor={item.dim} underline={item.open !== undefined && item.open === viewed}>{crewLabel(glyph, item)}</Text>
       const gap = index === 0 ? [] : [<Text>{' '}</Text>]
