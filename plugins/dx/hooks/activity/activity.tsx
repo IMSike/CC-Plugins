@@ -226,12 +226,14 @@ function wrappedRows(labels: readonly string[], columns: number): number {
   return rows
 }
 
-// What each tab atop the panel shows when pressed, by its key: a content, or
-// a background task's terminal; none for the tab in front. Rebuilt as the tabs
-// are drawn, it holds the drawn ones alone. Every key starts with `pane-`,
-// which the press hook matches.
+// What each tab atop the panel shows when pressed: a content, or a background
+// task's terminal.
 type TabPress = { view: 'notes' | 'settings' } | { task: string }
-let tabActions = new Map<string, TabPress>()
+// The task each terminal's tab shows, by its key; none for the tab in front.
+// Rebuilt as the tabs are drawn, it holds the drawn ones alone. Every key
+// starts with `pane-task-`, which the press hook matches; the notes' and the
+// settings' tabs are answered by their own features.
+let taskTabs = new Map<string, string>()
 
 async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
   if ('task' in action) return showTask($, action.task, false)
@@ -250,7 +252,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
   const { notesIcon, settingsIcon, monitorIcon } = await read($, settings)
   const labels: string[] = []
   // A surface with no Client draws a Button, the one way to press there.
-  const board = 'Client' in elements ? pressBoard<TabPress>(elements.Client, 'pane-') : undefined
+  const board = 'Client' in elements ? pressBoard<string>(elements.Client, 'pane-') : undefined
   const tab = (key: string, label: string, isCurrent: boolean, action: TabPress) => {
     labels.push(label)
     if (board === undefined) {
@@ -263,7 +265,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
     // As wide as drawn, cut to the pane only when longer.
     const width = Array.from(label).length > columns ? columns : undefined
     const parts = [{ text: label, color: isCurrent ? 'claude' : 'subtle', inverse: isCurrent, bold: isCurrent }]
-    return board.press(key, isCurrent ? undefined : action, parts, { bold: true }, width)
+    return board.press(key, isCurrent || !('task' in action) ? undefined : action.task, parts, { bold: true }, width)
   }
   // A wide glyph is followed by its own cell, then the space; a narrow one by
   // the space alone.
@@ -284,7 +286,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
       {terminals}
     </Box>
   )
-  tabActions = board?.actions ?? new Map()
+  taskTabs = board?.actions ?? new Map()
   return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1 }
 }
 
@@ -297,10 +299,10 @@ export async function openAgent($: EngineInterface, id: string, viewed: string |
 
 // The tool hooks hand back the call's result whatever becomes of following it.
 export function registerActivity(on: On): void {
-  // Each tab pressed atop the panel.
-  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^pane-/ }, async ($, e) => {
-    const action = tabActions.get(e.element)
-    if (action !== undefined) await tabPressed($, action)
+  // Each terminal's tab pressed atop the panel.
+  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^pane-task-/ }, async ($, e) => {
+    const task = taskTabs.get(e.element)
+    if (task !== undefined) await showTask($, task, false)
 
     return {}
   })

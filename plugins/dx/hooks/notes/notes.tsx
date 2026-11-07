@@ -5,7 +5,7 @@ import type { Note, Notes, NoteTab, NotesUnsaved, NotesView } from '../../types'
 import { paneTabs } from '../activity/activity'
 import { dayTime, errorText } from '../shared/format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
-import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
+import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
 import type { EditorProps } from './editor'
 import { fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
@@ -166,8 +166,19 @@ export async function startNotesTurn($: EngineInterface, e: TurnStartInput): Pro
   await ensureNotes($, false).catch(() => undefined)
 }
 
+// The notes shown in the panel. An open panel is redrawn, not opened again, so
+// no `ui.open` hook sees the switch: the notes, when their load failed, are
+// loaded again here first.
+async function showNotes($: EngineInterface): Promise<void> {
+  await ensureNotes($)
+  await showPanel($, 'notes')
+}
+
+// A click on the band's notes icon: the notes shown, or the panel closed when
+// it already shows them.
 export async function toggleNotes($: EngineInterface): Promise<void> {
-  await togglePanel($, 'notes')
+  if (await isShowing($, 'notes')) await closePanel($)
+  else await showNotes($)
 }
 
 // Shows a tab, or another session's note, and keeps it as the last one shown.
@@ -271,6 +282,14 @@ export function registerNotes(on: On): void {
     const row = e.pointer.row + list.offset
     if (row < list.first || row >= list.end) return next(e)
     if (!(await scrollOthers($, e.by).catch(() => false))) return next(e)
+
+    return {}
+  })
+
+  // The notes' tab atop the panel (../activity's paneTabs): in front, it does
+  // nothing.
+  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: 'pane-notes' }, async $ => {
+    if ((await panelView($)) !== 'notes') await showNotes($)
 
     return {}
   })

@@ -2,7 +2,6 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { PanelView } from '../../types'
-import { ensureNotes } from '../notes/notes-load'
 
 // dx's side panel: one pane, whose content is the notes, the settings or a
 // background task's terminal. Going from one to another redraws it in place,
@@ -30,10 +29,9 @@ export async function closePanel($: EngineInterface): Promise<void> {
 }
 
 // Shows `view` in the panel, opened when it is not. An open panel is redrawn,
-// not opened again, so no `ui.open` hook sees the switch: the notes, when
-// their load failed, are loaded again here first.
+// not opened again, so no `ui.open` hook sees the switch: what a content
+// needs first, its feature does before calling this (../notes's showNotes).
 export async function showPanel($: EngineInterface, view: PanelView): Promise<void> {
-  if (view === 'notes') await ensureNotes($)
   await update($, panel, () => view)
   if (!(await isOpen($))) await $.ui.open({ id: PANEL, title: TITLE, columns: PANE_COLUMNS }).catch(() => undefined)
 }

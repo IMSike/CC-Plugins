@@ -29,7 +29,7 @@ import {
   SPEEDS,
   thresholdsOf,
 } from '../shared/options'
-import { PANEL, panelView, togglePanel } from '../shared/panes'
+import { PANEL, panelView, showPanel, togglePanel } from '../shared/panes'
 import type { PressPart, PressStyle } from '../shared/press'
 import { pressBoard } from '../shared/presses'
 import { STEPPER_COLUMNS } from './stepper'
@@ -123,6 +123,14 @@ export function registerSettings(on: On): void {
     if (set === undefined || typeof data.value !== 'number') return next(e)
     const picked = data.value
     await change($, current => set(current, picked))
+
+    return {}
+  })
+
+  // The settings' tab atop the panel (../activity's paneTabs): in front, it
+  // does nothing.
+  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: 'pane-settings' }, async $ => {
+    if ((await panelView($)) !== 'settings') await showPanel($, 'settings')
 
     return {}
   })
