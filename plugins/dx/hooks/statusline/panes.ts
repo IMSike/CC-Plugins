@@ -17,6 +17,7 @@ const panel = atom({ plugin: 'dx', key: 'panel' } as const, 'notes' as PanelView
 // The panel's name, drawn only while another plugin's pane is open beside it:
 // one for every content, so that switching needs no new open.
 const TITLE = 'dx'
+// The contents' names, on the tabs atop the panel.
 export const TITLES: Record<Exclude<PanelView, 'task'>, string> = { notes: 'Notes', settings: 'Réglages' }
 
 async function isOpen($: EngineInterface): Promise<boolean> {

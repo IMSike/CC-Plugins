@@ -27,7 +27,7 @@ export type StatusSnapshot = {
   refreshedAt: number
 }
 
-// What runs beside the main loop, shown on the band's bottom border.
+// An agent CLI found running in a background task.
 export type CliAgent = 'claude' | 'cursor'
 
 // A background shell or monitor, followed by its id.
@@ -47,6 +47,7 @@ export type Task = {
   dueAt: number
 }
 
+// What runs beside the main loop, shown on the band's bottom border.
 export type Activity = {
   agents: { id: string; type: string; status: string }[]
   tasks: Task[]
@@ -128,8 +129,9 @@ export type Note = { text: string; updatedAt: number }
 
 export type NoteTab = 'global' | 'project' | 'session'
 
-// The notes, loaded from `$.store` when the session starts, or when their
-// pane is shown after a failed load.
+// The notes, loaded from `$.store` when the session starts, and again when
+// their pane is shown, a note is written or a prompt sent while they are not
+// loaded, or loaded for another session id (after a `/clear`).
 export type Notes = {
   global: Note | null
   project: Note | null

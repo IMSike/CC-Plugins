@@ -86,7 +86,7 @@ export async function clearedView($: EngineInterface): Promise<NotesView | undef
   return clearedFor(id)?.view
 }
 
-// Every note, this session's included when the session is a resumed one.
+// Every note: the global one, the project's, and every session's.
 // `keep`: the link a `/clear` makes kept, which a render may not write.
 export async function readNotes($: EngineInterface, keep = true): Promise<Notes> {
   const [root, id, keys] = await Promise.all([

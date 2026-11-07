@@ -26,9 +26,11 @@ import type { ProcessTree } from './tasks'
 // or, as a safety net, from the system's process list, read only when a task
 // is due for a check: soon after it starts (to tell an agent CLI in it), then
 // further and further apart (ADR 0003).
+
 // What the band shows, set in ./settings: the panes' icons here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
 
+// The agents and the tasks followed, drawn on the band's bottom border.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
   shape: 'activity-1',
 })
