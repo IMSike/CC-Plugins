@@ -26,6 +26,8 @@ const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as stri
 // Why the last save failed, or the last edit was refused: null once a save
 // succeeds.
 const notesUnsaved = atom({ plugin: 'dx', key: 'notesUnsaved' } as const, null as string | null, { shape: 'notes-unsaved-1' })
+// The first of the other sessions' notes listed, the list scrolled.
+const notesOthersAt = atom({ plugin: 'dx', key: 'notesOthersAt' } as const, 0, { shape: 'notes-others-at-1' })
 
 // The last tab shown, taken up again by the next pane (a setting).
 const TAB_KEY = 'notesTab'
@@ -140,11 +142,41 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
 // show, a retry of the load, or another session's note to delete. Rebuilt as
 // the pane draws, it holds the drawn ones alone. Every key starts with
 // `notes:`, which the press hook matches.
-type NotesPress = { view: NotesView } | { retry: true } | { erase: string }
+type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number }
 let PRESSES = new Map<string, NotesPress>()
+
+// The other sessions' notes, latest first.
+function othersOf(value: Notes): [string, Note][] {
+  return Object.entries(value.sessions)
+    .filter(([id]) => id !== value.session)
+    .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
+}
+
+// The first of `count` notes listed, `shown` rows at a time from `at`: kept
+// within the list, its last row at the window's last.
+export function othersStart(at: number, count: number, shown: number): number {
+  return Math.max(0, Math.min(at, count - shown))
+}
+
+// Where the list of other sessions stands in the pane's tree, as last drawn:
+// its title's row and the row past its last; `offset`, the pane's window then.
+// Read by the wheel, which says the body's row it is over.
+let OTHERS_ROWS: { first: number; end: number; offset: number } | undefined
+
+// The list of other sessions moved `by` rows, kept within it.
+async function scrollOthers($: EngineInterface, by: number): Promise<void> {
+  const value = await read($, notes)
+  if (value === null) return
+  const { notesOthers } = await read($, settings)
+  const count = othersOf(value).length
+  const stored = await read($, notesOthersAt)
+  const moved = othersStart(othersStart(stored, count, notesOthers) + by, count, notesOthers)
+  if (moved !== stored) await update($, notesOthersAt, () => moved)
+}
 
 async function pressed($: EngineInterface, action: NotesPress): Promise<void> {
   if ('retry' in action) return tryNotes($)
+  if ('scroll' in action) return scrollOthers($, action.scroll)
   if ('erase' in action) {
     await save($, 'session', action.erase, '')
     return setView($, { tab: 'session' })
@@ -182,6 +214,18 @@ export function registerNotes(on: On): void {
     }
     if (typeof data.text !== 'string') return next(e)
     await save($, data.tab, data.session, data.text)
+
+    return {}
+  })
+
+  // The wheel over the list of other sessions scrolls it, `notesOthers` rows
+  // shown still; elsewhere in the pane it moves the pane's window as ever.
+  on('ui.scroll', { component: 'Pane', requestId: PANEL }, async ($, e, next) => {
+    const list = OTHERS_ROWS
+    if (list === undefined || e.pointer === undefined || (await panelView($)) !== 'notes') return next(e)
+    const row = e.pointer.row + list.offset
+    if (row < list.first || row >= list.end) return next(e)
+    await scrollOthers($, e.by).catch(() => undefined)
 
     return {}
   })
@@ -233,6 +277,7 @@ export function registerNotes(on: On): void {
     // Not loaded: what failed, and a retry, never a blank pane.
     if (value === null) {
       PRESSES = presses
+      OTHERS_ROWS = undefined
       return (
         <Box flexDirection="column">
           {panes}
@@ -255,11 +300,13 @@ export function registerNotes(on: On): void {
     // editor takes it as it opens; the last one written wins.
     const note = await $.store.get(key).then(noteOf, () => known)
     PRESSES = presses
-    const others = Object.entries(value.sessions)
-      .filter(([id]) => id !== value.session)
-      .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
-      .slice(0, options.notesOthers)
+    // Every other session's note, `notesOthers` listed at a time from where
+    // the list was scrolled.
+    const all = othersOf(value)
+    const start = othersStart(await read($, notesOthersAt), all.length, options.notesOthers)
+    const others = all.slice(start, start + options.notesOthers)
     const listed = view.tab === 'session' && other === undefined && others.length > 0
+    const scrolls = listed && all.length > others.length
     const project = value.root.split(/[\\/]/).filter(Boolean).at(-1) ?? value.root
     const subtitle = view.tab === 'global'
       ? 'Toutes les sessions'
@@ -274,6 +321,9 @@ export function registerNotes(on: On): void {
     // other sessions.
     const extra = panesRows + 5 + (failed !== null ? 1 : 0) + (other !== undefined ? 1 : 0) + (listed ? others.length + 2 : 0)
     const rows = Math.max(3, e.props.scroll.bodyRows - extra)
+    // The list's title and rows, last in the tree.
+    const end = rows + extra
+    OTHERS_ROWS = listed ? { first: end - others.length - 1, end, offset: e.props.scroll.offset } : undefined
     const editor: EditorProps = {
       text: note?.text ?? '',
       rows,
@@ -311,7 +361,20 @@ export function registerNotes(on: On): void {
         <Text dimColor wrap="truncate-end">{hint}</Text>
         {listed && (
           <Box key="others" flexDirection="column" marginTop={1}>
-            <Text bold color="claude">Autres sessions</Text>
+            <Box key="others-title" flexShrink={0} justifyContent="space-between">
+              <Text bold color="claude">Autres sessions</Text>
+              {scrolls && (
+                <Box>
+                  <Text dimColor>{`${start + 1}–${start + others.length} / ${all.length} `}</Text>
+                  {press('others-up', { scroll: -others.length }, [
+                    { text: ' ▲ ', color: start > 0 ? 'claude' : 'subtle' },
+                  ], { inverse: true })}
+                  {press('others-down', { scroll: others.length }, [
+                    { text: ' ▼ ', color: start + others.length < all.length ? 'claude' : 'subtle' },
+                  ], { inverse: true })}
+                </Box>
+              )}
+            </Box>
             {others.map(([id, one]) =>
               press(`session-${id}`, { view: { tab: 'session', other: id } }, [
                 { text: `${dayTime(one.updatedAt)}  `, dimColor: true },

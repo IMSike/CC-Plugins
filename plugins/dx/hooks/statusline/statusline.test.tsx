@@ -5,6 +5,7 @@ import type { On } from 'claude-code'
 import { SPIN_MS, TERMINAL } from './crew'
 import { clockTime, heat, travelMs } from './format'
 import { FRAME_MS } from './gauge'
+import { othersStart } from './notes'
 
 const NOW = Date.parse('2026-10-25T10:00:00Z')
 
@@ -994,6 +995,66 @@ test('a note that would fill the store is refused, the store left as it was', as
   expect((store.get('notes.global') as { text: string }).text).toHaveLength(500)
   expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
   await pane.unmount()
+})
+
+// Every other session's note is reachable: as many listed as set, the list
+// scrolled by its arrows or the wheel over it, a press still opening one.
+test("the other sessions' notes scroll, as many listed as set", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const stored: Record<string, unknown> = { notesTab: 'session', settings: { notesOthers: 3 } }
+  for (const [index, id] of ['a', 'b', 'c', 'd', 'e'].entries()) {
+    stored[`notes.session.${id}`] = { text: `note ${id}`, updatedAt: NOW - (index + 1) * 60_000 }
+  }
+  engine(on, true, [], {}, stored)
+  // The pane's window, beneath dx: the moves dx passes on.
+  const moved: number[] = []
+  on('ui.scroll', (_, e) => {
+    moved.push(e.by)
+
+    return {}
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  const listed = async () => {
+    const shown: string[] = []
+    for (const id of ['a', 'b', 'c', 'd', 'e']) if (await pane.find({ key: `notes:session-${id}` })) shown.push(id)
+    return shown.join('')
+  }
+  expect(await listed()).toBe('abc')
+  expect(await pane.find({ type: 'Text', text: '1–3 / 5 ' })).toBeDefined()
+
+  // A page down, kept within the list; a page up.
+  await click(pane, 'notes:others-down')
+  expect(await listed()).toBe('cde')
+  expect(await pane.find({ type: 'Text', text: '3–5 / 5 ' })).toBeDefined()
+  await click(pane, 'notes:others-up')
+  expect(await listed()).toBe('abc')
+
+  // The wheel over the list moves it a row; over the editor, not.
+  const wheel = (row: number, by: number) => $.ui.scroll({
+    component: 'Pane', requestId: 'dx-panel', offset: 0, by, bodyRows: 20, contentRows: 20,
+    origin: { kind: 'person' }, pointer: { column: 2, row },
+  })
+  await wheel(19, 1)
+  expect(await listed()).toBe('bcd')
+  await wheel(6, 1)
+  expect(await listed()).toBe('bcd')
+  await wheel(18, -5)
+  expect(await listed()).toBe('abc')
+  await wheel(18, 1)
+  expect(moved).toEqual([1])
+
+  // A press opens the note still.
+  await click(pane, 'notes:session-d')
+  expect(await pane.find({ type: 'Text', text: /note d/, in: 'note-session-d' })).toBeDefined()
+  await pane.unmount()
+})
+
+test('the list of other sessions stays within its notes', () => {
+  expect(othersStart(0, 5, 3)).toBe(0)
+  expect(othersStart(4, 5, 3)).toBe(2)
+  expect(othersStart(-2, 5, 3)).toBe(0)
+  expect(othersStart(3, 2, 3)).toBe(0)
 })
 
 // The editor applies no edit past 95,000 characters: a paste is refused whole.

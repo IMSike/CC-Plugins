@@ -168,6 +168,8 @@ declare module 'claude-code' {
       // Why the last save of a note failed, or an edit was refused; null once
       // a save succeeds.
       notesUnsaved: Shaped<string | null>
+      // The first of the other sessions' notes listed, the list scrolled.
+      notesOthersAt: Shaped<number>
       panel: Shaped<PanelView>
     }
   }
