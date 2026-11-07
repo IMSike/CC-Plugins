@@ -46,10 +46,16 @@ const CHOICE_COLUMNS = 13
 // An icon choice's cell: its mark, the glyph, the longest name.
 const ICON_COLUMNS = 26
 
-// Called once the session has started.
-export async function loadSettings($: EngineInterface): Promise<void> {
+// The settings as the store holds them.
+async function loadSettings($: EngineInterface): Promise<void> {
   const stored = await $.store.get(STORE_KEY).catch(() => undefined)
   await update($, settings, () => settingsOf(stored))
+}
+
+// Called by ../register once the session has started, before the features
+// that read the settings.
+export async function startSettings($: EngineInterface): Promise<void> {
+  await loadSettings($)
 }
 
 // The changes under way, one after the other.

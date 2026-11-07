@@ -26,7 +26,7 @@ plugins/<nom>/
 └── README.md                résumé court, qui renvoie à docs/{en,fr}/plugins/<nom>.md
 ```
 
-Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Une fonctionnalité peut appeler les fonctions qu'exporte une autre : dans dx, le bandeau charge les notes et les réglages et lance la surveillance de l'activité, et les panneaux de notes et de réglages dessinent la ligne d'onglets de l'activité. Un module qui n'appartient à aucune fonctionnalité en particulier va dans `hooks/shared/` ; un module d'une seule fonctionnalité reste dans son dossier. Un module que seuls les tests importent (`shared/testing.ts` dans dx) n'est jamais importé par le module de hooks. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
+Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Une fonctionnalité peut appeler les fonctions qu'exporte une autre : dans dx, le bandeau ouvre les panneaux de notes et de réglages, et ces panneaux dessinent la ligne d'onglets de l'activité. Un module qui n'appartient à aucune fonctionnalité en particulier va dans `hooks/shared/` ; un module d'une seule fonctionnalité reste dans son dossier. Un module que seuls les tests importent (`shared/testing.ts` dans dx) n'est jamais importé par le module de hooks. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
 
 ## Manifeste
 

@@ -179,7 +179,8 @@ async function tick($: EngineInterface): Promise<void> {
   await checkTasks($)
 }
 
-// Called once the session has started: nothing followed yet.
+// Called by ../register once the session has started: nothing followed yet,
+// then its clocks.
 export async function startActivity($: EngineInterface): Promise<void> {
   ended.clear()
   await update($, activity, () => ({ agents: [], tasks: [] }))

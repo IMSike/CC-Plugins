@@ -4,7 +4,7 @@ import type { On } from 'claude-code'
 
 // What dx's integration tests share: the engine beneath the plugin, the
 // drawings they mount and the acts they repeat. Imported by the *.test.tsx
-// files of each feature folder alone, never by the hooks module.
+// files alone, never by the hooks module.
 
 export const NOW = Date.parse('2026-10-25T10:00:00Z')
 

@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On } from 'claude-code'
+import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesView } from '../../types'
 import { paneTabs } from '../activity/activity'
@@ -37,8 +37,8 @@ function isTab(value: unknown): value is NoteTab {
   return value === 'global' || value === 'project' || value === 'session'
 }
 
-// Called once the session has started: every note, and the tab a pane opens on.
-export async function loadNotes($: EngineInterface): Promise<void> {
+// Every note, and the tab a pane opens on: once the session has started.
+async function loadNotes($: EngineInterface): Promise<void> {
   forgetClear()
   await tryNotes($)
   await openingTab($)
@@ -119,12 +119,12 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
 
 // How often the note shown is read again from the store while its pane is
 // open: another session writing it shows here within that time.
-export const NOTES_POLL_MS = 1000
+const NOTES_POLL_MS = 1000
 
 // Draws the pane again when another session changed the note it shows: the
 // store has no event of its own, and the editor takes the new text. The pane
 // reads `notesSeen`: writing it redraws the pane alone.
-export async function notesTick($: EngineInterface): Promise<void> {
+async function notesTick($: EngineInterface): Promise<void> {
   // The view first, a plain read: `isShowing` lists the panes.
   if ((await panelView($)) !== 'notes' || !(await isShowing($, 'notes'))) return
   const value = await read($, notes)
@@ -134,6 +134,21 @@ export async function notesTick($: EngineInterface): Promise<void> {
   const seen = `${key} ${stored?.updatedAt ?? 0}`
   if ((await read($, notesSeen)) === seen) return
   await update($, notesSeen, () => seen)
+}
+
+// Called by ../register once the session has started, after the settings that
+// name the tab a pane opens on: the notes, then the clock reading the note
+// shown again. A load that fails is tried again as the pane is shown.
+export async function startNotes($: EngineInterface): Promise<void> {
+  await loadNotes($).catch(() => undefined)
+  $.clock.every(NOTES_POLL_MS, () => notesTick($))
+}
+
+// Called by ../register as a turn starts: the main loop's first prompt after a
+// `/clear` keeps the notes for its new session id.
+export async function startNotesTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
+  if (e.agentId !== undefined) return
+  await ensureNotes($, false).catch(() => undefined)
 }
 
 export async function toggleNotes($: EngineInterface): Promise<void> {

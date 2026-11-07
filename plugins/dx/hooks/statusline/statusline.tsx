@@ -1,11 +1,10 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On, SessionUsage } from 'claude-code'
+import type { EngineInterface, On, SessionUsage, TurnStartInput } from 'claude-code'
 
 import type { Activity, BottomFact, Gauge, StatusSnapshot, TurnTime } from '../../types'
-import { openAgent, showTask, startActivity } from '../activity/activity'
-import { loadNotes, notesTick, NOTES_POLL_MS, toggleNotes } from '../notes/notes'
-import { ensureNotes } from '../notes/notes-load'
-import { loadSettings, toggleSettings } from '../settings/settings'
+import { openAgent, showTask } from '../activity/activity'
+import { toggleNotes } from '../notes/notes'
+import { toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import {
   clockTime,
@@ -127,21 +126,23 @@ async function refresh($: EngineInterface): Promise<void> {
   await update($, snapshot, () => status)
 }
 
+// Called by ../register once the session has started, after the settings it
+// draws with: the band's first snapshot, and its clocks.
+export async function startStatusline($: EngineInterface): Promise<void> {
+  $.clock.every(TICK_MS, () => turnTick($))
+  $.clock.every(SPIN_MS, () => spinTick($))
+  await refresh($)
+  $.clock.every(REFRESH_MS, () => refresh($))
+}
+
+// Called by ../register as a turn starts: the main loop's turn is timed.
+export async function startStatuslineTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
+  if (e.agentId !== undefined) return
+  const now = await $.clock.now()
+  await update($, turn, () => ({ startedAt: now }))
+}
+
 export function registerStatusline(on: On): void {
-  on('session.start', async ($, e, next) => {
-    const started = await next(e)
-    await loadSettings($)
-    await loadNotes($).catch(() => undefined)
-    await startActivity($)
-    $.clock.every(TICK_MS, () => turnTick($))
-    $.clock.every(SPIN_MS, () => spinTick($))
-    $.clock.every(NOTES_POLL_MS, () => notesTick($))
-    await refresh($)
-    $.clock.every(REFRESH_MS, () => refresh($))
-
-    return started
-  })
-
   // turn.step streams: the hook is an async generator forwarding the chunks.
   on('turn.step', async function* ($, e, next) {
     if (e.agentId === undefined && e.effort !== undefined) {
@@ -149,18 +150,6 @@ export function registerStatusline(on: On): void {
     }
 
     return yield* next(e)
-  })
-
-  on('turn.start', async ($, e, next) => {
-    const started = await next(e)
-    if (e.agentId === undefined) {
-      const now = await $.clock.now()
-      await update($, turn, () => ({ startedAt: now }))
-      // The first prompt after a `/clear` keeps the notes for its new session id.
-      await ensureNotes($, false).catch(() => undefined)
-    }
-
-    return started
   })
 
   on('turn.complete', async ($, e, next) => {
