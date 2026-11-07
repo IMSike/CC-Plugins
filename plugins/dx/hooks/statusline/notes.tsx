@@ -6,14 +6,14 @@ import { paneTabs } from './activity'
 import type { EditorProps } from './editor'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
-import { GLOBAL_KEY, noteOf, PROJECT_PREFIX, SESSION_PREFIX, tryNotes } from './notes-load'
+import { clearedView, ensureNotes, GLOBAL_KEY, noteClear, noteOf, PROJECT_PREFIX, readNotes, SESSION_PREFIX, tryNotes } from './notes-load'
 import { PANEL, panelView, togglePanel } from './panes'
 
 // The notes pane: three notes of the person's own, one for every session, one
 // for the project, one for this session, kept in `$.store` across sessions.
 // The model never sees a pane, so the notes stay out of its context.
 // The notes are loaded by ./notes-load, which keeps why its last load failed.
-const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-1' })
+const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-2' })
 const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
 // What the band shows, set in ./settings: the notes' tab and list here.
@@ -48,6 +48,8 @@ function keyOf(value: Notes, tab: NoteTab, session: string): string {
 async function save($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
   const now = await $.clock.now()
   const note: Note | null = text === '' ? null : { text, updatedAt: now }
+  // The pane may draw notes read afresh, not kept yet: kept first.
+  await ensureNotes($)
   const value = await read($, notes)
   if (value === null) return
   const key = keyOf(value, tab, session)
@@ -72,6 +74,14 @@ export function registerNotes(on: On): void {
     return next(e)
   })
 
+  // A `/clear` empties the conversation, not the session: its note goes on
+  // under the new session id the engine gives.
+  on('session.end', async ($, e, next) => {
+    if (e.reason === 'clear') await noteClear($, e.sessionId).catch(() => undefined)
+
+    return next(e)
+  })
+
   // Each change the editor posts.
   on('ui.message', { module: /editor\.tsx$/ }, async ($, e, next) => {
     if (e.requestId !== PANEL) return next(e)
@@ -86,13 +96,29 @@ export function registerNotes(on: On): void {
     // A Client is drawn there alone.
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'notes') return next(e)
-    const value = await read($, notes)
+    // Read afresh when not loaded, or loaded for another session id, as after
+    // a `/clear` with the pane open: a render writes nothing, the next load
+    // keeps them. A failed load waits for a retry.
+    let value = await read($, notes)
+    let reason = await read($, notesError)
+    const id = await $.session.id().catch(() => value?.id)
+    let restored: NotesView | undefined
+    if (value === null ? reason === null : id !== value.id) {
+      try {
+        value = await readNotes($, false)
+        // The tab a `/clear` left, the emptied one standing until kept.
+        restored = await clearedView($)
+        reason = null
+      } catch (error) {
+        value = null
+        reason = error instanceof Error ? error.message : String(error)
+      }
+    }
     const { Box, Button, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
 
     // Not loaded: what failed, and a retry, never a blank pane.
     if (value === null) {
-      const reason = await read($, notesError)
       return (
         <Box flexDirection="column">
           {panes}
@@ -106,7 +132,7 @@ export function registerNotes(on: On): void {
       )
     }
 
-    const view = await read($, notesView)
+    const view = restored ?? (await read($, notesView))
     const options = await read($, settings)
 
     const other = view.tab === 'session' ? view.other : undefined
@@ -134,6 +160,8 @@ export function registerNotes(on: On): void {
     const extra = panesRows + 5 + (other !== undefined ? 1 : 0) + (listed ? others.length + 2 : 0)
     const rows = Math.max(3, e.props.scroll.bodyRows - extra)
     const setView = async (shown: NotesView) => {
+      // Kept first: notes drawn afresh after a `/clear` show the tab it left.
+      await ensureNotes($)
       await update($, notesView, () => shown)
       await $.store.set(TAB_KEY, shown.tab).catch(() => undefined)
     }

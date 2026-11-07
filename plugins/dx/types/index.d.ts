@@ -134,9 +134,11 @@ export type Notes = {
   project: Note | null
   // Every session's note, by session id.
   sessions: Record<string, Note>
-  // The project's root and the session's id: the store keys of their notes.
+  // The project's root and the session whose note is this one's: the store
+  // keys of their notes; `id`, the engine's session id, which a `/clear` changes.
   root: string
   session: string
+  id: string
 }
 
 // The notes pane's tab, and the other session whose note it shows, if any.

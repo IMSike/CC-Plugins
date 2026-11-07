@@ -27,7 +27,8 @@ const BAND = {
 // 7-day window at 90% resetting in 1j15h. `agents` are the session's agents,
 // `files` more files to read, by the end of their path, `stored` what dx's
 // store holds; without `fiveHour`, the 5-hour window has not started. The
-// calls in `refused` are refused, as by a session not there yet.
+// calls in `refused` are refused, as by a session not there yet; `session.id`
+// and its start are `session`'s, which a test changes as a `/clear` does.
 function engine(
   on: On,
   rateLimits = true,
@@ -36,6 +37,7 @@ function engine(
   stored: Record<string, unknown> = {},
   fiveHour = true,
   refused: ReadonlySet<string> = new Set(),
+  session: { id: string; startedAt?: number } = { id: 's1' },
 ) {
   // dx's store, read back by the tests.
   const store = new Map(Object.entries(stored))
@@ -53,7 +55,7 @@ function engine(
   on('store.keys', () => ({ value: [...store.keys()] }))
   on('session.root', () => (refused.has('session.root') ? { deny: 'session not ready' } : { value: String.raw`C:\Users\dev\repo\app` }))
   mock.env(on, { USERPROFILE: String.raw`C:\Users\dev`, TEMP: String.raw`C:\Users\dev\AppData\Local\Temp` })
-  on('session.id', () => (refused.has('session.id') ? { deny: 'session not ready' } : { value: 's1' }))
+  on('session.id', () => (refused.has('session.id') ? { deny: 'session not ready' } : { value: session.id }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.cwd', () => ({ value: String.raw`C:\Users\dev\repo\app` }))
   on('settings.read', () => ({ value: { effortLevel: 'xhigh' } }))
@@ -67,7 +69,7 @@ function engine(
   })
   on('session.usage', () => ({
     value: {
-      startedAt: NOW - 3600_000,
+      startedAt: session.startedAt ?? NOW - 3600_000,
       context: { window: 200000, tokens: 24000, percent: 12 },
       rateLimits: rateLimits
         ? [
@@ -78,6 +80,7 @@ function engine(
     },
   }))
   on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('agent.list', () => ({ value: agents as never }))
   // No process list: tasks are followed from the engine's signals alone.
   on('process.run', () => ({ deny: 'no process in tests' }))
@@ -688,5 +691,111 @@ test('notes that cannot load say so in the panel, with a retry', async ($, on) =
   await pane.press({ key: 'retry' })
   expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeUndefined()
   expect(await pane.find({ key: 'sheet' })).toBeDefined()
+  await pane.unmount()
+})
+
+// Empties dx's notes and their tab as the engine does at a `/clear`, from the
+// call it returns on: each read as absent while it stands at the version it
+// had, until written.
+const EMPTIED_KEYS = ['notes', 'notesView']
+function emptyNotes(on: On): () => void {
+  let isEmpty = false
+  const emptied = new Map<string, number>()
+  on('state.get', async (_, e, next) => {
+    const read = await next(e)
+    if (!isEmpty || e.plugin !== 'dx' || !EMPTIED_KEYS.includes(e.key) || !('value' in read) || read.value === undefined) return read
+    if (!emptied.has(e.key)) emptied.set(e.key, read.value.version)
+
+    // A call's hook answers { value }: here the read, `{ value, version }`.
+    return read.value.version === emptied.get(e.key) ? { value: { ...read.value, value: undefined } } : read
+  })
+
+  return () => {
+    isEmpty = true
+  }
+}
+
+// A session with a note, then a `/clear`: the engine goes on under `s2`, its
+// clock started over unless `startedAt` says otherwise, dx's notes emptied
+// when `empty`.
+async function clearSession($: Engine, on: On, empty: boolean, startedAt = NOW) {
+  mock.clock(on, { now: NOW })
+  const session: { id: string; startedAt?: number } = { id: 's1' }
+  const store = engine(on, true, [], {}, { notesTab: 'session' }, true, new Set(), session)
+  shell(on)
+  const emptied = emptyNotes(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const before = await $.ui.mount(NOTES_PANE)
+  await before.post({ tab: 'session', session: 's1', text: 'piste s1' }, { in: 'note-session-s1' })
+  // The tab shown at the `/clear`, which the stored one is not.
+  await before.press({ key: 'tab-global' })
+  await before.press({ key: 'tab-session' })
+  store.set('notesTab', 'project')
+  await before.unmount()
+  expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1', updatedAt: NOW })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  session.startedAt = startedAt
+  if (empty) emptied()
+
+  return store
+}
+
+// A `/clear` empties the conversation, not the session: the session tab keeps
+// its note under the new id, which is linked to the session it goes on.
+test('a /clear keeps the session note, the state kept', async ($, on) => {
+  const store = await clearSession($, on, false)
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'notes' })
+  await band.unmount()
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ type: 'Text', text: /piste s1/, in: 'note-session-s1' })).toBeDefined()
+  expect(await pane.find({ key: 'session-s1' })).toBeUndefined()
+  expect(store.get('notes.link.s2')).toBe('s1')
+  expect(store.get('notes.cleared')).toBeUndefined()
+  await pane.post({ tab: 'session', session: 's1', text: 'piste s1, suite' }, { in: 'note-session-s1' })
+  expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1, suite', updatedAt: NOW })
+  expect(store.get('notes.session.s2')).toBeUndefined()
+  await pane.unmount()
+})
+
+// The engine may empty dx's state at a `/clear`: the pane, left open, draws
+// the notes again on its own, never « Notes indisponibles ».
+test('a /clear keeps the session note, the state emptied with the pane open', async ($, on) => {
+  const store = await clearSession($, on, true)
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeUndefined()
+  expect((await pane.find({ type: 'Text', text: /^ Session $/ }))?.props.inverse).toBe(true)
+  expect(await pane.find({ type: 'Text', text: /piste s1/, in: 'note-session-s1' })).toBeDefined()
+  expect(await pane.find({ key: 'session-s1' })).toBeUndefined()
+  // Drawn without a write; kept, and linked, by the first change.
+  expect(store.get('notes.link.s2')).toBeUndefined()
+  await pane.post({ tab: 'session', session: 's1', text: 'piste s1, suite' }, { in: 'note-session-s1' })
+  expect(store.get('notes.link.s2')).toBe('s1')
+  expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1, suite', updatedAt: NOW })
+  expect(store.get('notes.session.s2')).toBeUndefined()
+  await pane.press({ key: 'tab-global' })
+  expect((await pane.find({ type: 'Text', text: /^ Global $/ }))?.props.inverse).toBe(true)
+  await pane.unmount()
+})
+
+// A tab chosen right after the `/clear`, before anything kept the notes.
+test('a tab chosen right after a /clear is shown', async ($, on) => {
+  await clearSession($, on, true)
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.press({ key: 'tab-project' })
+  expect((await pane.find({ type: 'Text', text: /^ Projet $/ }))?.props.inverse).toBe(true)
+  await pane.unmount()
+})
+
+// Another session, started at another time, takes nothing of the `/clear`.
+test('a /clear in another session leaves this one its own note', async ($, on) => {
+  const store = await clearSession($, on, true, NOW - 60_000)
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.press({ key: 'tab-session' })
+  expect(await pane.find({ key: 'note-session-s2' })).toBeDefined()
+  expect(await pane.find({ key: 'session-s1' })).toBeDefined()
+  expect(store.get('notes.link.s2')).toBeUndefined()
+  expect(store.get('notes.cleared')).toBeDefined()
   await pane.unmount()
 })

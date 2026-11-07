@@ -22,6 +22,7 @@ import {
 import type { FrameProps, FrameRun } from './frame'
 import type { GaugeProps } from './gauge'
 import { loadNotes, toggleNotes } from './notes'
+import { ensureNotes } from './notes-load'
 import { DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from './options'
 import { loadSettings, toggleSettings } from './settings'
 
@@ -174,6 +175,8 @@ export function registerStatusline(on: On): void {
     if (e.agentId === undefined) {
       const now = await $.clock.now()
       await update($, turn, () => ({ startedAt: now }))
+      // The first prompt after a `/clear` keeps the notes for its new session id.
+      await ensureNotes($, false).catch(() => undefined)
     }
 
     return started
