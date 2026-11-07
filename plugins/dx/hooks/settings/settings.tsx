@@ -101,7 +101,7 @@ const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSe
 // set as the pane draws, applied to the settings as they stand when it lands.
 // Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
 // with `settings:`, which the press hook matches.
-let PRESSES = new Map<string, (current: BandSettings) => BandSettings>()
+let pressActions = new Map<string, (current: BandSettings) => BandSettings>()
 const BOLD: PressStyle = { bold: true }
 
 // `order` with `fact` moved one place up (-1) or down (+1).
@@ -129,7 +129,7 @@ export function registerSettings(on: On): void {
 
   // Each press in the pane.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^settings:/ }, async ($, e) => {
-    const edit = PRESSES.get(e.element)
+    const edit = pressActions.get(e.element)
     if (edit !== undefined) await change($, edit)
 
     return {}
@@ -156,7 +156,7 @@ export function registerSettings(on: On): void {
     // label cut there.
     // Nothing is awaited from here on: the presses drawn replace the last ones.
     const board = pressBoard<(current: BandSettings) => BandSettings>(Client, 'settings:')
-    PRESSES = board.actions
+    pressActions = board.actions
     const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) =>
       board.press(key, edit, parts, hover, width)
     const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })

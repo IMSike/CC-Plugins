@@ -231,7 +231,7 @@ function wrappedRows(labels: readonly string[], columns: number): number {
 // are drawn, it holds the drawn ones alone. Every key starts with `pane-`,
 // which the press hook matches.
 type TabPress = { view: 'notes' | 'settings' } | { task: string }
-let TAB_PRESSES = new Map<string, TabPress>()
+let tabActions = new Map<string, TabPress>()
 
 async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
   if ('task' in action) return showTask($, action.task, false)
@@ -284,7 +284,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
       {terminals}
     </Box>
   )
-  TAB_PRESSES = board?.actions ?? new Map()
+  tabActions = board?.actions ?? new Map()
   return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1 }
 }
 
@@ -299,7 +299,7 @@ export async function openAgent($: EngineInterface, id: string, viewed: string |
 export function registerActivity(on: On): void {
   // Each tab pressed atop the panel.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^pane-/ }, async ($, e) => {
-    const action = TAB_PRESSES.get(e.element)
+    const action = tabActions.get(e.element)
     if (action !== undefined) await tabPressed($, action)
 
     return {}

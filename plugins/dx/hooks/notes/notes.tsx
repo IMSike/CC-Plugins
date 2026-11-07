@@ -184,12 +184,12 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
 // draws, it holds the drawn ones alone. Every key starts with `notes:`, which
 // the press hook matches.
 type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number }
-let PRESSES = new Map<string, NotesPress>()
+let pressActions = new Map<string, NotesPress>()
 
 // Where the list of other sessions stands in the pane's tree, as last drawn:
 // its title's row and the row past its last; `offset`, the pane's window then.
 // Read by the wheel, which says the body's row it is over.
-let OTHERS_ROWS: { first: number; end: number; offset: number } | undefined
+let othersList: { first: number; end: number; offset: number } | undefined
 
 // The list of other sessions moved `by` rows, kept within it: whether it
 // moved, which it cannot with every note shown, or at its end that way.
@@ -266,7 +266,7 @@ export function registerNotes(on: On): void {
   // shown still; elsewhere in the pane, or the list unable to move that way,
   // it moves the pane's window as ever.
   on('ui.scroll', { component: 'Pane', requestId: PANEL }, async ($, e, next) => {
-    const list = OTHERS_ROWS
+    const list = othersList
     if (list === undefined || e.pointer === undefined || (await panelView($)) !== 'notes') return next(e)
     const row = e.pointer.row + list.offset
     if (row < list.first || row >= list.end) return next(e)
@@ -277,7 +277,7 @@ export function registerNotes(on: On): void {
 
   // Each press in the pane.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^notes:/ }, async ($, e) => {
-    const action = PRESSES.get(e.element)
+    const action = pressActions.get(e.element)
     if (action !== undefined) await pressed($, action)
 
     return {}
@@ -309,7 +309,7 @@ export function registerNotes(on: On): void {
     }
     const { Box, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
-    // The presses drawn, whose actions take PRESSES' place as the tree is
+    // The presses drawn, whose actions take pressActions' place as the tree is
     // returned.
     const { actions: presses, press } = pressBoard<NotesPress>(Client, 'notes:')
 
@@ -324,8 +324,8 @@ export function registerNotes(on: On): void {
           </Box>
         </Box>
       )
-      PRESSES = presses
-      OTHERS_ROWS = undefined
+      pressActions = presses
+      othersList = undefined
       return unavailable
     }
 
@@ -447,8 +447,8 @@ export function registerNotes(on: On): void {
     )
     // What the presses and the wheel act on, taken up with nothing awaited any
     // more: it matches the tree returned, never mixed with another render's.
-    PRESSES = presses
-    OTHERS_ROWS = othersRows
+    pressActions = presses
+    othersList = othersRows
     return tree
   })
 }
