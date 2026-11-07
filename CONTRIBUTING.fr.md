@@ -27,7 +27,7 @@ Une session lancée avec `--plugin-dir` recharge le plugin à chaque enregistrem
 
 ## Conventions de code
 
-- Modules de hooks en TypeScript (`.ts`, `.tsx` pour le JSX), en mode strict ; un module par plugin (`hooks/register.ts`), chaque fonctionnalité dans son propre dossier sous `hooks/`, qui enregistre ses propres hooks ; les modules que plusieurs fonctionnalités partagent vont dans `hooks/shared/`.
+- Modules de hooks en TypeScript (`.ts`, `.tsx` pour le JSX), en mode strict ; un module par plugin (`hooks/register.ts`), chaque fonctionnalité dans son propre dossier sous `hooks/`, qui enregistre ses propres hooks et peut appeler les fonctions qu'exporte une autre fonctionnalité ; les modules qui n'appartiennent à aucune fonctionnalité en particulier vont dans `hooks/shared/`.
 - La logique pure (mise en forme, calculs) dans des fichiers à part, sans `$`, testés seuls.
 - Les valeurs lues par un dessin vivent dans `$.state`, déclarées dans le contrat du plugin `types/index.d.ts`, avec une étiquette `shape` changée dès que leurs champs changent.
 - Indentation de 2 espaces, apostrophes simples, pas de points-virgules, comme les exemples du moteur.

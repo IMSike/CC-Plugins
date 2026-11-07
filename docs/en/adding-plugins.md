@@ -14,17 +14,19 @@ plugins/<name>/
 │   ├── hooks.json           { "modules": ["./register.ts"] }
 │   ├── register.ts          the hooks module: calls each feature's register function
 │   ├── <feature>/
-│   │   ├── <feature>.tsx    the feature's hooks
-│   │   ├── format.ts        its pure logic, without $
+│   │   ├── <feature>.tsx    the feature's hooks and its register function
+│   │   ├── <part>.tsx       a Client module, drawn on the surface's own thread (<Client module="./<part>.tsx">)
+│   │   ├── <logic>.ts       its pure logic, without $
 │   │   └── *.test.ts(x)     its tests
-│   └── shared/              modules several features share, with their tests
+│   └── shared/              modules that belong to no feature in particular, with their tests
+│       └── testing.ts       what the tests share, imported by *.test.ts(x) alone
 ├── types/
 │   └── index.d.ts           contract: the values kept in $.state
 ├── tsconfig.json            type checking against the engine's declarations
 └── README.md                short summary, linking to docs/{en,fr}/plugins/<name>.md
 ```
 
-A plugin has **one** hooks module: a new feature is a folder under `hooks/`, registering its own hooks, whose register function `register.ts` calls, not a new plugin. A module several features share goes in `hooks/shared/`; a module only one feature uses stays in its folder. A new plugin is for a separate theme that people would install on its own.
+A plugin has **one** hooks module: a new feature is a folder under `hooks/`, registering its own hooks, whose register function `register.ts` calls, not a new plugin. A feature may call the functions another feature exports: in dx, the band loads the notes and the settings and starts the activity's watch, and the notes and settings panes draw the activity's row of tabs. A module that belongs to no feature in particular goes in `hooks/shared/`; a module of one feature stays in its folder. A module the tests alone import (`shared/testing.ts` in dx) is never imported by the hooks module. A new plugin is for a separate theme that people would install on its own.
 
 ## Manifest
 

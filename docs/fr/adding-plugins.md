@@ -14,17 +14,19 @@ plugins/<nom>/
 │   ├── hooks.json           { "modules": ["./register.ts"] }
 │   ├── register.ts          le module de hooks : appelle la fonction d'enregistrement de chaque fonctionnalité
 │   ├── <fonctionnalité>/
-│   │   ├── <fonctionnalité>.tsx   les hooks de la fonctionnalité
-│   │   ├── format.ts        sa logique pure, sans $
+│   │   ├── <fonctionnalité>.tsx   les hooks de la fonctionnalité et sa fonction d'enregistrement
+│   │   ├── <partie>.tsx     un module Client, dessiné sur le fil de la surface elle-même (<Client module="./<partie>.tsx">)
+│   │   ├── <logique>.ts     sa logique pure, sans $
 │   │   └── *.test.ts(x)     ses tests
-│   └── shared/              modules que plusieurs fonctionnalités partagent, avec leurs tests
+│   └── shared/              modules qui n'appartiennent à aucune fonctionnalité en particulier, avec leurs tests
+│       └── testing.ts       ce que les tests partagent, importé par les seuls *.test.ts(x)
 ├── types/
 │   └── index.d.ts           contrat : les valeurs gardées dans $.state
 ├── tsconfig.json            vérification des types avec les déclarations du moteur
 └── README.md                résumé court, qui renvoie à docs/{en,fr}/plugins/<nom>.md
 ```
 
-Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Un module que plusieurs fonctionnalités partagent va dans `hooks/shared/` ; un module qu'une seule fonctionnalité utilise reste dans son dossier. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
+Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Une fonctionnalité peut appeler les fonctions qu'exporte une autre : dans dx, le bandeau charge les notes et les réglages et lance la surveillance de l'activité, et les panneaux de notes et de réglages dessinent la ligne d'onglets de l'activité. Un module qui n'appartient à aucune fonctionnalité en particulier va dans `hooks/shared/` ; un module d'une seule fonctionnalité reste dans son dossier. Un module que seuls les tests importent (`shared/testing.ts` dans dx) n'est jamais importé par le module de hooks. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
 
 ## Manifeste
 
