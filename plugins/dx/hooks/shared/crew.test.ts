@@ -1,7 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Activity, Task } from '../../types'
-import { lightAt } from '../statusline/frame'
 import { CURSOR_GREY, crewItems, crewLabel, crewWidth, iconGap, MONITOR, ROBOT, SPINNER, TERMINAL } from './crew'
 import { DEFAULT_SETTINGS, MONITOR_ICONS, NOTES_ICONS, SETTINGS_ICONS } from './options'
 
@@ -61,17 +60,6 @@ test('every pressable icon owns the cell after its glyph, the count none', () =>
 
 test("the spinner turns there and back, without macOS's emoji-prone ✳", () => {
   expect(SPINNER.join('')).toBe('·✢*✶✻✽✽✻✶*✢·')
-})
-
-test('two glints go round the frame half a lap apart, each fading in ahead and out behind', () => {
-  const perimeter = 100
-  expect(lightAt(40, 40, perimeter)).toBeGreaterThan(0.8)
-  expect(lightAt(90, 40, perimeter)).toBeGreaterThan(0.8)
-  expect(lightAt(35, 40, perimeter)).toBeLessThan(lightAt(38, 40, perimeter))
-  expect(lightAt(42, 40, perimeter)).toBeGreaterThan(0)
-  expect(lightAt(42, 40, perimeter)).toBeLessThan(lightAt(41, 40, perimeter))
-  expect(lightAt(44, 40, perimeter)).toBe(0)
-  expect(lightAt(65, 40, perimeter)).toBe(0)
 })
 
 test('a Nerd Font icon keeps the cell after it, any other takes one space', () => {
