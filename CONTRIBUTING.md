@@ -32,6 +32,7 @@ A session started with `--plugin-dir` reloads the plugin each time a file is sav
 - Pure logic (formatting, computations) in files of its own, without `$`, tested on their own.
 - Values a drawing reads live in `$.state`, declared in the plugin's contract `types/index.d.ts`, with a `shape` tag changed whenever their fields change.
 - 2-space indentation, single quotes, no semicolons, as the engine's own examples.
+- Names in camelCase, module state that changes as the plugin runs (a `let`, a collection filled later) included; UPPER_SNAKE_CASE for constants alone, values fixed once written.
 - Identifiers and comments in English; user-facing text in French for now.
 - Encoding: UTF-8 without BOM, LF. Enforced by `.gitattributes` and `.editorconfig`.
 

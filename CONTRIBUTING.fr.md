@@ -32,6 +32,7 @@ Une session lancée avec `--plugin-dir` recharge le plugin à chaque enregistrem
 - La logique pure (mise en forme, calculs) dans des fichiers à part, sans `$`, testés seuls.
 - Les valeurs lues par un dessin vivent dans `$.state`, déclarées dans le contrat du plugin `types/index.d.ts`, avec une étiquette `shape` changée dès que leurs champs changent.
 - Indentation de 2 espaces, apostrophes simples, pas de points-virgules, comme les exemples du moteur.
+- Noms en camelCase, y compris l'état de module qui change pendant que le plugin tourne (un `let`, une collection remplie ensuite) ; UPPER_SNAKE_CASE pour les seules constantes, valeurs fixées une fois écrites.
 - Identifiants et commentaires en anglais ; textes affichés à l'utilisateur en français pour l'instant.
 - Encodage : UTF-8 sans BOM, LF. Imposé par `.gitattributes` et `.editorconfig`.
 
