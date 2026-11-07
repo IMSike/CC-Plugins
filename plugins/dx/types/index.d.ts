@@ -127,7 +127,8 @@ export type Note = { text: string; updatedAt: number }
 
 export type NoteTab = 'global' | 'project' | 'session'
 
-// The notes, loaded from `$.store` when the session starts.
+// The notes, loaded from `$.store` when the session starts, or when their
+// pane is shown after a failed load.
 export type Notes = {
   global: Note | null
   project: Note | null
@@ -152,6 +153,8 @@ declare module 'claude-code' {
       tick: Shaped<number>
       settings: Shaped<BandSettings>
       notes: Shaped<Notes | null>
+      // Why the notes could not be loaded, shown in their pane; null once loaded.
+      notesError: Shaped<string | null>
       notesView: Shaped<NotesView>
       panel: Shaped<PanelView>
     }

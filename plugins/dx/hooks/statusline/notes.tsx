@@ -6,49 +6,29 @@ import { paneTabs } from './activity'
 import type { EditorProps } from './editor'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
+import { GLOBAL_KEY, noteOf, PROJECT_PREFIX, SESSION_PREFIX, tryNotes } from './notes-load'
 import { PANEL, panelView, togglePanel } from './panes'
 
 // The notes pane: three notes of the person's own, one for every session, one
 // for the project, one for this session, kept in `$.store` across sessions.
 // The model never sees a pane, so the notes stay out of its context.
+// The notes are loaded by ./notes-load, which keeps why its last load failed.
 const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-1' })
+const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
 // What the band shows, set in ./settings: the notes' tab and list here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-1' })
 
-const GLOBAL_KEY = 'notes.global'
-const PROJECT_PREFIX = 'notes.project.'
-const SESSION_PREFIX = 'notes.session.'
 // The last tab shown, taken up again by the next pane (a setting).
 const TAB_KEY = 'notesTab'
-
-function noteOf(stored: unknown): Note | null {
-  const value = stored as Partial<Note> | undefined
-  return typeof value?.text === 'string' && value.text !== '' && typeof value.updatedAt === 'number'
-    ? { text: value.text, updatedAt: value.updatedAt }
-    : null
-}
 
 function isTab(value: unknown): value is NoteTab {
   return value === 'global' || value === 'project' || value === 'session'
 }
 
-// Called once the session has started: every note, this session's included
-// when the session is a resumed one.
+// Called once the session has started: every note, and the tab a pane opens on.
 export async function loadNotes($: EngineInterface): Promise<void> {
-  const [root, session, keys] = await Promise.all([
-    $.session.root(),
-    $.session.id(),
-    $.store.keys().catch(() => [] as string[]),
-  ])
-  const get = (key: string) => $.store.get(key).then(noteOf).catch(() => null)
-  const sessions: Record<string, Note> = {}
-  for (const key of keys.filter(one => one.startsWith(SESSION_PREFIX))) {
-    const note = await get(key)
-    if (note !== null) sessions[key.slice(SESSION_PREFIX.length)] = note
-  }
-  const value: Notes = { global: await get(GLOBAL_KEY), project: await get(PROJECT_PREFIX + root), sessions, root, session }
-  await update($, notes, () => value)
+  await tryNotes($)
   await openingTab($)
 }
 
@@ -103,14 +83,31 @@ export function registerNotes(on: On): void {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANEL }, async ($, e, next) => {
-    const value = await read($, notes)
     // A Client is drawn there alone.
-    if (value === null || (e.surface !== 'terminal' && e.surface !== 'desktop')) return next(e)
+    if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'notes') return next(e)
-    const view = await read($, notesView)
-    const options = await read($, settings)
+    const value = await read($, notes)
     const { Box, Button, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
+
+    // Not loaded: what failed, and a retry, never a blank pane.
+    if (value === null) {
+      const reason = await read($, notesError)
+      return (
+        <Box flexDirection="column">
+          {panes}
+          <Text key="unavailable" color="error" wrap="wrap">{`Notes indisponibles${reason === null ? '' : ` : ${reason}`}`}</Text>
+          <Box key="retry-row" flexShrink={0}>
+            <Button key="retry" plain hover={{ underline: true }} onPress={() => tryNotes($)}>
+              <Text color="claude">↻ Réessayer</Text>
+            </Button>
+          </Box>
+        </Box>
+      )
+    }
+
+    const view = await read($, notesView)
+    const options = await read($, settings)
 
     const other = view.tab === 'session' ? view.other : undefined
     const session = other ?? value.session

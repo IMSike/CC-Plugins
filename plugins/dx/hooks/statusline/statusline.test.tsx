@@ -26,7 +26,8 @@ const BAND = {
 // repository on `dev`; context at 12%, 5-hour window at 20% resetting in 3h24,
 // 7-day window at 90% resetting in 1j15h. `agents` are the session's agents,
 // `files` more files to read, by the end of their path, `stored` what dx's
-// store holds; without `fiveHour`, the 5-hour window has not started.
+// store holds; without `fiveHour`, the 5-hour window has not started. The
+// calls in `refused` are refused, as by a session not there yet.
 function engine(
   on: On,
   rateLimits = true,
@@ -34,6 +35,7 @@ function engine(
   files: Record<string, string> = {},
   stored: Record<string, unknown> = {},
   fiveHour = true,
+  refused: ReadonlySet<string> = new Set(),
 ) {
   // dx's store, read back by the tests.
   const store = new Map(Object.entries(stored))
@@ -49,9 +51,9 @@ function engine(
     return { value: undefined }
   })
   on('store.keys', () => ({ value: [...store.keys()] }))
-  on('session.root', () => ({ value: String.raw`C:\Users\dev\repo\app` }))
+  on('session.root', () => (refused.has('session.root') ? { deny: 'session not ready' } : { value: String.raw`C:\Users\dev\repo\app` }))
   mock.env(on, { USERPROFILE: String.raw`C:\Users\dev`, TEMP: String.raw`C:\Users\dev\AppData\Local\Temp` })
-  on('session.id', () => ({ value: 's1' }))
+  on('session.id', () => (refused.has('session.id') ? { deny: 'session not ready' } : { value: 's1' }))
   on('session.model', () => ({ value: 'claude-opus-5-5' }))
   on('session.cwd', () => ({ value: String.raw`C:\Users\dev\repo\app` }))
   on('settings.read', () => ({ value: { effortLevel: 'xhigh' } }))
@@ -619,5 +621,72 @@ test('the crew animation setting turns the working one on with it', async ($, on
   expect(store.get('settings')).toMatchObject({ animateOnlyWorking: true, animateWithCrew: true })
   await pane.press({ key: 'animate-with-crew' })
   expect(store.get('settings')).toMatchObject({ animateOnlyWorking: true, animateWithCrew: false })
+  await pane.unmount()
+})
+
+test('notes that failed to load at the start load when the panel opens on them', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['session.id'])
+  engine(on, true, [], {}, { 'notes.global': { text: 'pain', updatedAt: NOW - 1000 } }, true, refused)
+  const panes = shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  refused.clear()
+
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'notes' })
+  await band.unmount()
+  expect(panes).toEqual(['dx-panel'])
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect((await pane.find({ type: 'Text', text: /^ Global $/ }))?.props.inverse).toBe(true)
+  expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
+  await pane.unmount()
+})
+
+test('notes that failed to load load when the open panel goes from the settings to them', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['session.root'])
+  engine(on, true, [], {}, {}, true, refused)
+  const panes = shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  refused.clear()
+
+  // The panel stays open: the notes are shown with no new open.
+  const settings = await showSettings($)
+  await settings.press({ key: 'pane-notes' })
+  await settings.unmount()
+  expect(panes).toEqual(['dx-panel'])
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ key: 'sheet' })).toBeDefined()
+  await pane.unmount()
+})
+
+test('notes that cannot load say so in the panel, with a retry', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['session.id'])
+  engine(on, true, [], {}, {}, true, refused)
+  shell(on)
+  const logged: { text: string; to?: string }[] = []
+  on('ui.log', (_, e) => {
+    logged.push(e)
+
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  // Not silent: the debug log says why.
+  expect(logged.some(line => line.to === 'debug' && /notes non chargées.*session not ready/.test(line.text))).toBe(true)
+
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'notes' })
+  await band.unmount()
+  const pane = await $.ui.mount(NOTES_PANE)
+  // Never a blank panel: its tabs, what failed, and a retry.
+  expect(await pane.find({ key: 'pane-settings' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /session not ready/ })).toBeDefined()
+  expect(await pane.find({ key: 'sheet' })).toBeUndefined()
+  refused.clear()
+  await pane.press({ key: 'retry' })
+  expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeUndefined()
+  expect(await pane.find({ key: 'sheet' })).toBeDefined()
   await pane.unmount()
 })
