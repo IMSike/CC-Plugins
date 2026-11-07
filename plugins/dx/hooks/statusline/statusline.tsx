@@ -352,7 +352,7 @@ export function registerStatusline(on: On): void {
       ...(fiveHourRow
         ? [(line: number) => row(line, '5h', status.fiveHour?.percent, status.fiveHour && { resetsAt: status.fiveHour.resetsAt, seconds: FIVE_HOURS })]
         : []),
-      ...(sevenDayRow && status.sevenDay
+      ...(sevenDayRow
         ? [(line: number) => row(line, options.sevenDayLabel, status.sevenDay?.percent, { resetsAt: status.sevenDay?.resetsAt, seconds: SEVEN_DAYS })]
         : []),
     ]

@@ -45,43 +45,43 @@ test('the heat scale goes green, yellow, orange, red, halfway at 25, 50 and 75%'
 })
 
 test('a gauge is a string of beads on a dotted track', () => {
-  expect(text(gauge(0, 10, 'subtle'))).toBe(TRACK.repeat(10))
-  expect(text(gauge(100, 10, 'subtle'))).toBe(USED.repeat(10))
-  expect(text(gauge(45, 10, 'subtle'))).toBe(`${USED.repeat(5)}${TRACK.repeat(5)}`)
-  expect(text(gauge(150, 4, 'subtle'))).toBe(USED.repeat(4))
-  expect(text(gauge(1, 40, 'subtle'))).toBe(`${USED}${TRACK.repeat(39)}`)
-  expect(gauge(42, 37, 'subtle').reduce((sum, run) => sum + run.text.length, 0)).toBe(37)
+  expect(text(gauge(0, 10))).toBe(TRACK.repeat(10))
+  expect(text(gauge(100, 10))).toBe(USED.repeat(10))
+  expect(text(gauge(45, 10))).toBe(`${USED.repeat(5)}${TRACK.repeat(5)}`)
+  expect(text(gauge(150, 4))).toBe(USED.repeat(4))
+  expect(text(gauge(1, 40))).toBe(`${USED}${TRACK.repeat(39)}`)
+  expect(gauge(42, 37).reduce((sum, run) => sum + run.text.length, 0)).toBe(37)
 })
 
 test('a gauge is colored by the position of each cell, runs merged', () => {
-  const runs = gauge(100, 40, 'subtle')
+  const runs = gauge(100, 40)
   expect(runs[0]?.color).toBe(heat(1.25))
   expect(runs[runs.length - 1]?.color).toBe(heat(98.75))
-  expect(gauge(0, 10, 'subtle')).toEqual([{ text: TRACK.repeat(10), color: 'subtle' }])
+  expect(gauge(0, 10)).toEqual([{ text: TRACK.repeat(10), color: 'subtle' }])
 })
 
 test('the budget left up to the pace is pale beads', () => {
-  const runs = gauge(20, 10, 'subtle', 60)
+  const runs = gauge(20, 10, 60)
   expect(text(runs)).toBe(`${USED.repeat(2)}${GAP.repeat(4)}${TRACK.repeat(4)}`)
   expect(runs.filter(run => run.dim).map(run => run.text).join('')).toBe(GAP.repeat(4))
 })
 
 test('what is consumed ahead of the pace is beads in full color', () => {
-  const runs = gauge(80, 10, 'subtle', 30)
+  const runs = gauge(80, 10, 30)
   expect(text(runs)).toBe(`${USED.repeat(3)}${GAP.repeat(5)}${TRACK.repeat(2)}`)
   expect(runs.some(run => run.dim)).toBe(false)
   // Without a pace, nothing is marked.
-  expect(text(gauge(80, 10, 'subtle'))).toBe(`${USED.repeat(8)}${TRACK.repeat(2)}`)
+  expect(text(gauge(80, 10))).toBe(`${USED.repeat(8)}${TRACK.repeat(2)}`)
 })
 
 test('the shuttle is a lit bead in a glow fading behind it', () => {
-  const runs = gauge(100, 20, 'subtle', undefined, 8)
+  const runs = gauge(100, 20, undefined, 8)
   const lit = runs.find(run => run.bold && run.color === lighten(heat(42.5), 0.7))
   expect(lit?.text).toBe(USED)
   expect(runs.find(run => run.color === lighten(heat(37.5), glow(1)))?.text).toBe(USED)
   // Past the part consumed, the shuttle is not drawn.
-  expect(text(gauge(20, 20, 'subtle', undefined, 12))).toBe(`${USED.repeat(4)}${TRACK.repeat(16)}`)
-  expect(gauge(20, 20, 'subtle', undefined, 12).some(run => run.bold)).toBe(false)
+  expect(text(gauge(20, 20, undefined, 12))).toBe(`${USED.repeat(4)}${TRACK.repeat(16)}`)
+  expect(gauge(20, 20, undefined, 12).some(run => run.bold)).toBe(false)
 })
 
 test('between two cells, the glow is shared by both', () => {
@@ -90,7 +90,7 @@ test('between two cells, the glow is shared by both', () => {
   expect(glow(0.5) > glow(1)).toBe(true)
   expect(glow(-1)).toBe(0)
   expect(glow(3)).toBe(0)
-  const runs = gauge(100, 20, 'subtle', undefined, 8.5)
+  const runs = gauge(100, 20, undefined, 8.5)
   expect(runs.find(run => run.color === lighten(heat(42.5), glow(0.5)))).toBeDefined()
   expect(runs.find(run => run.color === lighten(heat(47.5), glow(-0.5)))).toBeDefined()
 })

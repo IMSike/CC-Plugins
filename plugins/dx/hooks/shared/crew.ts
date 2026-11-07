@@ -1,13 +1,13 @@
 import type { Activity } from '../../types'
 
 // The icons of the band's bottom border: one per subagent and per background
-// task, up to a number of a kind (MAX_ICONS by default), then a count.
+// task, up to a number of a kind (a setting), then a count.
 
-export const MAX_ICONS = 5
 // Nerd Font glyphs: a robot, a terminal, a pulse (a monitor's by default).
 export const ROBOT = '\u{F06A9}'
 export const TERMINAL = '\u{F489}'
 export const MONITOR = '\u{F469}'
+// The icon color of Cursor's agent CLI.
 export const CURSOR_GREY = '#8b949e'
 
 // What follows an icon in a label, before its text: a Nerd Font glyph (one of
@@ -40,7 +40,7 @@ export function isWorking(status: string): boolean {
   return status === 'running' || status === 'pending'
 }
 
-function capped(items: CrewItem[], max = MAX_ICONS): CrewItem[] {
+function capped(items: CrewItem[], max: number): CrewItem[] {
   if (items.length <= max) return items
   const shown = items.slice(0, max)
   const last = shown[shown.length - 1]
@@ -50,7 +50,7 @@ function capped(items: CrewItem[], max = MAX_ICONS): CrewItem[] {
 // Working subagents first, then waiting ones, agent CLIs, shells, monitors.
 // Up to `agents` subagent icons of a kind, `tasks` task icons of a kind; a
 // monitor drawn as `monitor`.
-export function crewItems(crew: Activity, agents = MAX_ICONS, tasks = MAX_ICONS, monitor = MONITOR): CrewItem[] {
+export function crewItems(crew: Activity, agents: number, tasks: number, monitor: string): CrewItem[] {
   const working = crew.agents.filter(agent => isWorking(agent.status))
   const waiting = crew.agents.filter(agent => !isWorking(agent.status))
   const plain = (kind: string) => crew.tasks.filter(task => task.kind === kind && task.agent === undefined)

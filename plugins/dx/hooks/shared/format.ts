@@ -103,13 +103,12 @@ function merged(runs: Run[]): Run[] {
 // to `pace` (where a steady consumption would be), the gap between it and the
 // consumption is marked: pale beads for the budget left, beads in full color
 // for what is consumed ahead of it. `shuttle`, a position along the part
-// consumed, in cells, lights the cells around it. The track's color is the
-// caller's: the theme's.
+// consumed, in cells, lights the cells around it. The track is drawn in the
+// theme's subtle color.
 // `solid` draws every cell in that color instead of the heat gradient.
 export function gauge(
   percent: number,
   width: number,
-  track: string,
   pace?: number,
   shuttle?: number,
   solid?: string,
@@ -134,7 +133,7 @@ export function gauge(
     } else if (cell < budget) {
       runs.push({ text: GAP, color, dim: true })
     } else {
-      runs.push({ text: TRACK, color: track })
+      runs.push({ text: TRACK, color: 'subtle' })
     }
   }
 

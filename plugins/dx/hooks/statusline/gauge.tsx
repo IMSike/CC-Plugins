@@ -59,7 +59,7 @@ const Gauge: ClientModule<GaugeProps, GaugeState> = (props, surface) => {
   }
 
   const shuttle = surface.state?.shuttle ?? undefined
-  const runs = gauge(props.percent, props.width, 'subtle', props.pace ?? undefined, props.shuttle ? shuttle : undefined, props.solid ?? undefined, props.thresholds)
+  const runs = gauge(props.percent, props.width, props.pace ?? undefined, props.shuttle ? shuttle : undefined, props.solid ?? undefined, props.thresholds)
 
   return (
     <Box>
