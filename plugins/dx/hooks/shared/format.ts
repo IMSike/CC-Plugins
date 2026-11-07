@@ -1,4 +1,5 @@
-// Pure helpers of the status band: no `$`, so they are tested on their own.
+// Pure helpers the features share (the formatting of figures, the drawing of
+// a gauge): no `$`, so they are tested on their own.
 
 // The heat scale of the gauges: green, yellow, orange, red, each blending
 // into the next, halfway at the thresholds: yellow at half the orange one,
