@@ -79,7 +79,7 @@ export function parsePosixTree(stdout: string): ProcessTree {
   return { self, procs: descendants(all, self) }
 }
 
-export function descendants(procs: readonly Proc[], root: number): Proc[] {
+function descendants(procs: readonly Proc[], root: number): Proc[] {
   const out: Proc[] = []
   const queue = [root]
   const seen = new Set<number>([root])

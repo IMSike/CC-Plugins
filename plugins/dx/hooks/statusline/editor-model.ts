@@ -5,7 +5,7 @@
 export type Editor = { text: string; cursor: number; top: number }
 
 // A visual row: `text.slice(start, end)`, its line's newline left out.
-export type Row = { start: number; end: number }
+type Row = { start: number; end: number }
 
 // Key names the terminal gives for keys that type nothing here (the others
 // are handled below); a function key is `f1`, `f2`...
@@ -46,7 +46,7 @@ function classOf(char: string): CharClass {
 // Where ctrl+left lands from `cursor`, as in a text editor: over the spaces,
 // then to the start of the word; a line break stops it, at the line's start,
 // or, right after it, at the end of the line above.
-export function wordLeft(text: string, cursor: number): number {
+function wordLeft(text: string, cursor: number): number {
   let at = cursor
   while (at > 0 && classOf(text.charAt(at - 1)) === 'space') at--
   if (at === 0) return 0
@@ -58,7 +58,7 @@ export function wordLeft(text: string, cursor: number): number {
 
 // Where ctrl+right lands from `cursor`: over the spaces, then to the end of
 // the word; a line break stops it, as for wordLeft.
-export function wordRight(text: string, cursor: number): number {
+function wordRight(text: string, cursor: number): number {
   let at = cursor
   while (at < text.length && classOf(text.charAt(at)) === 'space') at++
   if (at === text.length) return at

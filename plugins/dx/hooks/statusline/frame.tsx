@@ -24,7 +24,7 @@ type FrameState = { lit: string }
 
 // A lap of the frame, in milliseconds; a glint's tail and the fade ahead of
 // it, in cells.
-export const LAP_MS = 18_000
+const LAP_MS = 18_000
 const TAIL = 10
 const LEAD = 4
 const GLOW = 0.9
@@ -65,6 +65,9 @@ function litOf(props: FrameProps): string {
   return lit
 }
 
+// Each instance's latest props, for its clock.
+const instances = new WeakMap<object, { props: FrameProps }>()
+
 const Frame: ClientModule<FrameProps, FrameState> = (props, surface) => {
   const { Box, Text } = surface.elements
   if (surface.state === undefined) {
@@ -103,8 +106,5 @@ const Frame: ClientModule<FrameProps, FrameState> = (props, surface) => {
     </Box>
   )
 }
-
-// Each instance's latest props, for its clock.
-const instances = new WeakMap<object, { props: FrameProps }>()
 
 export default Frame

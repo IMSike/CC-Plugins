@@ -59,7 +59,7 @@ export function lighten(hex: string, amount: number): string {
 }
 
 // One run of identical glyphs in one style: what a gauge is drawn with.
-export type Run = { text: string; color: string; dim?: true; bold?: true }
+type Run = { text: string; color: string; dim?: true; bold?: true }
 
 // A gauge is a string of beads: double circles for what is consumed, dotted
 // circles for the gap to the pace (pale ahead of the consumption, in full

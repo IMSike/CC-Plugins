@@ -136,7 +136,7 @@ export const NOTE_TABS: readonly (readonly [NoteTab, string])[] = [
 ]
 
 // Mid-saturation tones, readable on dark and light themes alike.
-export const PALETTE: readonly (readonly [string, string])[] = [
+const PALETTE: readonly (readonly [string, string])[] = [
   ['#d4a72c', 'Jaune'],
   ['#e3742f', 'Orange'],
   ['#f85149', 'Rouge'],

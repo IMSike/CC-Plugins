@@ -35,7 +35,7 @@ import type { StepperProps } from './stepper'
 
 // The settings pane: what the band shows, animates and is colored with, kept
 // in `$.store` across sessions and read into `$.state` for the drawings.
-export const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
 
 const STORE_KEY = 'settings'
 // The toggles go in two columns from this inner width.

@@ -29,7 +29,7 @@ import type { ProcessTree } from './tasks'
 // What the band shows, set in ./settings: the panes' icons here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
 
-export const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
+const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
   shape: 'activity-1',
 })
 
@@ -42,7 +42,7 @@ const TICK_MS = 3000
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
 const ENDED = /^(completed|failed|killed|stopped|cancelled|canceled|error)$/i
 // When a task's process is looked for, from its start: then every last step.
-export const CHECKS_MS = [2_000, 10_000, 60_000, 300_000, 900_000]
+const CHECKS_MS = [2_000, 10_000, 60_000, 300_000, 900_000]
 
 // Ids of tasks a notification row reported ended: a drawing may not write the
 // state, so the next tick does.
@@ -107,7 +107,9 @@ async function refreshPane($: EngineInterface): Promise<void> {
   }
 }
 
-async function addTask($: EngineInterface, id: string, kind: Task['kind'], command: string, output?: string): Promise<void> {
+// A task the session started: followed from now on, its output file found.
+async function followTask($: EngineInterface, id: string, kind: Task['kind'], command: string, result: unknown): Promise<void> {
+  const output = await outputPath($, id, result)
   const now = await $.clock.now()
   const due = now + (CHECKS_MS[0] ?? 2000)
   await update($, activity, value =>
@@ -115,11 +117,6 @@ async function addTask($: EngineInterface, id: string, kind: Task['kind'], comma
       ? value
       : { ...value, tasks: [...value.tasks, { id, kind, command, output, step: 0, dueAt: due }] },
   )
-}
-
-// A task the session started: followed from now on, its output file found.
-async function followTask($: EngineInterface, id: string, kind: Task['kind'], command: string, result: unknown): Promise<void> {
-  await addTask($, id, kind, command, await outputPath($, id, result))
 }
 
 async function removeTasks($: EngineInterface, ids: ReadonlySet<string>): Promise<void> {

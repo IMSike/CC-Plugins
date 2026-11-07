@@ -50,7 +50,7 @@ export async function showPanel($: EngineInterface, view: PanelView): Promise<vo
 // A click on a view's icon: the view shown, or the panel closed when it
 // already shows it.
 export async function togglePanel($: EngineInterface, view: PanelView): Promise<void> {
-  if ((await isOpen($)) && (await read($, panel)) === view) await closePanel($)
+  if (await isShowing($, view)) await closePanel($)
   else await showPanel($, view)
 }
 

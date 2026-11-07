@@ -27,7 +27,7 @@ const CHECK_MS = 500
 const SETTLED = 2
 
 // Each instance's latest props, for its listeners.
-const latestOf = new WeakMap<object, StepperProps>()
+const instances = new WeakMap<object, StepperProps>()
 
 const Stepper: ClientModule<StepperProps, StepperState> = (props, surface) => {
   const { Box, Text } = surface.elements
@@ -37,7 +37,7 @@ const Stepper: ClientModule<StepperProps, StepperState> = (props, surface) => {
     surface.onPointer(event => {
       const current = surface.state
       if (current === undefined || event.type !== 'down') return
-      const latest = latestOf.get(surface) ?? props
+      const latest = instances.get(surface) ?? props
       const by = event.x < BUTTON ? -latest.step : event.x >= STEPPER_COLUMNS - BUTTON ? latest.step : 0
       const value = Math.min(latest.max, Math.max(latest.min, current.value + by))
       if (value === current.value) return
@@ -46,7 +46,7 @@ const Stepper: ClientModule<StepperProps, StepperState> = (props, surface) => {
     })
     surface.every(CHECK_MS, () => {
       const current = surface.state
-      const latest = latestOf.get(surface)
+      const latest = instances.get(surface)
       if (current === undefined || latest === undefined || current.sent.length === 0) return
       const quiet = current.quiet + 1
       surface.setState(
@@ -66,7 +66,7 @@ const Stepper: ClientModule<StepperProps, StepperState> = (props, surface) => {
           : { value: props.value, given: props.value, sent: [], quiet: 0 },
     )
   }
-  latestOf.set(surface, props)
+  instances.set(surface, props)
 
   const value = surface.state?.value ?? props.value
   return (

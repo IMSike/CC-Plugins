@@ -26,7 +26,7 @@ export const SPIN_MS = 200
 
 // One icon; a click on it opens the subagent's transcript (`open`) or the
 // task's output (`tail`).
-export type CrewItem = {
+type CrewItem = {
   glyph: string
   color: string
   dim?: true
@@ -40,7 +40,7 @@ export function isWorking(status: string): boolean {
   return status === 'running' || status === 'pending'
 }
 
-export function capped(items: CrewItem[], max = MAX_ICONS): CrewItem[] {
+function capped(items: CrewItem[], max = MAX_ICONS): CrewItem[] {
   if (items.length <= max) return items
   const shown = items.slice(0, max)
   const last = shown[shown.length - 1]

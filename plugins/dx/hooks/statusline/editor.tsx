@@ -36,6 +36,11 @@ export function drawn(state: EditorState, text: string): EditorState {
   return { ...state, text, cursor, top: Math.min(state.top, text.slice(0, cursor).split('\n').length - 1), given: text, sent: [] }
 }
 
+// An editor opened on `text`: the cursor at its end, the keyboard elsewhere.
+function opened(text: string): EditorState {
+  return { text, cursor: text.length, top: 0, active: false, given: text, sent: [] }
+}
+
 // Each instance's latest props, for its listeners.
 const instances = new WeakMap<object, { props: EditorProps }>()
 
@@ -46,7 +51,7 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   if (surface.state === undefined) {
     const latest = { props }
     instances.set(surface, latest)
-    surface.setState({ text: props.text, cursor: props.text.length, top: 0, active: false, given: props.text, sent: [] })
+    surface.setState(opened(props.text))
     const apply = (next: EditorState) => {
       const state = surface.state
       if (state === undefined || next === state) return
@@ -75,7 +80,7 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
     if (next !== surface.state) surface.setState(next)
   }
 
-  const state = surface.state ?? { text: props.text, cursor: props.text.length, top: 0, active: false, given: props.text, sent: [] }
+  const state = surface.state ?? opened(props.text)
   const rows = rowsOf(state.text, width())
   const at = rowOf(rows, state.cursor)
   const shown = rows.slice(state.top, state.top + props.rows)
