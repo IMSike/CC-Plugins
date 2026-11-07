@@ -13,7 +13,9 @@ const CRIMSON: Rgb = [218, 54, 81]
 export type Thresholds = readonly [orange: number, red: number]
 const DEFAULT_THRESHOLDS: Thresholds = [50, 75]
 
-function heatScale([orange, red]: Thresholds): readonly (readonly [number, Rgb])[] {
+type HeatScale = readonly (readonly [number, Rgb])[]
+
+function heatScale([orange, red]: Thresholds): HeatScale {
   const yellow = orange / 2
   return [
     [0, GREEN],
@@ -25,20 +27,24 @@ function heatScale([orange, red]: Thresholds): readonly (readonly [number, Rgb])
   ]
 }
 
-// Hex color of the heat scale at `percent`, quantized to steps of 2.5% so that
+// Hex color of `scale` at `percent`, quantized to steps of 2.5% so that
 // neighbouring cells share a color and are drawn as one run.
-export function heat(percent: number, thresholds: Thresholds = DEFAULT_THRESHOLDS): string {
-  const HEAT = heatScale(thresholds)
+function heatOn(scale: HeatScale, percent: number): string {
   const at = Math.round(Math.min(100, Math.max(0, percent)) / 2.5) * 2.5
   let index = 1
-  while (index < HEAT.length - 1 && (HEAT[index]?.[0] ?? 100) < at) index += 1
+  while (index < scale.length - 1 && (scale[index]?.[0] ?? 100) < at) index += 1
 
-  const [fromAt, from] = HEAT[index - 1] ?? HEAT[0]!
-  const [toAt, to] = HEAT[index] ?? HEAT[HEAT.length - 1]!
+  const [fromAt, from] = scale[index - 1] ?? scale[0]!
+  const [toAt, to] = scale[index] ?? scale[scale.length - 1]!
   const t = toAt === fromAt ? 0 : (at - fromAt) / (toAt - fromAt)
   const channel = (i: 0 | 1 | 2) => Math.round(from[i] + (to[i] - from[i]) * t)
 
   return `#${[channel(0), channel(1), channel(2)].map(c => c.toString(16).padStart(2, '0')).join('')}`
+}
+
+// Hex color of the heat scale at `percent`.
+export function heat(percent: number, thresholds: Thresholds = DEFAULT_THRESHOLDS): string {
+  return heatOn(heatScale(thresholds), percent)
 }
 
 // `hex` mixed with white: 0 keeps it, 1 is white.
@@ -112,10 +118,12 @@ export function gauge(
   const cells = Math.max(0, Math.floor(width))
   const filled = filledCells(percent, cells)
   const budget = pace === undefined ? -1 : filledCells(pace, cells)
+  // Built once for every cell.
+  const scale = heatScale(thresholds)
 
   const runs: Run[] = []
   for (let cell = 0; cell < cells; cell += 1) {
-    const color = solid ?? heat(((cell + 0.5) / cells) * 100, thresholds)
+    const color = solid ?? heatOn(scale, ((cell + 0.5) / cells) * 100)
     if (cell < filled) {
       const light = shuttle === undefined ? 0 : glow(shuttle - cell)
       runs.push({

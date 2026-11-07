@@ -78,12 +78,19 @@ export async function readNotes($: EngineInterface, keep = true): Promise<Notes>
   ])
   const session = await sessionOf($, id, keep)
   const get = (key: string) => $.store.get(key).then(noteOf).catch(() => null)
+  const sessionKeys = keys.filter(one => one.startsWith(SESSION_PREFIX))
+  // Every key at once: one store round trip's wait, not one per note.
+  const [global, project, sessionNotes] = await Promise.all([
+    get(GLOBAL_KEY),
+    get(PROJECT_PREFIX + root),
+    Promise.all(sessionKeys.map(get)),
+  ])
   const sessions: Record<string, Note> = {}
-  for (const key of keys.filter(one => one.startsWith(SESSION_PREFIX))) {
-    const note = await get(key)
-    if (note !== null) sessions[key.slice(SESSION_PREFIX.length)] = note
-  }
-  return { global: await get(GLOBAL_KEY), project: await get(PROJECT_PREFIX + root), sessions, root, session, id }
+  sessionKeys.forEach((key, index) => {
+    const note = sessionNotes[index]
+    if (note !== undefined && note !== null) sessions[key.slice(SESSION_PREFIX.length)] = note
+  })
+  return { global, project, sessions, root, session, id }
 }
 
 // Loads the notes. A failure is kept for the pane to show and written to the
