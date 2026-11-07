@@ -227,9 +227,11 @@ function wrappedRows(labels: readonly string[], columns: number): number {
 }
 
 // What each tab atop the panel shows when pressed, by its key: a content, or
-// a background task's terminal; none for the tab in front.
+// a background task's terminal; none for the tab in front. Rebuilt as the tabs
+// are drawn, it holds the drawn ones alone. Every key starts with `pane-`,
+// which the press hook matches.
 type TabPress = { view: 'notes' | 'settings' } | { task: string }
-const TAB_PRESSES = new Map<string, TabPress>()
+let TAB_PRESSES = new Map<string, TabPress>()
 
 async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
   if ('task' in action) return showTask($, action.task, false)
@@ -247,10 +249,10 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
   const view = await read($, taskView)
   const { notesIcon, settingsIcon, monitorIcon } = await read($, settings)
   const labels: string[] = []
+  const presses = new Map<string, TabPress>()
   const tab = (key: string, label: string, isCurrent: boolean, action: TabPress) => {
     labels.push(label)
-    if (isCurrent) TAB_PRESSES.delete(key)
-    else TAB_PRESSES.set(key, action)
+    if (!isCurrent) presses.set(key, action)
     const props: PressProps = {
       parts: [{ text: label, color: isCurrent ? 'claude' : 'subtle', inverse: isCurrent, bold: isCurrent }],
       hover: { bold: true },
@@ -288,6 +290,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
       {terminals}
     </Box>
   )
+  TAB_PRESSES = presses
   return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1 }
 }
 
@@ -301,11 +304,9 @@ export async function openAgent($: EngineInterface, id: string, viewed: string |
 // The tool hooks hand back the call's result whatever becomes of following it.
 export function registerActivity(on: On): void {
   // Each tab pressed atop the panel.
-  on('ui.message', { module: /press\.tsx$/ }, async ($, e, next) => {
-    if (e.requestId !== PANEL) return next(e)
+  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^pane-/ }, async ($, e) => {
     const action = TAB_PRESSES.get(e.element)
-    if (action === undefined) return next(e)
-    await tabPressed($, action)
+    if (action !== undefined) await tabPressed($, action)
 
     return {}
   })

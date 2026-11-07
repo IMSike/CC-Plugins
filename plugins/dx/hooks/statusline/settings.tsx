@@ -91,7 +91,9 @@ const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSe
 
 // What each press drawn in the pane (./press.tsx) changes, by its key: set as
 // the pane draws, applied to the settings as they stand when it lands.
-const PRESSES = new Map<string, (current: BandSettings) => BandSettings>()
+// Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
+// with `settings:`, which the press hook matches.
+let PRESSES = new Map<string, (current: BandSettings) => BandSettings>()
 const BOLD: PressStyle = { bold: true }
 
 // `order` with `fact` moved one place up (-1) or down (+1).
@@ -119,11 +121,9 @@ export function registerSettings(on: On): void {
   })
 
   // Each press in the pane.
-  on('ui.message', { module: /press\.tsx$/ }, async ($, e, next) => {
-    if (e.requestId !== PANEL) return next(e)
+  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^settings:/ }, async ($, e) => {
     const edit = PRESSES.get(e.element)
-    if (edit === undefined) return next(e)
-    await change($, edit)
+    if (edit !== undefined) await change($, edit)
 
     return {}
   })
@@ -147,10 +147,13 @@ export function registerSettings(on: On): void {
     )
     // A press that applies `edit`, drawn by ./press.tsx: the terminal selects
     // nothing however the clicks come. `width`: its cell's, the label cut there.
+    // Nothing is awaited from here on: the presses drawn replace the last ones.
+    const presses = new Map<string, (current: BandSettings) => BandSettings>()
+    PRESSES = presses
     const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) => {
-      PRESSES.set(key, edit)
+      presses.set(`settings:${key}`, edit)
       const props: PressProps = { parts, hover, truncate: width !== undefined }
-      return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
+      return <Client key={`settings:${key}`} module="./press.tsx" props={props} width={width} height={1} />
     }
     const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })
     const toggle = (key: string, checked: boolean, label: string, edit: (current: BandSettings) => BandSettings, width = half) => (

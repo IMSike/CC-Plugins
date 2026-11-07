@@ -113,9 +113,11 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
 }
 
 // What each press drawn in the pane (./press.tsx) does, by its key: a view to
-// show, a retry of the load, or another session's note to delete.
+// show, a retry of the load, or another session's note to delete. Rebuilt as
+// the pane draws, it holds the drawn ones alone. Every key starts with
+// `notes:`, which the press hook matches.
 type NotesPress = { view: NotesView } | { retry: true } | { erase: string }
-const PRESSES = new Map<string, NotesPress>()
+let PRESSES = new Map<string, NotesPress>()
 
 async function pressed($: EngineInterface, action: NotesPress): Promise<void> {
   if ('retry' in action) return tryNotes($)
@@ -152,11 +154,9 @@ export function registerNotes(on: On): void {
   })
 
   // Each press in the pane.
-  on('ui.message', { module: /press\.tsx$/ }, async ($, e, next) => {
-    if (e.requestId !== PANEL) return next(e)
+  on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^notes:/ }, async ($, e) => {
     const action = PRESSES.get(e.element)
-    if (action === undefined) return next(e)
-    await pressed($, action)
+    if (action !== undefined) await pressed($, action)
 
     return {}
   })
@@ -188,15 +188,18 @@ export function registerNotes(on: On): void {
     const { Box, Client, Text } = $.ui.resolve(e)
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
     // A press drawn by ./press.tsx: the terminal selects nothing however the
-    // clicks come. `width`: the label cut there.
+    // clicks come. `width`: the label cut there. Kept in `presses`, which takes
+    // PRESSES' place once nothing is awaited any more.
+    const presses = new Map<string, NotesPress>()
     const press = (key: string, action: NotesPress, parts: PressPart[], hover: PressStyle, width?: number) => {
-      PRESSES.set(key, action)
+      presses.set(`notes:${key}`, action)
       const props: PressProps = { parts, hover, truncate: width !== undefined }
-      return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
+      return <Client key={`notes:${key}`} module="./press.tsx" props={props} width={width} height={1} />
     }
 
     // Not loaded: what failed, and a retry, never a blank pane.
     if (value === null) {
+      PRESSES = presses
       return (
         <Box flexDirection="column">
           {panes}
@@ -217,6 +220,7 @@ export function registerNotes(on: On): void {
     // As the store holds it: another session may have written it since. The
     // editor takes it as it opens; the last one written wins.
     const note = await $.store.get(keyOf(value, view.tab, session)).then(noteOf, () => known)
+    PRESSES = presses
     const others = Object.entries(value.sessions)
       .filter(([id]) => id !== value.session)
       .sort(([, a], [, b]) => b.updatedAt - a.updatedAt)
