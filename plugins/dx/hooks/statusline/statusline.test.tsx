@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { SPIN_MS } from './crew'
+import { SPIN_MS, TERMINAL } from './crew'
 import { clockTime, heat, travelMs } from './format'
 import { FRAME_MS } from './gauge'
 
@@ -418,6 +418,28 @@ test("the panel's tabs lead from the notes to a terminal and the settings", asyn
   const settings = await $.ui.mount(SETTINGS_PANE)
   expect((await settings.find({ type: 'Text', text: / Réglages $/, in: 'pane-settings' }))?.props.inverse).toBe(true)
   await settings.unmount()
+})
+
+// A narrow icon chosen for monitors or notes takes one space after it in its
+// tab; a Nerd Font glyph, drawn over two cells, two.
+test("the panel's tabs space each icon by its width", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, true, [], OUTPUT, { settings: { monitorIcon: '◉', notesIcon: '✎' } })
+  shell(on)
+  on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+  await $.tool.call({ tool: 'Monitor', command: 'tail -f app.log' } as never)
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'notes')
+  await ui.unmount()
+  const notes = await $.ui.mount(NOTES_PANE)
+  expect(await notes.find({ type: 'Text', text: ' ◉ tail -f app.log ', in: 'pane-task-m1' })).toBeDefined()
+  expect(await notes.find({ type: 'Text', text: ` ${TERMINAL}  npm run dev `, in: 'pane-task-b1' })).toBeDefined()
+  expect(await notes.find({ type: 'Text', text: ' ✎ Notes ', in: 'pane-notes' })).toBeDefined()
+  expect(await notes.find({ type: 'Text', text: /\u{F423} {2}Réglages $/u, in: 'pane-settings' })).toBeDefined()
+  await notes.unmount()
 })
 
 test('a stopped shell leaves the border', async ($, on) => {

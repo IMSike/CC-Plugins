@@ -1,8 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
 import type { Activity, Task } from '../../types'
-import { CURSOR_GREY, crewItems, crewLabel, crewWidth, MAX_ICONS, MONITOR, ROBOT, SPINNER, TERMINAL } from './crew'
+import { CURSOR_GREY, crewItems, crewLabel, crewWidth, iconGap, MAX_ICONS, MONITOR, ROBOT, SPINNER, TERMINAL } from './crew'
 import { lightAt } from './frame'
+import { MONITOR_ICONS, NOTES_ICONS, SETTINGS_ICONS } from './options'
 
 const task = (id: string, kind: Task['kind'], agent?: Task['agent']): Task => ({ id, kind, command: id, agent, step: 0, dueAt: 0 })
 
@@ -68,4 +69,13 @@ test('two glints go round the frame half a lap apart, each fading in ahead and o
   expect(lightAt(42, 40, perimeter)).toBeLessThan(lightAt(41, 40, perimeter))
   expect(lightAt(44, 40, perimeter)).toBe(0)
   expect(lightAt(65, 40, perimeter)).toBe(0)
+})
+
+test('a Nerd Font icon keeps the cell after it, any other takes one space', () => {
+  expect(iconGap(MONITOR)).toBe('  ')
+  expect(iconGap(ROBOT)).toBe('  ')
+  const narrow = [...MONITOR_ICONS, ...NOTES_ICONS, ...SETTINGS_ICONS]
+    .map(([glyph]) => glyph)
+    .filter(glyph => iconGap(glyph) === ' ')
+  expect(narrow).toEqual(['◉', '◎', '⦿', '✎', '✐', '☰'])
 })

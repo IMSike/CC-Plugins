@@ -10,6 +10,14 @@ export const TERMINAL = '\u{F489}'
 export const MONITOR = '\u{F469}'
 export const CURSOR_GREY = '#8b949e'
 
+// What follows an icon in a label, before its text: a Nerd Font glyph (one of
+// Unicode's private use areas) is counted one cell but drawn over two, so the
+// cell after it is left to it, then a space; any other icon, a space.
+export function iconGap(glyph: string): string {
+  const code = glyph.codePointAt(0) ?? 0
+  return (code >= 0xe000 && code <= 0xf8ff) || code >= 0xf0000 ? '  ' : ' '
+}
+
 // Claude Code's spinner, there and back; `*` where macOS draws ✳, which
 // other terminals show as a green emoji.
 const SPINNER_CHARS = ['·', '✢', '*', '✶', '✻', '✽']

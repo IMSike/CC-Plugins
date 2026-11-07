@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderElement } from 'claude-code'
 
 import type { Activity, PanelView, Task, TaskView } from '../../types'
-import { ROBOT, TERMINAL } from './crew'
+import { iconGap, ROBOT, TERMINAL } from './crew'
 import { DEFAULT_SETTINGS } from './options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from './panes'
 import type { PressProps } from './press'
@@ -269,14 +269,16 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
     const { Client } = elements
     return <Client key={key} module="./press.tsx" props={props} width={width} height={1} />
   }
-  const notesTab = tab('pane-notes', ` ${notesIcon}  ${TITLES.notes} `, current === 'notes', { view: 'notes' })
-  const settingsTab = tab('pane-settings', ` ${settingsIcon}  ${TITLES.settings} `, current === 'settings', { view: 'settings' })
-  // A wide glyph is followed by its own cell, then the space.
+  // A wide glyph is followed by its own cell, then the space; a narrow one by
+  // the space alone.
+  const icon = (glyph: string) => `${glyph}${iconGap(glyph)}`
+  const notesTab = tab('pane-notes', ` ${icon(notesIcon)}${TITLES.notes} `, current === 'notes', { view: 'notes' })
+  const settingsTab = tab('pane-settings', ` ${icon(settingsIcon)}${TITLES.settings} `, current === 'settings', { view: 'settings' })
   const terminals = tasks.map(task => {
-    const icon = task.agent !== undefined ? `${ROBOT}  ` : task.kind === 'monitor' ? `${monitorIcon}  ` : `${TERMINAL}  `
+    const glyph = task.agent !== undefined ? ROBOT : task.kind === 'monitor' ? monitorIcon : TERMINAL
     const command = task.command.split('\n')[0] ?? ''
     const label = command.length > TAB_COMMAND ? `${command.slice(0, TAB_COMMAND - 1)}…` : command
-    return tab(`pane-task-${task.id}`, ` ${icon}${label} `, current === 'task' && view?.id === task.id, { task: task.id })
+    return tab(`pane-task-${task.id}`, ` ${icon(glyph)}${label} `, current === 'task' && view?.id === task.id, { task: task.id })
   })
 
   const tabs = (
