@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesView } from '../../types'
+import { errorText } from '../shared/format'
 import { forgetStoreSize, storeWritten } from './store-size'
 
 // The notes as ./notes draws them, loaded from `$.store` when the session
@@ -130,7 +131,7 @@ export async function tryNotes($: EngineInterface): Promise<void> {
     await update($, notes, () => value)
     await update($, notesError, () => null)
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
+    const reason = errorText(error)
     $.ui.log(`dx : notes non chargées (${reason})`, { to: 'debug' })
     await update($, notesError, () => reason).catch(() => undefined)
   }

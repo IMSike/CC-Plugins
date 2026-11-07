@@ -3,7 +3,7 @@ import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesUnsaved, NotesView } from '../../types'
 import { paneTabs } from '../activity/activity'
-import { dayTime } from '../shared/format'
+import { dayTime, errorText } from '../shared/format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
 import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
 import type { PressPart, PressProps, PressStyle } from '../shared/press'
@@ -98,7 +98,7 @@ async function kept($: EngineInterface, key: string, note: Note | null): Promise
   try {
     await (note === null ? $.store.delete(key) : $.store.set(key, note))
   } catch (error) {
-    return `store : ${error instanceof Error ? error.message : String(error)}`
+    return `store : ${errorText(error)}`
   }
   storeWritten(key, note)
   return null
@@ -304,7 +304,7 @@ export function registerNotes(on: On): void {
         reason = null
       } catch (error) {
         value = null
-        reason = error instanceof Error ? error.message : String(error)
+        reason = errorText(error)
       }
     }
     const { Box, Client, Text } = $.ui.resolve(e)
