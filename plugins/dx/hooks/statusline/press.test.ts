@@ -7,7 +7,7 @@ import type { PressProps } from './press'
 // again after each setState; `drawn` is the last tree it returned.
 function mount(props: PressProps) {
   let state: unknown
-  let pointer: (event: { type: string; x: number; y: number }) => void = () => undefined
+  let pointer: (event: { type: string; x: number; y: number; button?: string }) => void = () => undefined
   let drawn: unknown
   const posts: unknown[] = []
   const surface = {
@@ -37,7 +37,7 @@ function mount(props: PressProps) {
   return {
     posts,
     drawn: () => drawn as { bold?: boolean; color?: string },
-    at: (type: string, x: number, y = 0) => pointer({ type, x, y }),
+    at: (type: string, x: number, y = 0, button = type === 'down' || type === 'up' ? 'left' : undefined) => pointer({ type, x, y, button }),
   }
 }
 
@@ -57,6 +57,20 @@ test('a press released off it is not', () => {
   press.at('up', 12)
   press.at('up', 2)
   expect(press.posts).toEqual([])
+})
+
+test('a right or middle click is not posted', () => {
+  const press = mount(LABEL)
+  for (const button of ['right', 'middle']) {
+    press.at('down', 2, 0, button)
+    press.at('up', 2, 0, button)
+  }
+  expect(press.posts).toEqual([])
+  // Nor does one ending over a left press undo it.
+  press.at('down', 2)
+  press.at('up', 2, 0, 'right')
+  press.at('up', 2)
+  expect(press.posts).toEqual([{}])
 })
 
 test('the pointer over it draws it in its hover style', () => {

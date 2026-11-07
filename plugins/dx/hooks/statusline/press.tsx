@@ -34,6 +34,8 @@ const Press: ClientModule<PressProps, PressState> = (props, surface) => {
     surface.onPointer(event => {
       const state = surface.state
       if (state === undefined) return
+      // The left button alone presses: a right or middle click does nothing.
+      if (event.button !== undefined && event.button !== 'left') return
       // Over the region; a size the surface does not give (0) bounds nothing.
       const inside = event.x >= 0 && event.y >= 0 && (!surface.columns || event.x < surface.columns) && (!surface.rows || event.y < surface.rows)
       if (event.type === 'enter' || event.type === 'leave') {
