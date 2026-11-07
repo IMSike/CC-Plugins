@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
-import type { Note, Notes, NotesView } from '../../types'
+import type { Note, Notes, NoteTab, NotesView } from '../../types'
 
 // The notes as ./notes draws them, loaded from `$.store` when the session
 // starts, and again when their pane is shown, a note is written or a prompt
@@ -13,9 +13,9 @@ const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as st
 // The tab shown, which a `/clear` empties too: shown again after it.
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
 
-export const GLOBAL_KEY = 'notes.global'
-export const PROJECT_PREFIX = 'notes.project.'
-export const SESSION_PREFIX = 'notes.session.'
+const GLOBAL_KEY = 'notes.global'
+const PROJECT_PREFIX = 'notes.project.'
+const SESSION_PREFIX = 'notes.session.'
 // A session id a `/clear` gave, to the session it goes on: its note's key.
 const LINK_PREFIX = 'notes.link.'
 // The `/clear` this process went through, until the next load links the new
@@ -31,6 +31,24 @@ export function noteOf(stored: unknown): Note | null {
   return typeof value?.text === 'string' && value.text !== '' && typeof value.updatedAt === 'number'
     ? { text: value.text, updatedAt: value.updatedAt }
     : null
+}
+
+// Where a note is kept.
+export function keyOf(value: Notes, tab: NoteTab, session: string): string {
+  return tab === 'global' ? GLOBAL_KEY : tab === 'project' ? PROJECT_PREFIX + value.root : SESSION_PREFIX + session
+}
+
+// The note `view` shows: the session whose note the session tab holds (another
+// one's, or this one's), and the note's key.
+export function shownNote(value: Notes, view: NotesView): { session: string; key: string } {
+  const session = (view.tab === 'session' ? view.other : undefined) ?? value.session
+  return { session, key: keyOf(value, view.tab, session) }
+}
+
+// Whether the notes are to be read again: not loaded (after a failed load,
+// only on a `retry`), or loaded for another session id than the engine's `id`.
+export function needsLoad(value: Notes | null, error: string | null, id: string | undefined, retry: boolean): boolean {
+  return value === null ? retry || error === null : id !== value.id
 }
 
 // The `/clear` the engine's session `id` follows: this process's last one,
@@ -111,12 +129,9 @@ export async function tryNotes($: EngineInterface): Promise<void> {
 // `retry`, after a failed load too, else only when the pane's retry asks.
 export async function ensureNotes($: EngineInterface, retry = true): Promise<void> {
   const value = await read($, notes)
-  if (value === null) {
-    if (retry || (await read($, notesError)) === null) await tryNotes($)
-    return
-  }
-  const id = await $.session.id().catch(() => value.id)
-  if (id !== value.id) await tryNotes($)
+  const error = value === null && !retry ? await read($, notesError) : null
+  const id = value === null ? undefined : await $.session.id().catch(() => value.id)
+  if (needsLoad(value, error, id, retry)) await tryNotes($)
 }
 
 // At a `/clear`, the session it ends and the tab shown, for the next load to

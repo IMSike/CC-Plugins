@@ -6,7 +6,7 @@ import { paneTabs } from './activity'
 import type { EditorProps } from './editor'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
-import { clearedView, ensureNotes, forgetClear, GLOBAL_KEY, noteClear, noteOf, PROJECT_PREFIX, readNotes, SESSION_PREFIX, tryNotes } from './notes-load'
+import { clearedView, ensureNotes, forgetClear, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { isShowing, PANEL, panelView, togglePanel } from './panes'
 import type { PressPart, PressProps, PressStyle } from './press'
 
@@ -41,11 +41,6 @@ async function openingTab($: EngineInterface): Promise<void> {
   const { notesTab, resumeNotesTab } = await read($, settings)
   const last = resumeNotesTab ? await $.store.get(TAB_KEY).catch(() => undefined) : undefined
   await update($, notesView, () => ({ tab: isTab(last) ? last : notesTab }))
-}
-
-// Where a note is kept.
-function keyOf(value: Notes, tab: NoteTab, session: string): string {
-  return tab === 'global' ? GLOBAL_KEY : tab === 'project' ? PROJECT_PREFIX + value.root : SESSION_PREFIX + session
 }
 
 // The saves in flight, one after another: each change the editor posts is a
@@ -91,9 +86,7 @@ export async function notesTick($: EngineInterface): Promise<void> {
   if ((await panelView($)) !== 'notes' || !(await isShowing($, 'notes'))) return
   const value = await read($, notes)
   if (value === null) return
-  const view = await read($, notesView)
-  const session = view.tab === 'session' ? (view.other ?? value.session) : value.session
-  const key = keyOf(value, view.tab, session)
+  const { key } = shownNote(value, await read($, notesView))
   const stored = noteOf(await $.store.get(key).catch(() => undefined))
   const seen = `${key} ${stored?.updatedAt ?? 0}`
   if ((await read($, notesSeen)) === seen) return
@@ -174,7 +167,7 @@ export function registerNotes(on: On): void {
     let reason = await read($, notesError)
     const id = await $.session.id().catch(() => value?.id)
     let restored: NotesView | undefined
-    if (value === null ? reason === null : id !== value.id) {
+    if (needsLoad(value, reason, id, false)) {
       try {
         value = await readNotes($, false)
         // The tab a `/clear` left, the emptied one standing until kept.
@@ -215,11 +208,11 @@ export function registerNotes(on: On): void {
     const options = await read($, settings)
 
     const other = view.tab === 'session' ? view.other : undefined
-    const session = other ?? value.session
+    const { session, key } = shownNote(value, view)
     const known = view.tab === 'global' ? value.global : view.tab === 'project' ? value.project : (value.sessions[session] ?? null)
     // As the store holds it: another session may have written it since. The
     // editor takes it as it opens; the last one written wins.
-    const note = await $.store.get(keyOf(value, view.tab, session)).then(noteOf, () => known)
+    const note = await $.store.get(key).then(noteOf, () => known)
     PRESSES = presses
     const others = Object.entries(value.sessions)
       .filter(([id]) => id !== value.session)
