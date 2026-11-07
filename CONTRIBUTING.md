@@ -27,7 +27,7 @@ A session started with `--plugin-dir` reloads the plugin each time a file is sav
 
 ## Code conventions
 
-- Hooks modules in TypeScript (`.ts`, `.tsx` for JSX), strict mode; one module per plugin (`hooks/register.ts`), each feature in its own folder under `hooks/`, registering its own hooks.
+- Hooks modules in TypeScript (`.ts`, `.tsx` for JSX), strict mode; one module per plugin (`hooks/register.ts`), each feature in its own folder under `hooks/`, registering its own hooks; modules several features share go in `hooks/shared/`.
 - Pure logic (formatting, computations) in files of its own, without `$`, tested on their own.
 - Values a drawing reads live in `$.state`, declared in the plugin's contract `types/index.d.ts`, with a `shape` tag changed whenever their fields change.
 - 2-space indentation, single quotes, no semicolons, as the engine's own examples.

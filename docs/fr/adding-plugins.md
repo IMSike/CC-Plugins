@@ -13,17 +13,18 @@ plugins/<nom>/
 ├── hooks/
 │   ├── hooks.json           { "modules": ["./register.ts"] }
 │   ├── register.ts          le module de hooks : appelle la fonction d'enregistrement de chaque fonctionnalité
-│   └── <fonctionnalité>/
-│       ├── <fonctionnalité>.tsx   les hooks de la fonctionnalité
-│       ├── format.ts        sa logique pure, sans $
-│       └── *.test.ts(x)     ses tests
+│   ├── <fonctionnalité>/
+│   │   ├── <fonctionnalité>.tsx   les hooks de la fonctionnalité
+│   │   ├── format.ts        sa logique pure, sans $
+│   │   └── *.test.ts(x)     ses tests
+│   └── shared/              modules que plusieurs fonctionnalités partagent, avec leurs tests
 ├── types/
 │   └── index.d.ts           contrat : les valeurs gardées dans $.state
 ├── tsconfig.json            vérification des types avec les déclarations du moteur
 └── README.md                résumé court, qui renvoie à docs/{en,fr}/plugins/<nom>.md
 ```
 
-Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/` dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
+Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Un module que plusieurs fonctionnalités partagent va dans `hooks/shared/` ; un module qu'une seule fonctionnalité utilise reste dans son dossier. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
 
 ## Manifeste
 
