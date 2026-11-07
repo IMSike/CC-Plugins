@@ -49,53 +49,63 @@ function headAt(perimeter: number, speed: number): number {
   return ((Date.now() % lap) / lap) * perimeter
 }
 
-// The light of each frame cell, joined: what changes when a redraw is due.
-function litOf(props: FrameProps): string {
-  if (!props.glints) return ''
+// The light of each cell of the runs, the glints where they are now: none off
+// the frame, on its spaces, or while the glints rest.
+function lightsOf(props: FrameProps): number[] {
+  if (!props.glints) return []
   const head = headAt(props.perimeter, props.speed)
-  let offset = 0
-  let lit = ''
+  const lights: number[] = []
   for (const run of props.runs) {
-    const length = Array.from(run.text).length
-    if (run.frame) {
-      for (let cell = 0; cell < length; cell += 1) lit += lightAt(props.start + props.step * (offset + cell), head, props.perimeter)
+    for (const char of Array.from(run.text)) {
+      lights.push(run.frame && char !== ' ' ? lightAt(props.start + props.step * lights.length, head, props.perimeter) : 0)
     }
-    offset += length
   }
-  return lit
+  return lights
 }
 
-// Each instance's latest props, for its clock.
-const instances = new WeakMap<object, { props: FrameProps }>()
+// The lights joined: what changes when a redraw is due.
+function litOf(lights: readonly number[]): string {
+  return lights.join(',')
+}
+
+// Each instance's latest props, for its clock, and the lights last found, with
+// the props they were found for: the redraw the clock asks for draws them
+// rather than finding them again.
+type Instance = { props: FrameProps; lights: { props: FrameProps; values: number[] } }
+const instances = new WeakMap<object, Instance>()
 
 const Frame: ClientModule<FrameProps, FrameState> = (props, surface) => {
   const { Box, Text } = surface.elements
   if (surface.state === undefined) {
-    const latest = { props }
-    surface.setState({ lit: litOf(props) })
+    const values = lightsOf(props)
+    const latest: Instance = { props, lights: { props, values } }
+    surface.setState({ lit: litOf(values) })
     surface.every(TICK_MS, () => {
       const state = surface.state
-      const lit = litOf(latest.props)
-      if (state !== undefined && lit !== state.lit) surface.setState({ lit })
+      const next = lightsOf(latest.props)
+      const lit = litOf(next)
+      if (state === undefined || lit === state.lit) return
+      latest.lights = { props: latest.props, values: next }
+      surface.setState({ lit })
     })
     instances.set(surface, latest)
   }
   const latest = instances.get(surface)
   if (latest !== undefined) latest.props = props
+  if (latest !== undefined && latest.lights.props !== props) latest.lights = { props, values: lightsOf(props) }
+  const lights = latest?.lights.values ?? lightsOf(props)
 
-  const head = headAt(props.perimeter, props.speed)
   const cells: { text: string; color: string; bold?: true; dim?: true }[] = []
-  let offset = 0
+  let index = 0
   for (const run of props.runs) {
-    const chars = Array.from(run.text)
-    chars.forEach((char, cell) => {
-      const light = props.glints && run.frame && char !== ' ' ? lightAt(props.start + props.step * (offset + cell), head, props.perimeter) : 0
+    for (const char of Array.from(run.text)) {
+      const light = lights[index] ?? 0
+      index += 1
       const color = light > 0 ? lighten(props.hex, light) : run.color
       const last = cells[cells.length - 1]
       if (last !== undefined && last.color === color && last.bold === run.bold && last.dim === run.dim) last.text += char
       else cells.push({ text: char, color, bold: run.bold, dim: run.dim })
-    })
-    offset += chars.length
+    }
   }
 
   return (
