@@ -84,9 +84,11 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
 export const NOTES_POLL_MS = 1000
 
 // Draws the pane again when another session changed the note it shows: the
-// store has no event of its own, and the editor takes the new text.
+// store has no event of its own, and the editor takes the new text. The pane
+// reads `notesSeen`: writing it redraws the pane alone.
 export async function notesTick($: EngineInterface): Promise<void> {
-  if (!(await isShowing($, 'notes'))) return
+  // The view first, a plain read: `isShowing` lists the panes.
+  if ((await panelView($)) !== 'notes' || !(await isShowing($, 'notes'))) return
   const value = await read($, notes)
   if (value === null) return
   const view = await read($, notesView)
@@ -96,7 +98,6 @@ export async function notesTick($: EngineInterface): Promise<void> {
   const seen = `${key} ${stored?.updatedAt ?? 0}`
   if ((await read($, notesSeen)) === seen) return
   await update($, notesSeen, () => seen)
-  $.ui.invalidate('ui.render')
 }
 
 export async function toggleNotes($: EngineInterface): Promise<void> {
@@ -164,6 +165,8 @@ export function registerNotes(on: On): void {
     // A Client is drawn there alone.
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'notes') return next(e)
+    // Read so that notesTick, seeing the note changed in the store, redraws it.
+    await read($, notesSeen)
     // Read afresh when not loaded, or loaded for another session id, as after
     // a `/clear` with the pane open: a render writes nothing, the next load
     // keeps them. A failed load waits for a retry.
