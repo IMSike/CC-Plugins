@@ -447,6 +447,17 @@ test("the other sessions' notes scroll, as many listed as set", async ($, on) =>
   expect(await listed()).toBe('abc')
   await wheel(18, 1)
   expect(moved).toEqual([1])
+  // The list at its end that way: the wheel moves the pane's window.
+  await wheel(18, 5)
+  expect(await listed()).toBe('cde')
+  await wheel(18, 1)
+  expect(moved).toEqual([1, 1])
+  await wheel(18, -5)
+  await wheel(18, -1)
+  expect(await listed()).toBe('abc')
+  expect(moved).toEqual([1, 1, -1])
+  await wheel(18, 1)
+  expect(await listed()).toBe('bcd')
 
   // A press opens the note still.
   await click(pane, 'notes:session-d')

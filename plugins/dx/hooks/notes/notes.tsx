@@ -167,20 +167,26 @@ export function othersStart(at: number, count: number, shown: number): number {
 // Read by the wheel, which says the body's row it is over.
 let OTHERS_ROWS: { first: number; end: number; offset: number } | undefined
 
-// The list of other sessions moved `by` rows, kept within it.
-async function scrollOthers($: EngineInterface, by: number): Promise<void> {
+// The list of other sessions moved `by` rows, kept within it: whether it
+// moved, which it cannot with every note shown, or at its end that way.
+async function scrollOthers($: EngineInterface, by: number): Promise<boolean> {
   const value = await read($, notes)
-  if (value === null) return
+  if (value === null) return false
   const { notesOthers } = await read($, settings)
   const count = othersOf(value).length
   const stored = await read($, notesOthersAt)
-  const moved = othersStart(othersStart(stored, count, notesOthers) + by, count, notesOthers)
+  const from = othersStart(stored, count, notesOthers)
+  const moved = othersStart(from + by, count, notesOthers)
   if (moved !== stored) await update($, notesOthersAt, () => moved)
+  return moved !== from
 }
 
 async function pressed($: EngineInterface, action: NotesPress): Promise<void> {
   if ('retry' in action) return tryNotes($)
-  if ('scroll' in action) return scrollOthers($, action.scroll)
+  if ('scroll' in action) {
+    await scrollOthers($, action.scroll)
+    return
+  }
   if ('erase' in action) {
     await save($, 'session', action.erase, '')
     // Its links too, once it is gone: the current session's own note emptied
@@ -229,13 +235,14 @@ export function registerNotes(on: On): void {
   })
 
   // The wheel over the list of other sessions scrolls it, `notesOthers` rows
-  // shown still; elsewhere in the pane it moves the pane's window as ever.
+  // shown still; elsewhere in the pane, or the list unable to move that way,
+  // it moves the pane's window as ever.
   on('ui.scroll', { component: 'Pane', requestId: PANEL }, async ($, e, next) => {
     const list = OTHERS_ROWS
     if (list === undefined || e.pointer === undefined || (await panelView($)) !== 'notes') return next(e)
     const row = e.pointer.row + list.offset
     if (row < list.first || row >= list.end) return next(e)
-    await scrollOthers($, e.by).catch(() => undefined)
+    if (!(await scrollOthers($, e.by).catch(() => false))) return next(e)
 
     return {}
   })
@@ -276,7 +283,7 @@ export function registerNotes(on: On): void {
     const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
     // A press drawn by ../shared/press.tsx: the terminal selects nothing however
     // the clicks come. `width`: the label cut there. Kept in `presses`, which
-    // takes PRESSES' place once nothing is awaited any more.
+    // takes PRESSES' place as the tree is returned.
     const presses = new Map<string, NotesPress>()
     const press = (key: string, action: NotesPress, parts: PressPart[], hover: PressStyle, width?: number) => {
       presses.set(`notes:${key}`, action)
@@ -286,9 +293,7 @@ export function registerNotes(on: On): void {
 
     // Not loaded: what failed, and a retry, never a blank pane.
     if (value === null) {
-      PRESSES = presses
-      OTHERS_ROWS = undefined
-      return (
+      const unavailable = (
         <Box flexDirection="column">
           {panes}
           <Text key="unavailable" color="error" wrap="wrap">{`Notes indisponibles${reason === null ? '' : ` : ${reason}`}`}</Text>
@@ -297,11 +302,15 @@ export function registerNotes(on: On): void {
           </Box>
         </Box>
       )
+      PRESSES = presses
+      OTHERS_ROWS = undefined
+      return unavailable
     }
 
     const view = restored ?? (await read($, notesView))
     const options = await read($, settings)
     const failed = await read($, notesUnsaved)
+    const othersAt = await read($, notesOthersAt)
 
     const other = view.tab === 'session' ? view.other : undefined
     const { session, key } = shownNote(value, view)
@@ -309,11 +318,10 @@ export function registerNotes(on: On): void {
     // As the store holds it: another session may have written it since. The
     // editor takes it as it opens; the last one written wins.
     const note = await $.store.get(key).then(noteOf, () => known)
-    PRESSES = presses
     // Every other session's note, `notesOthers` listed at a time from where
     // the list was scrolled.
     const all = othersOf(value)
-    const start = othersStart(await read($, notesOthersAt), all.length, options.notesOthers)
+    const start = othersStart(othersAt, all.length, options.notesOthers)
     const others = all.slice(start, start + options.notesOthers)
     const listed = view.tab === 'session' && other === undefined && others.length > 0
     const scrolls = listed && all.length > others.length
@@ -333,7 +341,7 @@ export function registerNotes(on: On): void {
     const rows = Math.max(3, e.props.scroll.bodyRows - extra)
     // The list's title and rows, last in the tree.
     const end = rows + extra
-    OTHERS_ROWS = listed ? { first: end - others.length - 1, end, offset: e.props.scroll.offset } : undefined
+    const othersRows = listed ? { first: end - others.length - 1, end, offset: e.props.scroll.offset } : undefined
     const editor: EditorProps = {
       text: note?.text ?? '',
       rows,
@@ -349,7 +357,7 @@ export function registerNotes(on: On): void {
       ], { bold: true })
     })
 
-    return (
+    const tree = (
       <Box flexDirection="column">
         {panes}
         <Box key="tabs" flexShrink={0} justifyContent="space-between">
@@ -395,5 +403,10 @@ export function registerNotes(on: On): void {
         )}
       </Box>
     )
+    // What the presses and the wheel act on, taken up with nothing awaited any
+    // more: it matches the tree returned, never mixed with another render's.
+    PRESSES = presses
+    OTHERS_ROWS = othersRows
+    return tree
   })
 }
