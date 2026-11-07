@@ -2,6 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { SPIN_MS } from './crew'
 import { clockTime, heat, travelMs } from './format'
 import { FRAME_MS } from './gauge'
 
@@ -279,17 +280,72 @@ test("a subagent's icon turns and opens its transcript, then the main one again"
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
-  expect((await ui.find({ key: 'crew-a1' }))?.text).toBe('·')
+  expect((await ui.find({ key: 'crew-a1' }))?.text).toBe('· ')
   await ui.press({ key: 'crew-a1' })
   expect(asked).toEqual([{ agentId: 'a1' }])
   await ui.unmount()
 
   // Its transcript in view: the icon is underlined, a press goes back.
   const viewing = await $.ui.mount({ ...BAND, props: { ...BAND.props, view: { agentId: 'a1' } } })
-  expect((await viewing.find({ type: 'Text', text: /^·$/ }))?.props.underline).toBe(true)
+  expect((await viewing.find({ type: 'Text', text: /^· $/ }))?.props.underline).toBe(true)
   await viewing.press({ key: 'crew-a1' })
   expect(asked).toEqual([{ agentId: 'a1' }, {}])
   await viewing.unmount()
+})
+
+type Drawn = { type: string; props?: { key?: string; width?: number }; children?: (Drawn | string)[] }
+
+// The bottom border's row: the Box holding the frame's bottom left piece.
+function bottomRow(tree: Drawn): Drawn | undefined {
+  const children = (tree.children ?? []).filter((child): child is Drawn => typeof child !== 'string')
+  if (children.some(child => child.props?.key === 'frame-bl')) return tree
+  for (const child of children) {
+    const found = bottomRow(child)
+    if (found !== undefined) return found
+  }
+  return undefined
+}
+
+function textOf(element: Drawn | string): string {
+  return typeof element === 'string' ? element : (element.children ?? []).map(textOf).join('')
+}
+
+// The cells a row's elements take, as the layout counts them: a Client its
+// width, anything else its text, a code point a cell.
+function cellsOf(element: Drawn): number {
+  return element.type === 'Client' ? (element.props?.width ?? 0) : Array.from(textOf(element)).length
+}
+
+test('each bottom icon is pressable on the cell after its glyph, as the top ones', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  engine(on, true, [{ id: 'a1', type: 'Explore', status: 'running' }], OUTPUT)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+  const ui = await $.ui.mount(BAND)
+
+  // Every frame of the spinner, and the terminal icon: a Button of the glyph
+  // and the cell after it, set in the row between the frame's pieces, as the
+  // notes and settings Buttons are; the row as wide as the band.
+  const frames = new Set<string>()
+  for (let frame = 0; frame < 12; frame += 1) {
+    const row = bottomRow((await ui.drawn()) as Drawn)
+    const children = (row?.children ?? []).filter((child): child is Drawn => typeof child !== 'string')
+    expect(children.map(child => child.type)).toEqual(['Client', 'Button', 'Text', 'Button', 'Client'])
+    const [, agent, gap, task] = children
+    expect(agent?.props?.key).toBe('crew-a1')
+    expect(Array.from(textOf(agent!))).toHaveLength(2)
+    expect(textOf(agent!).endsWith(' ')).toBe(true)
+    frames.add(textOf(agent!))
+    expect(textOf(gap!)).toBe(' ')
+    expect(task?.props?.key).toBe('crew-b1')
+    expect(Array.from(textOf(task!))).toHaveLength(2)
+    expect(textOf(task!).endsWith(' ')).toBe(true)
+    expect(children.reduce((sum, child) => sum + cellsOf(child), 0)).toBe(BAND.props.bodyColumns)
+    await clock.advance(SPIN_MS)
+  }
+  expect(frames.size).toBe(6)
+  await ui.unmount()
 })
 
 test("a background shell's icon opens its command and output, and closes them", async ($, on) => {

@@ -11,7 +11,7 @@ Installation : `/plugin install dx@cc-plugins` (après `/plugin marketplace add 
 │ ctx  22% ◎◎◎◎◎◎◎◎◎◎···································         │
 │ 5h   12% ◎◎◎◎◎◉◉◉◉◉◉◉◉◉·······························  ↻ 3h24 │
 │ 7d   71% ◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◉◉◉◉◉◉◉◉◉◉◉◉············· ↻ 1j15h │
-╰─ ✻ ✻ ▣ ▣ ───── durée 1m04 · fin 14:32 · total 1h12 · 24k/200k ─╯
+╰─ ✻  ✻  ▣  ▣  ─ durée 1m04 · fin 14:32 · total 1h12 · 24k/200k ─╯
 ```
 
 À l'écran, les couleurs distinguent ce que le texte brut ne peut pas montrer : sur `5h`, les `◉` sont le budget, pâle ; sur `7d`, ils sont consommés en avance sur l'allure, en pleine couleur. Dans la bordure du bas, `▣` tient la place de l'icône de terminal, un glyphe Nerd Font ; dans la bordure du haut, `✎` et `⚙` tiennent celle des icônes de notes et de réglages, deux autres (nf-fa-edit et nf-oct-gear par défaut).

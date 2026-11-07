@@ -11,7 +11,7 @@ Install: `/plugin install dx@cc-plugins` (after `/plugin marketplace add IMSike/
 │ ctx  22% ◎◎◎◎◎◎◎◎◎◎···································         │
 │ 5h   12% ◎◎◎◎◎◉◉◉◉◉◉◉◉◉·······························  ↻ 3h24 │
 │ 7d   71% ◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◎◉◉◉◉◉◉◉◉◉◉◉◉············· ↻ 1j15h │
-╰─ ✻ ✻ ▣ ▣ ───── durée 1m04 · fin 14:32 · total 1h12 · 24k/200k ─╯
+╰─ ✻  ✻  ▣  ▣  ─ durée 1m04 · fin 14:32 · total 1h12 · 24k/200k ─╯
 ```
 
 On screen, colors tell apart what plain text cannot: on `5h`, the `◉` are the pale budget; on `7d`, they are consumed ahead of the pace, in full color. In the bottom border, `▣` stands for the terminal icon, a Nerd Font glyph; in the top border, `✎` and `⚙` stand for the notes and settings icons, two more (nf-fa-edit and nf-oct-gear by default).

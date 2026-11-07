@@ -3,7 +3,7 @@ import type { EngineInterface, On, SessionUsage } from 'claude-code'
 
 import type { Activity, BottomFact, Gauge, StatusSnapshot, TurnTime } from '../../types'
 import { openAgent, showTask, startActivity } from './activity'
-import { crewItems, crewWidth, isWorking, SPIN_MS, SPINNER } from './crew'
+import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from './crew'
 import {
   branchOf,
   clockTime,
@@ -247,7 +247,7 @@ export function registerStatusline(on: On): void {
     const facts = options.bottomOrder.flatMap(fact => factOf[fact] ?? [])
     const info = facts.length === 0 ? '' : ` ${facts.join(' · ')}`
     // Its icons, one per subagent and background task: Buttons, since only a
-    // press may change the view.
+    // press may change the view, drawn in the row itself as the top border's.
     const crew = await read($, activity)
     const crewList = show.crew ? crewItems(crew, options.maxAgentIcons, options.maxTaskIcons) : []
     const crewColumns = crewWidth(crewList)
@@ -255,8 +255,8 @@ export function registerStatusline(on: On): void {
     const viewed = e.props.view.agentId
     const icons = crewList.flatMap((item, index) => {
       const glyph = item.spin && options.animate.spinner ? (SPINNER[spinFrame % SPINNER.length] ?? '✻') : item.glyph
-      // A wide glyph's button takes the cell after it too (crewWidth).
-      const label = <Text color={item.color} dimColor={item.dim} underline={item.open !== undefined && item.open === viewed}>{item.wide ? `${glyph} ` : glyph}</Text>
+      // A pressable icon's Button takes the cell after its glyph too (crewLabel).
+      const label = <Text color={item.color} dimColor={item.dim} underline={item.open !== undefined && item.open === viewed}>{crewLabel(glyph, item)}</Text>
       const gap = index === 0 ? [] : [<Text>{' '}</Text>]
       const agentId = item.open
       const taskId = item.tail
@@ -383,7 +383,7 @@ export function registerStatusline(on: On): void {
           {rows.map((draw, index) => draw(index + 1))}
           <Box flexShrink={0}>
             {piece('frame-bl', bottomLeft, bottomAt(0), -1)}
-            {crewColumns > 0 && <Box key="crew" flexShrink={0}>{icons}</Box>}
+            {icons}
             {piece('frame-br', bottomRight, bottomAt(rightStart), -1)}
           </Box>
         </Box>

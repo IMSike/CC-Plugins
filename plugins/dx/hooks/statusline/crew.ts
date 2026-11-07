@@ -22,9 +22,6 @@ export type CrewItem = {
   glyph: string
   color: string
   dim?: true
-  // A Nerd Font glyph, drawn two cells wide by terminals that count it one:
-  // the cell after it is its own too, so that a click on either half lands.
-  wide?: true
   // Turns like Claude Code's spinner while true.
   spin?: true
   open?: string
@@ -52,14 +49,27 @@ export function crewItems(crew: Activity, agents = MAX_ICONS, tasks = MAX_ICONS)
   return [
     ...capped(working.map(agent => ({ glyph: '✻', color: 'claude', spin: true as const, open: agent.id })), agents),
     ...capped(waiting.map(agent => ({ glyph: '✻', color: 'claude', dim: true as const, open: agent.id })), agents),
-    ...capped(cli('claude').map(task => ({ glyph: ROBOT, color: 'claude', wide: true as const, tail: task.id })), tasks),
-    ...capped(cli('cursor').map(task => ({ glyph: ROBOT, color: CURSOR_GREY, wide: true as const, tail: task.id })), tasks),
-    ...capped(plain('shell').map(task => ({ glyph: TERMINAL, color: 'subtle', wide: true as const, tail: task.id })), tasks),
+    ...capped(cli('claude').map(task => ({ glyph: ROBOT, color: 'claude', tail: task.id })), tasks),
+    ...capped(cli('cursor').map(task => ({ glyph: ROBOT, color: CURSOR_GREY, tail: task.id })), tasks),
+    ...capped(plain('shell').map(task => ({ glyph: TERMINAL, color: 'subtle', tail: task.id })), tasks),
     ...capped(plain('monitor').map(task => ({ glyph: MONITOR, color: 'subtle', tail: task.id })), tasks),
   ]
 }
 
-// Columns the icons take, one space apart, a wide one's own cell after it.
+// Whether a click on the icon does something: a subagent's or a task's.
+function isPressable(item: CrewItem): boolean {
+  return item.open !== undefined || item.tail !== undefined
+}
+
+// What an icon draws: a pressable one, its glyph and the cell after it. The
+// layout counts these glyphs one cell, but a terminal may draw them over two
+// (a Nerd Font glyph, a ✻ from a fallback font): with that cell in its Button,
+// a click on either half lands, whatever the glyph or the spinner's frame.
+export function crewLabel(glyph: string, item: CrewItem): string {
+  return isPressable(item) ? `${glyph} ` : glyph
+}
+
+// Columns the icons take, one space apart.
 export function crewWidth(items: readonly CrewItem[]): number {
-  return items.reduce((sum, item, index) => sum + Array.from(item.glyph).length + (item.wide ? 1 : 0) + (index === 0 ? 0 : 1), 0)
+  return items.reduce((sum, item, index) => sum + Array.from(crewLabel(item.glyph, item)).length + (index === 0 ? 0 : 1), 0)
 }
