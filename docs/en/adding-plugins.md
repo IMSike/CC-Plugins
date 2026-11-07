@@ -12,9 +12,9 @@ plugins/<name>/
 │   └── plugin.json          manifest
 ├── hooks/
 │   ├── hooks.json           { "modules": ["./register.ts"] }
-│   ├── register.ts          the hooks module: calls each feature's register function
+│   ├── register.ts          the hooks module: calls each feature's register function, holds session.start and turn.start
 │   ├── <feature>/
-│   │   ├── <feature>.tsx    the feature's hooks and its register function
+│   │   ├── <feature>.tsx    the feature's hooks, its register and start functions
 │   │   ├── <part>.tsx       a Client module, drawn on the surface's own thread (<Client module="./<part>.tsx">)
 │   │   ├── <logic>.ts       its pure logic, without $
 │   │   └── *.test.ts(x)     its tests
@@ -26,7 +26,7 @@ plugins/<name>/
 └── README.md                short summary, linking to docs/{en,fr}/plugins/<name>.md
 ```
 
-A plugin has **one** hooks module: a new feature is a folder under `hooks/`, registering its own hooks, whose register function `register.ts` calls, not a new plugin. A feature may call the functions another feature exports: in dx, the band opens the notes and settings panes, and those panes draw the activity's row of tabs. A module that belongs to no feature in particular goes in `hooks/shared/`; a module of one feature stays in its folder. A module the tests alone import (`shared/testing.ts` in dx) is never imported by the hooks module. A new plugin is for a separate theme that people would install on its own.
+A plugin has **one** hooks module: a new feature is a folder under `hooks/`, registering its own hooks, whose register function `register.ts` calls, not a new plugin. The engine takes a single hook per event without a matcher in the whole plugin: the hooks of events several features answer, such as `session.start` and `turn.start`, live in `register.ts`, which calls one start function per feature (in dx `startSettings`, `startNotes`, `startActivity`, `startStatusline`) in an order written and explained there; each feature does its own loading and starts its own clocks in it. A feature may call the functions another feature exports: in dx, the band opens the notes and settings panes, and those panes draw the activity's row of tabs. A module that belongs to no feature in particular goes in `hooks/shared/`; a module of one feature stays in its folder. A module the tests alone import (`shared/testing.ts` in dx) is never imported by the hooks module. A new plugin is for a separate theme that people would install on its own.
 
 ## Manifest
 
