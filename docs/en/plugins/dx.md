@@ -80,7 +80,7 @@ The `✎` icon shows the notes in the side panel, for you alone, with three tabs
 - **`/clear`**: a `/clear` empties the conversation, not the session: the **Session** tab keeps its note, and the pane stays on the tab shown. Claude Code goes on under a new session id; dx links it to the old one (a small `notes.link.<id>` entry in its store) at the next load, only in the conversation whose session clock just started over, never in another one open meanwhile.
 - **Implications**:
   - The notes are not sent to Claude: what a pane shows never reaches its context. They are not hidden from it either: the store is a plain-text file under `~/.claude`, which Claude could read if it went looking for it.
-  - A note opened in two sessions at once: the last one written wins. Each session shows the note as it is stored whenever its sheet opens.
+  - A note opened in two sessions at once: what one writes shows in the other within about a second, no tab changed (dx reads the shown note again every second while the notes pane is open). If both write within the same second, the last one written wins.
   - They stay on the machine, follow you elsewhere only if `~/.claude` is synced, and belong to the copy of the plugin that wrote them.
 
 ## Turn off

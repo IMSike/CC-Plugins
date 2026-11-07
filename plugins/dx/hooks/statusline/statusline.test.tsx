@@ -613,6 +613,30 @@ test('a note or a setting written by another session is taken up, not overwritte
   expect(store.get('settings')).toMatchObject({ show: { branch: false, total: false } })
 })
 
+test('a note another session changes is shown in the open pane, and kept from there', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const store = engine(on, true, [], {}, { 'notes.global': { text: 'liste', updatedAt: NOW - 1000 } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await band.press({ key: 'notes' })
+  await band.unmount()
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ type: 'Text', text: /liste/, in: 'note-global-s1' })).toBeDefined()
+
+  // Another session writes the note: shown here within a poll, no tab changed.
+  store.set('notes.global', { text: 'liste\npain', updatedAt: NOW + 500 })
+  await clock.advance(1000)
+  expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
+
+  // Written on from here: the other session's line stays.
+  await pane.pointer({ type: 'down', x: 20, y: 5, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'end', in: 'note-global-s1' })
+  await pane.key({ key: ' lait', in: 'note-global-s1' })
+  expect((store.get('notes.global') as { text: string }).text).toBe('liste\npain lait')
+  await pane.unmount()
+})
+
 test('the crew animation setting turns the working one on with it', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on, true, [], {}, { settings: { animateWithCrew: false } })

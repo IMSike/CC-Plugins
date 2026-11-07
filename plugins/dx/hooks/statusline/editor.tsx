@@ -8,7 +8,8 @@ import type { Editor } from './editor-model'
 // change is posted to the hooks module, which keeps it.
 
 export type EditorProps = {
-  // The note's text when the editor opens; the editor owns it afterwards.
+  // The note's text as the store holds it: taken when the editor opens, and
+  // again when another session changed it; an echo of its own posts is not.
   text: string
   rows: number
   placeholder: string
@@ -16,7 +17,24 @@ export type EditorProps = {
   tab: string
   session: string
 }
-type EditorState = Editor & { active: boolean }
+// `given`: the text the hooks last drew; `sent`: the texts posted since, not
+// drawn back yet.
+type EditorState = Editor & { active: boolean; given: string; sent: string[] }
+// Posts kept to tell an echo from another session's text: redraws fold, so
+// some never come back.
+const SENT_KEPT = 200
+
+// The text the hooks drew, taken in: the one shown, every post landed; one
+// this editor posted, drawn back late, the keys since standing; any other,
+// another session's, shown in place of this one's, the cursor kept within.
+export function drawn(state: EditorState, text: string): EditorState {
+  if (text === state.given) return state
+  if (text === state.text) return { ...state, given: text, sent: [] }
+  const echoed = state.sent.lastIndexOf(text)
+  if (echoed >= 0) return { ...state, given: text, sent: state.sent.slice(echoed + 1) }
+  const cursor = Math.min(state.cursor, text.length)
+  return { ...state, text, cursor, top: Math.min(state.top, text.slice(0, cursor).split('\n').length - 1), given: text, sent: [] }
+}
 
 // Each instance's latest props, for its listeners.
 const instances = new WeakMap<object, { props: EditorProps }>()
@@ -28,30 +46,36 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   if (surface.state === undefined) {
     const latest = { props }
     instances.set(surface, latest)
-    surface.setState({ text: props.text, cursor: props.text.length, top: 0, active: false })
+    surface.setState({ text: props.text, cursor: props.text.length, top: 0, active: false, given: props.text, sent: [] })
     const apply = (next: EditorState) => {
       const state = surface.state
       if (state === undefined || next === state) return
-      surface.setState(next)
-      if (next.text !== state.text) surface.post({ tab: latest.props.tab, session: latest.props.session, text: next.text })
+      if (next.text === state.text) {
+        surface.setState(next)
+        return
+      }
+      surface.setState({ ...next, sent: [...next.sent, next.text].slice(-SENT_KEPT) })
+      surface.post({ tab: latest.props.tab, session: latest.props.session, text: next.text })
     }
     surface.onKey(event => {
       const state = surface.state
       if (state === undefined) return
       const next = keyed(state, event, width(), latest.props.rows)
-      apply(next === state && state.active ? state : { ...next, active: true })
+      apply(next === state && state.active ? state : { ...state, ...next, active: true })
     })
     surface.onPointer(event => {
       const state = surface.state
       if (state === undefined || event.type !== 'down') return
-      apply({ ...clicked(state, event.x, event.y, width()), active: true })
+      apply({ ...state, ...clicked(state, event.x, event.y, width()), active: true })
     })
   } else {
     const latest = instances.get(surface)
     if (latest !== undefined) latest.props = props
+    const next = drawn(surface.state, props.text)
+    if (next !== surface.state) surface.setState(next)
   }
 
-  const state = surface.state ?? { text: props.text, cursor: props.text.length, top: 0, active: false }
+  const state = surface.state ?? { text: props.text, cursor: props.text.length, top: 0, active: false, given: props.text, sent: [] }
   const rows = rowsOf(state.text, width())
   const at = rowOf(rows, state.cursor)
   const shown = rows.slice(state.top, state.top + props.rows)

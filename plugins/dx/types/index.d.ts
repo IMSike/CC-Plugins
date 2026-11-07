@@ -158,6 +158,8 @@ declare module 'claude-code' {
       // Why the notes could not be loaded, shown in their pane; null once loaded.
       notesError: Shaped<string | null>
       notesView: Shaped<NotesView>
+      // The note the notes pane shows, as the store last held it: key and time.
+      notesSeen: Shaped<string | null>
       panel: Shaped<PanelView>
     }
   }

@@ -80,7 +80,7 @@ L'icône `✎` affiche les notes dans le panneau latéral, rien que pour vous, a
 - **`/clear`** : un `/clear` vide la conversation, pas la session : l'onglet **Session** garde sa note, et le panneau reste sur l'onglet affiché. Claude Code poursuit sous un nouvel identifiant de session ; dx le relie à l'ancien (une petite entrée `notes.link.<id>` dans son stockage) au premier chargement qui suit, uniquement dans la conversation dont le compteur de session vient de repartir, jamais dans une autre ouverte en parallèle.
 - **Implications** :
   - Les notes ne sont pas envoyées à Claude : ce qu'affiche un panneau n'entre jamais dans son contexte. Elles ne lui sont pas cachées pour autant : le store est un fichier en clair sous `~/.claude`, que Claude pourrait lire s'il allait le chercher.
-  - Une note ouverte dans deux sessions à la fois : la dernière écrite l'emporte. Chaque session affiche la note telle qu'elle est enregistrée à chaque ouverture de sa feuille.
+  - Une note ouverte dans deux sessions à la fois : ce que l'une écrit apparaît dans l'autre en une seconde environ, sans changer d'onglet (dx relit la note affichée chaque seconde tant que le panneau Notes est ouvert). Si les deux écrivent dans la même seconde, la dernière écrite l'emporte.
   - Elles restent sur la machine, ne vous suivent ailleurs que si `~/.claude` est synchronisé, et appartiennent à la copie du plugin qui les a écrites.
 
 ## Désactiver

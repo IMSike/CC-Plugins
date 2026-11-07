@@ -21,7 +21,7 @@ import {
 } from './format'
 import type { FrameProps, FrameRun } from './frame'
 import type { GaugeProps } from './gauge'
-import { loadNotes, toggleNotes } from './notes'
+import { loadNotes, notesTick, NOTES_POLL_MS, toggleNotes } from './notes'
 import { ensureNotes } from './notes-load'
 import { DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from './options'
 import { loadSettings, toggleSettings } from './settings'
@@ -155,6 +155,7 @@ export function registerStatusline(on: On): void {
     await startActivity($)
     $.clock.every(TICK_MS, () => turnTick($))
     $.clock.every(SPIN_MS, () => spinTick($))
+    $.clock.every(NOTES_POLL_MS, () => notesTick($))
     await refresh($)
     $.clock.every(REFRESH_MS, () => refresh($))
 

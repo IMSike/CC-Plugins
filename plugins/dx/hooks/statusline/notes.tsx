@@ -7,7 +7,7 @@ import type { EditorProps } from './editor'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
 import { clearedView, ensureNotes, GLOBAL_KEY, noteClear, noteOf, PROJECT_PREFIX, readNotes, SESSION_PREFIX, tryNotes } from './notes-load'
-import { PANEL, panelView, togglePanel } from './panes'
+import { isShowing, PANEL, panelView, togglePanel } from './panes'
 
 // The notes pane: three notes of the person's own, one for every session, one
 // for the project, one for this session, kept in `$.store` across sessions.
@@ -18,6 +18,8 @@ const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as st
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
 // What the band shows, set in ./settings: the notes' tab and list here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-1' })
+// The note shown, as the store last held it: drawn again when it changes there.
+const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })
 
 // The last tab shown, taken up again by the next pane (a setting).
 const TAB_KEY = 'notesTab'
@@ -61,6 +63,26 @@ async function save($: EngineInterface, tab: NoteTab, session: string, text: str
     return { ...current, sessions: note === null ? others : { ...others, [session]: note } }
   })
   await (note === null ? $.store.delete(key) : $.store.set(key, note)).catch(() => undefined)
+}
+
+// How often the note shown is read again from the store while its pane is
+// open: another session writing it shows here within that time.
+export const NOTES_POLL_MS = 1000
+
+// Draws the pane again when another session changed the note it shows: the
+// store has no event of its own, and the editor takes the new text.
+export async function notesTick($: EngineInterface): Promise<void> {
+  if (!(await isShowing($, 'notes'))) return
+  const value = await read($, notes)
+  if (value === null) return
+  const view = await read($, notesView)
+  const session = view.tab === 'session' ? (view.other ?? value.session) : value.session
+  const key = keyOf(value, view.tab, session)
+  const stored = noteOf(await $.store.get(key).catch(() => undefined))
+  const seen = `${key} ${stored?.updatedAt ?? 0}`
+  if ((await read($, notesSeen)) === seen) return
+  await update($, notesSeen, () => seen)
+  $.ui.invalidate('ui.render')
 }
 
 export async function toggleNotes($: EngineInterface): Promise<void> {
