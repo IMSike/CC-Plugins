@@ -33,7 +33,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
 })
 
 // What the band shows, animates and is colored with, set in ./settings.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 
 // The main loop's last turn, and a tick each second while it runs, so its
 // duration is redrawn.
@@ -351,7 +351,7 @@ export function registerStatusline(on: On): void {
         ? [(line: number) => row(line, '5h', status.fiveHour?.percent, status.fiveHour && { resetsAt: status.fiveHour.resetsAt, seconds: FIVE_HOURS })]
         : []),
       ...(sevenDayRow && status.sevenDay
-        ? [(line: number) => row(line, '7j', status.sevenDay?.percent, { resetsAt: status.sevenDay?.resetsAt, seconds: SEVEN_DAYS })]
+        ? [(line: number) => row(line, options.sevenDayLabel, status.sevenDay?.percent, { resetsAt: status.sevenDay?.resetsAt, seconds: SEVEN_DAYS })]
         : []),
     ]
 

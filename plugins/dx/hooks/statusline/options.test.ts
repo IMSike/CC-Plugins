@@ -46,6 +46,14 @@ test("a monitor's icon is a pulse unless another offered one is chosen", () => {
   expect(settingsOf({ monitorIcon: '◉' }).monitorIcon).toBe('◉')
 })
 
+test("the 7-day gauge reads 7j unless 7d is chosen", () => {
+  expect(DEFAULT_SETTINGS.sevenDayLabel).toBe('7j')
+  expect(settingsOf({ sevenDayLabel: '7d' }).sevenDayLabel).toBe('7d')
+  expect(settingsOf({ sevenDayLabel: '7w' }).sevenDayLabel).toBe('7j')
+  // Settings stored before the choice existed keep the default.
+  expect(settingsOf({ speed: 'fast' }).sevenDayLabel).toBe('7j')
+})
+
 test('the red threshold stays above the orange one', () => {
   expect(thresholdsOf(50, 75)).toEqual([50, 75])
   expect(thresholdsOf(80, 60)).toEqual([80, 85])

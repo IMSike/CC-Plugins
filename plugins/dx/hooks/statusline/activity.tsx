@@ -28,7 +28,7 @@ import type { ProcessTree } from './tasks'
 // further and further apart (ADR 0003).
 
 // What the band shows, set in ./settings: the panes' icons here.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 
 // The agents and the tasks followed, drawn on the band's bottom border.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {

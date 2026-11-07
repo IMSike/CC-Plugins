@@ -24,6 +24,7 @@ import {
   NOTES_OTHERS_RANGE,
   SETTINGS_ICONS,
   settingsOf,
+  SEVEN_DAY_LABELS,
   SHOW_LABELS,
   SPEEDS,
   thresholdsOf,
@@ -35,7 +36,7 @@ import type { StepperProps } from './stepper'
 
 // The settings pane: what the band shows, animates and is colored with, kept
 // in `$.store` across sessions and read into `$.state` for the drawings.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-2' })
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 
 const STORE_KEY = 'settings'
 // The toggles go in two columns from this inner width.
@@ -265,6 +266,10 @@ export function registerSettings(on: On): void {
             {SHOW_LABELS.map(([key, label]) =>
               toggle(`show-${key}`, value.show[key], label, current => ({ ...current, show: { ...current.show, [key]: !current.show[key] } })),
             )}
+          </Box>,
+          <Box key="seven-day-label" columnGap={1}>
+            <Text>Libellé de la jauge 7 j</Text>
+            {segments('seven-day-label', SEVEN_DAY_LABELS, value.sevenDayLabel, (current, sevenDayLabel) => ({ ...current, sevenDayLabel }))}
           </Box>,
         ])}
         {section('bottom', 'Bordure du bas', [

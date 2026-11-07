@@ -92,6 +92,7 @@ export const DEFAULT_SETTINGS: BandSettings = {
   hideIdleFiveHour: true,
   animateOnlyWorking: false,
   animateWithCrew: true,
+  sevenDayLabel: '7j',
 }
 
 // The settings pane's rows, in order, with their labels.
@@ -128,6 +129,12 @@ export const SPEEDS: readonly (readonly [BandSettings['speed'], string])[] = [
 
 // How much faster than normal each speed runs.
 export const SPEED_FACTORS: Record<BandSettings['speed'], number> = { slow: 0.5, normal: 1, fast: 2 }
+
+// The 7-day gauge's labels: in French as the rest of the band, or in English.
+export const SEVEN_DAY_LABELS: readonly (readonly [BandSettings['sevenDayLabel'], string])[] = [
+  ['7j', '7j'],
+  ['7d', '7d'],
+]
 
 export const NOTE_TABS: readonly (readonly [NoteTab, string])[] = [
   ['global', 'Global'],
@@ -233,5 +240,6 @@ export function settingsOf(stored: unknown): BandSettings {
     hideIdleFiveHour: typeof value.hideIdleFiveHour === 'boolean' ? value.hideIdleFiveHour : DEFAULT_SETTINGS.hideIdleFiveHour,
     animateOnlyWorking: typeof value.animateOnlyWorking === 'boolean' ? value.animateOnlyWorking : DEFAULT_SETTINGS.animateOnlyWorking,
     animateWithCrew: typeof value.animateWithCrew === 'boolean' ? value.animateWithCrew : DEFAULT_SETTINGS.animateWithCrew,
+    sevenDayLabel: oneOf(value.sevenDayLabel, SEVEN_DAY_LABELS) ?? DEFAULT_SETTINGS.sevenDayLabel,
   }
 }

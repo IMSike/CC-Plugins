@@ -117,6 +117,8 @@ export type BandSettings = {
   // `animateWithCrew`, also while a subagent works or a background task runs.
   animateOnlyWorking: boolean
   animateWithCrew: boolean
+  // The 7-day gauge's label: `7j` (jours, the default) or `7d` (days).
+  sevenDayLabel: '7j' | '7d'
 }
 
 // What dx's side panel shows.

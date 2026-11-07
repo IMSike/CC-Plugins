@@ -212,6 +212,23 @@ test('a window used too fast warns when it runs out, another counts down', async
   await ui.unmount()
 })
 
+test("the 7-day gauge's label set in its pane is drawn", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  await click(pane, 'settings:seven-day-label-7d')
+  await pane.unmount()
+
+  expect((store.get('settings') as { sevenDayLabel: string }).sevenDayLabel).toBe('7d')
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /^7d  $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^7j/ })).toBeUndefined()
+  await ui.unmount()
+})
+
 test('without a subscription, only the context gauge is shown', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, false)
