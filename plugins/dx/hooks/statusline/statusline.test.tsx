@@ -202,6 +202,9 @@ test('a window used too fast warns when it runs out, another counts down', async
 
   const ui = await $.ui.mount(BAND)
 
+  // The rows' labels, in French as the countdowns: `7j`, seven days.
+  expect(await ui.find({ type: 'Text', text: /^5h  $/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^7j  $/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /↻ 3h24$/ })).toBeDefined()
   // 7 days minus 39 hours gone, 90% used: the last 10% last 14h20.
   const warning = await ui.find({ type: 'Text', text: /⚠ 14h20$/ })
@@ -218,7 +221,7 @@ test('without a subscription, only the context gauge is shown', async ($, on) =>
 
   expect(await ui.find({ type: 'Text', text: /^ctx/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^5h/ })).toBeUndefined()
-  expect(await ui.find({ type: 'Text', text: /^7d/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^7j/ })).toBeUndefined()
   await ui.unmount()
 })
 
