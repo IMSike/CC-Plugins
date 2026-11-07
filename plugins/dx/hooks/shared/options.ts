@@ -177,12 +177,18 @@ export function hexOf(text: string): string | undefined {
   return HEX.test(value) ? value : undefined
 }
 
+// A stored true or false, else none.
+function boolOf(stored: unknown): boolean | undefined {
+  return typeof stored === 'boolean' ? stored : undefined
+}
+
+// The stored flags of `defaults`' keys, each missing or invalid one its default.
 function flags<T extends Record<string, boolean>>(defaults: T, stored: unknown): T {
   const value = typeof stored === 'object' && stored !== null ? (stored as Record<string, unknown>) : {}
   const result = { ...defaults }
   for (const key of Object.keys(defaults) as (keyof T)[]) {
-    const flag = value[key as string]
-    if (typeof flag === 'boolean') result[key] = flag as T[keyof T]
+    const flag = boolOf(value[key as string])
+    if (flag !== undefined) result[key] = flag as T[keyof T]
   }
   return result
 }
@@ -198,6 +204,7 @@ function numberOf(stored: unknown, [min, max]: readonly [number, number]): numbe
   return typeof stored === 'number' && Number.isInteger(stored) && stored >= min && stored <= max ? stored : undefined
 }
 
+// A stored value among `choices`, else none.
 function oneOf<T extends string>(stored: unknown, choices: readonly (readonly [T, string])[]): T | undefined {
   return choices.find(([value]) => value === stored)?.[0]
 }
@@ -241,11 +248,11 @@ export function settingsOf(stored: unknown): BandSettings {
     settingsIcon: oneOf(value.settingsIcon, SETTINGS_ICONS) ?? DEFAULT_SETTINGS.settingsIcon,
     monitorIcon: oneOf(value.monitorIcon, MONITOR_ICONS) ?? DEFAULT_SETTINGS.monitorIcon,
     notesTab: oneOf(value.notesTab, NOTE_TABS) ?? DEFAULT_SETTINGS.notesTab,
-    resumeNotesTab: typeof value.resumeNotesTab === 'boolean' ? value.resumeNotesTab : DEFAULT_SETTINGS.resumeNotesTab,
+    resumeNotesTab: boolOf(value.resumeNotesTab) ?? DEFAULT_SETTINGS.resumeNotesTab,
     notesOthers: numberOf(value.notesOthers, NOTES_OTHERS_RANGE) ?? DEFAULT_SETTINGS.notesOthers,
-    hideIdleFiveHour: typeof value.hideIdleFiveHour === 'boolean' ? value.hideIdleFiveHour : DEFAULT_SETTINGS.hideIdleFiveHour,
-    animateOnlyWorking: typeof value.animateOnlyWorking === 'boolean' ? value.animateOnlyWorking : DEFAULT_SETTINGS.animateOnlyWorking,
-    animateWithCrew: typeof value.animateWithCrew === 'boolean' ? value.animateWithCrew : DEFAULT_SETTINGS.animateWithCrew,
+    hideIdleFiveHour: boolOf(value.hideIdleFiveHour) ?? DEFAULT_SETTINGS.hideIdleFiveHour,
+    animateOnlyWorking: boolOf(value.animateOnlyWorking) ?? DEFAULT_SETTINGS.animateOnlyWorking,
+    animateWithCrew: boolOf(value.animateWithCrew) ?? DEFAULT_SETTINGS.animateWithCrew,
     sevenDayLabel: oneOf(value.sevenDayLabel, SEVEN_DAY_LABELS) ?? DEFAULT_SETTINGS.sevenDayLabel,
   }
 }
