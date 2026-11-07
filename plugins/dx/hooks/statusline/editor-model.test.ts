@@ -70,3 +70,38 @@ test('clicked puts the cursor under the pointer', () => {
   expect(clicked(at(text, 0), 0, 7, 4).cursor).toBe(7)
   expect(clicked(at(text, 0, 1), 0, 0, 4).cursor).toBe(4)
 })
+
+test('ctrl with the arrows moves a word at a time, as a text editor', () => {
+  const text = 'un deux, trois\n  quatre'
+  const left = (cursor: number) => keyed(at(text, cursor), { key: 'left', ctrl: true }, 40, 5).cursor
+  const right = (cursor: number) => keyed(at(text, cursor), { key: 'right', ctrl: true }, 40, 5).cursor
+  // To the start of the word, over the spaces before it.
+  expect(left(7)).toBe(3)
+  expect(left(9)).toBe(7)
+  expect(left(3)).toBe(0)
+  // A line break stops it: the start of the line, then the end of the one above.
+  expect(left(17)).toBe(15)
+  expect(left(15)).toBe(14)
+  // Alt moves a character, as without it.
+  expect(keyed(at(text, 7), { key: 'left', meta: true }, 40, 5).cursor).toBe(6)
+  // To the end of the word, over the spaces before it; punctuation is a word of its own.
+  expect(right(0)).toBe(2)
+  expect(right(2)).toBe(7)
+  expect(right(7)).toBe(8)
+  expect(right(14)).toBe(15)
+  expect(right(15)).toBe(23)
+})
+
+test('ctrl with backspace erases the word before the cursor, ctrl with delete the one after', () => {
+  expect(keyed(at('un deux trois', 7), { key: 'backspace', ctrl: true }, 40, 5)).toEqual(at('un  trois', 3))
+  expect(keyed(at('un deux  '), { key: 'backspace', ctrl: true }, 40, 5)).toEqual(at('un '))
+  expect(keyed(at('un deux trois', 2), { key: 'delete', ctrl: true }, 40, 5)).toEqual(at('un trois', 2))
+  // Only with ctrl: ctrl+h, ctrl+w and alt with backspace erase no word.
+  expect(keyed(at('un deux'), { key: 'backspace', meta: true }, 40, 5)).toEqual(at('un deu'))
+  for (const event of [{ key: 'h', ctrl: true }, { key: 'w', ctrl: true }] as const) {
+    const editor = at('un deux')
+    expect(keyed(editor, event, 40, 5)).toBe(editor)
+  }
+  const start = at('un', 0)
+  expect(keyed(start, { key: 'backspace', ctrl: true }, 40, 5)).toBe(start)
+})

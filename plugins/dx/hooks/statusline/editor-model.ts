@@ -32,6 +32,42 @@ function typed(event: Key): string | undefined {
   return key.replace(/\r\n?/g, '\n')
 }
 
+// What a character is to a move by words: a word's letter, digit or `_`, a
+// space, a line break, or punctuation, a word of its own.
+type CharClass = 'word' | 'space' | 'line' | 'mark'
+const WORD_CHAR = /[\p{L}\p{N}_]/u
+
+function classOf(char: string): CharClass {
+  if (char === '\n') return 'line'
+  if (/\s/.test(char)) return 'space'
+  return WORD_CHAR.test(char) ? 'word' : 'mark'
+}
+
+// Where ctrl+left lands from `cursor`, as in a text editor: over the spaces,
+// then to the start of the word; a line break stops it, at the line's start,
+// or, right after it, at the end of the line above.
+export function wordLeft(text: string, cursor: number): number {
+  let at = cursor
+  while (at > 0 && classOf(text.charAt(at - 1)) === 'space') at--
+  if (at === 0) return 0
+  const kind = classOf(text.charAt(at - 1))
+  if (kind === 'line') return at === cursor ? at - 1 : at
+  while (at > 0 && classOf(text.charAt(at - 1)) === kind) at--
+  return at
+}
+
+// Where ctrl+right lands from `cursor`: over the spaces, then to the end of
+// the word; a line break stops it, as for wordLeft.
+export function wordRight(text: string, cursor: number): number {
+  let at = cursor
+  while (at < text.length && classOf(text.charAt(at)) === 'space') at++
+  if (at === text.length) return at
+  const kind = classOf(text.charAt(at))
+  if (kind === 'line') return at === cursor ? at + 1 : at
+  while (at < text.length && classOf(text.charAt(at)) === kind) at++
+  return at
+}
+
 // The text's visual rows at `width`. A line exactly as long as a multiple of
 // the width gets an empty row after it, where its end's cursor stands.
 export function rowsOf(text: string, width: number): Row[] {
@@ -88,7 +124,14 @@ export function keyed(
   const { text, cursor } = editor
   const rows = rowsOf(text, width)
   const row = rows[rowOf(rows, cursor)] ?? { start: 0, end: 0 }
+  // A word at a time: with ctrl.
+  const byWord = event.ctrl === true
   let next: Editor
+  if (event.key === 'backspace' && byWord) {
+    const from = wordLeft(text, cursor)
+    next = { ...editor, text: text.slice(0, from) + text.slice(cursor), cursor: from }
+    return next.text === text ? editor : scrolled(next, width, height)
+  }
   switch (event.key) {
     case 'return':
     case 'enter':
@@ -101,13 +144,13 @@ export function keyed(
       next = cursor === 0 ? editor : { ...editor, text: text.slice(0, cursor - 1) + text.slice(cursor), cursor: cursor - 1 }
       break
     case 'delete':
-      next = cursor === text.length ? editor : { ...editor, text: text.slice(0, cursor) + text.slice(cursor + 1) }
+      next = cursor === text.length ? editor : { ...editor, text: text.slice(0, cursor) + text.slice(byWord ? wordRight(text, cursor) : cursor + 1) }
       break
     case 'left':
-      next = { ...editor, cursor: Math.max(0, cursor - 1) }
+      next = { ...editor, cursor: byWord ? wordLeft(text, cursor) : Math.max(0, cursor - 1) }
       break
     case 'right':
-      next = { ...editor, cursor: Math.min(text.length, cursor + 1) }
+      next = { ...editor, cursor: byWord ? wordRight(text, cursor) : Math.min(text.length, cursor + 1) }
       break
     case 'up':
       next = toRow(editor, rows, rowOf(rows, cursor) - 1)
