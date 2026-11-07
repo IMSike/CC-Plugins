@@ -1050,6 +1050,36 @@ test("the other sessions' notes scroll, as many listed as set", async ($, on) =>
   await pane.unmount()
 })
 
+// The links a `/clear` made to another session go with its note; the current
+// session's own note emptied keeps its links.
+test("deleting another session's note deletes the links to it", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, true, [], {}, {
+    notesTab: 'session',
+    'notes.session.old': { text: 'ancienne piste', updatedAt: NOW - 86400_000 },
+    'notes.link.old2': 'old',
+    'notes.link.old3': 'old',
+    'notes.link.x2': 'x1',
+    'notes.link.s1': 's0',
+    'notes.session.s0': { text: 'piste s0', updatedAt: NOW - 1000 },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  // This session goes on from s0: its note emptied, its link stays.
+  await pane.post({ tab: 'session', session: 's0', text: '' }, { in: 'note-session-s0' })
+  expect(store.get('notes.session.s0')).toBeUndefined()
+  expect(store.get('notes.link.s1')).toBe('s0')
+
+  await click(pane, 'notes:session-old')
+  await click(pane, 'notes:delete')
+  expect(store.get('notes.session.old')).toBeUndefined()
+  expect(store.get('notes.link.old2')).toBeUndefined()
+  expect(store.get('notes.link.old3')).toBeUndefined()
+  expect(store.get('notes.link.x2')).toBe('x1')
+  expect(store.get('notes.link.s1')).toBe('s0')
+  await pane.unmount()
+})
+
 test('the list of other sessions stays within its notes', () => {
   expect(othersStart(0, 5, 3)).toBe(0)
   expect(othersStart(4, 5, 3)).toBe(2)

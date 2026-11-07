@@ -7,7 +7,7 @@ import type { EditorProps } from './editor'
 import { NOTE_MAX_CHARS } from './editor-model'
 import { dayTime } from './format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from './options'
-import { clearedView, ensureNotes, forgetClear, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
+import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { isShowing, PANEL, panelView, togglePanel } from './panes'
 import type { PressPart, PressProps, PressStyle } from './press'
 import { fitsStore, storeWritten } from './store-size'
@@ -179,6 +179,9 @@ async function pressed($: EngineInterface, action: NotesPress): Promise<void> {
   if ('scroll' in action) return scrollOthers($, action.scroll)
   if ('erase' in action) {
     await save($, 'session', action.erase, '')
+    // Its links too, once it is gone: the current session's own note emptied
+    // keeps them, written on again under the same session.
+    await forgetLinks($, action.erase)
     return setView($, { tab: 'session' })
   }
   return setView($, action.view)

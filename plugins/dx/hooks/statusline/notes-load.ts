@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesView } from '../../types'
-import { forgetStoreSize } from './store-size'
+import { forgetStoreSize, storeWritten } from './store-size'
 
 // The notes as ./notes draws them, loaded from `$.store` when the session
 // starts, and again when their pane is shown, a note is written or a prompt
@@ -135,6 +135,19 @@ export async function ensureNotes($: EngineInterface, retry = true): Promise<voi
   const error = value === null && !retry ? await read($, notesError) : null
   const id = value === null ? undefined : await $.session.id().catch(() => value.id)
   if (needsLoad(value, error, id, retry)) await tryNotes($)
+}
+
+// Another session's note deleted: the links of the session ids its `/clear`s
+// gave go with it, never read again. A failed read or deletion leaves them.
+export async function forgetLinks($: EngineInterface, session: string): Promise<void> {
+  if (noteOf(await $.store.get(SESSION_PREFIX + session).catch(() => undefined)) !== null) return
+  const keys = await $.store.keys().catch(() => [] as string[])
+  const links = keys.filter(key => key.startsWith(LINK_PREFIX))
+  const targets = await Promise.all(links.map(key => $.store.get(key).catch(() => undefined)))
+  for (const [index, key] of links.entries()) {
+    if (targets[index] !== session) continue
+    await $.store.delete(key).then(() => storeWritten(key, null), () => undefined)
+  }
 }
 
 // At a `/clear`, the session it ends and the tab shown, for the next load to
