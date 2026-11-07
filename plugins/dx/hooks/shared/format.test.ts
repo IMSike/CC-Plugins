@@ -158,14 +158,21 @@ test('a window used too fast says when it runs out', () => {
 })
 
 test('durations and countdowns read in days, hours or minutes', () => {
-  expect(duration(39 * 3600)).toBe('1j15h')
-  expect(duration(3 * 3600 + 24 * 60)).toBe('3h24')
-  expect(duration(3900)).toBe('1h05')
-  expect(duration(750)).toBe('12m')
-  expect(duration(-5)).toBe('0m')
-  expect(countdown('2026-10-25T13:24:00Z', NOW)).toBe('3h24')
-  expect(countdown('2026-10-25T09:00:00Z', NOW)).toBe('0m')
-  expect(countdown('not a date', NOW)).toBe('')
+  expect(duration(39 * 3600, 'j')).toBe('1j15h')
+  expect(duration(3 * 3600 + 24 * 60, 'j')).toBe('3h24')
+  expect(duration(3900, 'j')).toBe('1h05')
+  expect(duration(750, 'j')).toBe('12m')
+  expect(duration(-5, 'j')).toBe('0m')
+  expect(countdown('2026-10-25T13:24:00Z', NOW, 'j')).toBe('3h24')
+  expect(countdown('2026-10-25T09:00:00Z', NOW, 'j')).toBe('0m')
+  expect(countdown('not a date', NOW, 'j')).toBe('')
+})
+
+test('days are written `j` or `d` as asked, hours and minutes alike', () => {
+  expect(duration(39 * 3600, 'd')).toBe('1d15h')
+  expect(duration(3 * 3600 + 24 * 60, 'd')).toBe('3h24')
+  expect(countdown('2026-10-27T01:00:00Z', NOW, 'j')).toBe('1j15h')
+  expect(countdown('2026-10-27T01:00:00Z', NOW, 'd')).toBe('1d15h')
 })
 
 test('numbers read compact', () => {

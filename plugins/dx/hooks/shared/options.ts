@@ -1,5 +1,6 @@
 import type { BandSettings, BottomFact, NoteTab } from '../../types'
 import { MONITOR } from './crew'
+import type { DayUnit } from './format'
 
 // The settings pane's model: defaults, choices, and the reading of what
 // `$.store` holds.
@@ -135,6 +136,11 @@ export const SEVEN_DAY_LABELS: readonly (readonly [BandSettings['sevenDayLabel']
   ['7j', '7j'],
   ['7d', '7d'],
 ]
+
+// The letter the band's durations write days with: the 7-day label's.
+export function dayUnitOf(label: BandSettings['sevenDayLabel']): DayUnit {
+  return label === '7d' ? 'd' : 'j'
+}
 
 export const NOTE_TABS: readonly (readonly [NoteTab, string])[] = [
   ['global', 'Global'],

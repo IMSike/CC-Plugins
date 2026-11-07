@@ -56,7 +56,7 @@ The left of the bottom border holds an icon for each subagent and background tas
 The `⚙` icon shows the settings in the side panel; a second click closes it. A change applies at once and is kept across sessions.
 
 - **Effect**:
-  - **Display**: each element of the band on or off: model, effort, directory, Git branch, each gauge, countdowns, subagents and tasks; the 7-day gauge's label (**Libellé de la jauge 7 j**), `7j` (French, by default) or `7d`.
+  - **Display**: each element of the band on or off: model, effort, directory, Git branch, each gauge, countdowns, subagents and tasks; the 7-day gauge's label (**Libellé de la jauge 7 j**), `7j` (French, by default) or `7d`, which also sets the day unit of the durations the band shows, its countdowns and the session's total: `1j15h` with `7j`, `1d15h` with `7d`.
   - **Bottom border**: the turn's duration, its end time, the session's total and context tokens, each on or off and moved up or down with `↑` `↓`; how many subagent icons, and how many terminal icons, of a kind before a `+N` count (5 each by default, 1 to 10).
   - **Animations**: the frame's glints, the gauges' shuttle, the subagents' spinner, each on (by default) or off; the speed of the glints and the shuttle (slow, half as fast; normal, by default; fast, twice as fast). The spinner keeps Claude Code's pace whatever the speed.
   - **Colors**, each picked from a list of named colors or typed as hex (`#58a6ff`): the frame (the theme's warning color, yellow, by default), the effort meter and the branch (Claude's color by default), the gauges (the heat gradient by default, or one color), the bottom border's text (dim by default). The band shows a change at once.

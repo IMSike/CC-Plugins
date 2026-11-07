@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 
 import { MONITOR } from './crew'
-import { DEFAULT_SETTINGS, hexOf, MONITOR_ICONS, settingsOf, thresholdsOf } from './options'
+import { dayUnitOf, DEFAULT_SETTINGS, hexOf, MONITOR_ICONS, settingsOf, thresholdsOf } from './options'
 
 test('a color typed loosely is read as hex, anything else is refused', () => {
   expect(hexOf('#D4A72C')).toBe('#d4a72c')
@@ -52,6 +52,11 @@ test("the 7-day gauge reads 7j unless 7d is chosen", () => {
   expect(settingsOf({ sevenDayLabel: '7w' }).sevenDayLabel).toBe('7j')
   // Settings stored before the choice existed keep the default.
   expect(settingsOf({ speed: 'fast' }).sevenDayLabel).toBe('7j')
+})
+
+test("the durations write days with the 7-day label's letter", () => {
+  expect(dayUnitOf('7j')).toBe('j')
+  expect(dayUnitOf('7d')).toBe('d')
 })
 
 test('the red threshold stays above the orange one', () => {

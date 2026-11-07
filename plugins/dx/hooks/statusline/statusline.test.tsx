@@ -75,6 +75,29 @@ test("the 7-day gauge's label set in its pane is drawn", async ($, on) => {
   await ui.unmount()
 })
 
+test("the band's durations write their days as the 7-day gauge's label", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  // A session started 39 hours ago: its total runs over a day.
+  const session = { id: 's1', startedAt: NOW - 39 * 3600_000 }
+  engine(on, true, [], {}, {}, true, new Set(), session)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toBe(' total 1j15h · 24k/200k')
+  await ui.unmount()
+})
+
+test("with the 7-day gauge labeled `7d`, the band's days are `d`", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const session = { id: 's1', startedAt: NOW - 39 * 3600_000 }
+  engine(on, true, [], {}, { settings: { sevenDayLabel: '7d' } }, true, new Set(), session)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toBe(' total 1d15h · 24k/200k')
+  await ui.unmount()
+})
+
 test('without a subscription, only the context gauge is shown', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, false)

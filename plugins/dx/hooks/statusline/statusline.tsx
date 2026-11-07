@@ -22,7 +22,7 @@ import {
   truncateStart,
   turnDuration,
 } from '../shared/format'
-import { DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
+import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
 import type { FrameProps, FrameRun } from './frame'
 import type { GaugeProps } from './gauge'
 
@@ -219,6 +219,8 @@ export function registerStatusline(on: On): void {
     const solid = options.gaugeColor === HEAT ? null : options.gaugeColor
     const thresholds = thresholdsOf(options.heatOrange, options.heatRed)
     const speed = SPEED_FACTORS[options.speed]
+    // The days of its durations, written as the 7-day gauge's label.
+    const day = dayUnitOf(options.sevenDayLabel)
 
     // Top border: `╭─ ✻ Opus 5.5 ─ ▰▰▰▰▱ xhigh ───── ~\repo ⎇ dev ─ ✎ ⚙ ─╮`.
     const model = show.model ? status.model : ''
@@ -243,7 +245,7 @@ export function registerStatusline(on: On): void {
     const factOf: Record<BottomFact, string | undefined> = {
       duration: !show.duration || last === null ? undefined : `durée ${turnDuration(last.durationMs ?? now - last.startedAt)}`,
       end: !show.end || last?.endedAt === undefined ? undefined : `fin ${clockTime(last.endedAt)}`,
-      total: show.total ? `total ${duration((now - status.startedAt) / 1000)}` : undefined,
+      total: show.total ? `total ${duration((now - status.startedAt) / 1000, day)}` : undefined,
       tokens: show.tokens && status.contextTokens !== undefined
         ? `${compactNumber(status.contextTokens)}/${compactNumber(status.contextWindow)}`
         : undefined,
@@ -325,8 +327,8 @@ export function registerStatusline(on: On): void {
       const reset = resetsAt === undefined
         ? ''
         : exhaustion === undefined
-          ? `↻ ${countdown(resetsAt, now)}`
-          : `⚠ ${duration(exhaustion)}`
+          ? `↻ ${countdown(resetsAt, now, day)}`
+          : `⚠ ${duration(exhaustion, day)}`
 
       return (
         <Box key={label} flexShrink={0}>

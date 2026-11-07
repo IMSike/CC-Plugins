@@ -203,14 +203,17 @@ export function exhaustionOf(percent: number, resetsAt: string, windowSeconds: n
   return left < remaining ? left : undefined
 }
 
-// A duration: `2j15h`, `3h24`, `12m`.
-export function duration(seconds: number): string {
+// The letter a duration writes days with: `j` (jours) or `d` (days).
+export type DayUnit = 'j' | 'd'
+
+// A duration: `2j15h` (`2d15h` with `d` days), `3h24`, `12m`.
+export function duration(seconds: number, day: DayUnit): string {
   const total = Math.max(0, Math.floor(seconds))
   const days = Math.floor(total / 86400)
   const hours = Math.floor((total % 86400) / 3600)
   const minutes = Math.floor((total % 3600) / 60)
 
-  if (days > 0) return `${days}j${hours}h`
+  if (days > 0) return `${days}${day}${hours}h`
   if (hours > 0) return `${hours}h${String(minutes).padStart(2, '0')}`
   return `${minutes}m`
 }
@@ -238,12 +241,12 @@ export function dayTime(ms: number): string {
   return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')} ${clockTime(ms)}`
 }
 
-// Time left until `resetsAt` (ISO 8601), as a duration.
-export function countdown(resetsAt: string, nowMs: number): string {
+// Time left until `resetsAt` (ISO 8601), as a duration with `day` days.
+export function countdown(resetsAt: string, nowMs: number, day: DayUnit): string {
   const target = Date.parse(resetsAt)
   if (Number.isNaN(target)) return ''
 
-  return duration((target - nowMs) / 1000)
+  return duration((target - nowMs) / 1000, day)
 }
 
 // `950`, `24k`, `1.2M`.
