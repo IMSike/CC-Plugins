@@ -270,6 +270,22 @@ test('a session started after a /clear takes nothing of it', async ($, on) => {
   await pane.unmount()
 })
 
+// A `/clear`, then a `/resume` within the process before anything loaded the
+// notes: the session resumed keeps its own note, never linked to the cleared one.
+test('a session resumed right after a /clear takes nothing of it', async ($, on) => {
+  const session: { id: string; startedAt?: number } = { id: 's1' }
+  const store = await clearSession($, on, false, session)
+  await $.session.end({ reason: 'resume', sessionId: 's2', resume: { id: 'r1' } })
+  session.id = 'r1'
+  const pane = await $.ui.mount(NOTES_PANE)
+  expect(await pane.find({ key: 'note-session-r1' })).toBeDefined()
+  await pane.post({ tab: 'session', session: 'r1', text: 'piste r1' }, { in: 'note-session-r1' })
+  expect(store.get('notes.link.r1')).toBeUndefined()
+  expect(store.get('notes.session.r1')).toEqual({ text: 'piste r1', updatedAt: NOW })
+  expect(store.get('notes.session.s1')).toEqual({ text: 'piste s1', updatedAt: NOW })
+  await pane.unmount()
+})
+
 // Two changes posted one after the other, the first one's save held up until
 // the second is posted: the engine runs both at once, the last one stays.
 test('a note keeps the last change posted, an earlier save slower', async ($, on) => {

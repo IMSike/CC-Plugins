@@ -58,8 +58,9 @@ function clearedFor(id: string): Cleared | undefined {
   return cleared?.ending === id ? undefined : cleared
 }
 
-// A `session.start`: a fresh load of the plugin, never a `/clear`, so nothing
-// remembered goes on into it.
+// A `session.start` (a fresh load of the plugin), or a session ended other
+// than by a `/clear` (a `/resume` within the process): nothing remembered
+// goes on into the next session.
 export function forgetClear(): void {
   cleared = undefined
 }

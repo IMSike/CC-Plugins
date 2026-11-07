@@ -195,9 +195,12 @@ export function registerNotes(on: On): void {
   })
 
   // A `/clear` empties the conversation, not the session: its note goes on
-  // under the new session id the engine gives.
+  // under the new session id the engine gives. Any other end (a `/resume`
+  // within the process among them) follows no `/clear`: one remembered is
+  // forgotten, never linked to the session that comes next.
   on('session.end', async ($, e, next) => {
     if (e.reason === 'clear') await noteClear($, e.sessionId).catch(() => undefined)
+    else forgetClear()
 
     return next(e)
   })
