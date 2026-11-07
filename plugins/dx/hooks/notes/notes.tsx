@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
-import type { Note, Notes, NoteTab, NotesView } from '../../types'
+import type { Note, Notes, NoteTab, NotesUnsaved, NotesView } from '../../types'
 import { paneTabs } from '../activity/activity'
 import { dayTime } from '../shared/format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
@@ -9,9 +9,9 @@ import { isShowing, PANEL, panelView, togglePanel } from '../shared/panes'
 import type { PressPart, PressProps, PressStyle } from '../shared/press'
 import type { EditorProps } from './editor'
 import { NOTE_MAX_CHARS, NOTE_MAX_SHOWN } from './editor-model'
-import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
+import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { othersOf, othersStart } from './others'
-import { fitsStore, storeWritten } from './store-size'
+import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
 
 // The notes pane: three notes of the person's own, one for every session, one
 // for the project, one for this session, kept in `$.store` across sessions.
@@ -22,11 +22,12 @@ const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as st
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
 // What the band shows, set in ../settings/settings: the notes' tab and list here.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
-// The note shown, as the store last held it: drawn again when it changes there.
+// The note shown, as the store last held it, and the longest it may grow to:
+// drawn again when either changes there.
 const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })
-// Why the last save failed, or the last edit was refused: null once a save
-// succeeds (see `unsaved`).
-const notesUnsaved = atom({ plugin: 'dx', key: 'notesUnsaved' } as const, null as string | null, { shape: 'notes-unsaved-1' })
+// Why the last save failed, or the last edit was refused, and which note:
+// shown with that note alone, null once it saves (see `unsaved`).
+const notesUnsaved = atom({ plugin: 'dx', key: 'notesUnsaved' } as const, null as NotesUnsaved | null, { shape: 'notes-unsaved-2' })
 // The first of the other sessions' notes listed, the list scrolled.
 const notesOthersAt = atom({ plugin: 'dx', key: 'notesOthersAt' } as const, 0, { shape: 'notes-others-at-1' })
 
@@ -72,10 +73,22 @@ function save($: EngineInterface, tab: NoteTab, session: string, text: string): 
 const TOO_LONG = `note trop longue (${NOTE_MAX_SHOWN} caractères au plus)`
 const STORE_FULL = "store presque plein : supprimez d'anciennes notes"
 
-// A save failed, an edit was refused, or the notes did not load to keep it:
-// the pane says why until a save succeeds. A handler's write, never a render's.
-async function unsaved($: EngineInterface, reason: string | null): Promise<void> {
-  if ((await read($, notesUnsaved)) !== reason) await update($, notesUnsaved, () => reason)
+// A save of the note under `key` failed, an edit of it was refused, or the
+// notes did not load to keep it: the pane says why, with that note, until it
+// saves; `reason` null, it saved. A `key` unknown (null) stands for any note:
+// said with each, cleared by the next save. A handler's write, never a render's.
+async function unsaved($: EngineInterface, key: string | null, reason: string | null): Promise<void> {
+  const current = await read($, notesUnsaved)
+  if (reason === null) {
+    if (current !== null && (current.key === key || current.key === null)) await update($, notesUnsaved, () => null)
+    return
+  }
+  if (current?.key !== key || current.reason !== reason) await update($, notesUnsaved, () => ({ key, reason }))
+}
+
+// Why the note under `key` is not saved, from `unsaved`, or null.
+function unsavedFor(value: NotesUnsaved | null, key: string): string | null {
+  return value !== null && (value.key === key || value.key === null) ? value.reason : null
 }
 
 // Writes `note` under `key`, `null` deleting it: why it was not, or null.
@@ -102,11 +115,11 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
   const value = await read($, notes)
   if (value === null) {
     const error = await read($, notesError)
-    return unsaved($, `notes non chargées${error === null ? '' : ` : ${error}`}`)
+    return unsaved($, knownKey(tab, session), `notes non chargées${error === null ? '' : ` : ${error}`}`)
   }
   const key = keyOf(value, tab, session)
   const reason = await kept($, key, note)
-  await unsaved($, reason)
+  await unsaved($, key, reason)
   if (reason !== null) return
   await update($, notes, current => {
     if (current === null) return current
@@ -121,9 +134,10 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
 // open: another session writing it shows here within that time.
 const NOTES_POLL_MS = 1000
 
-// Draws the pane again when another session changed the note it shows: the
-// store has no event of its own, and the editor takes the new text. The pane
-// reads `notesSeen`: writing it redraws the pane alone.
+// Draws the pane again when another session changed the note it shows, or
+// the room the store has left for it (the store near full, measured again):
+// the store has no event of its own, and the editor takes the new text and
+// limit. The pane reads `notesSeen`: writing it redraws the pane alone.
 async function notesTick($: EngineInterface): Promise<void> {
   // The view first, a plain read: `isShowing` lists the panes.
   if ((await panelView($)) !== 'notes' || !(await isShowing($, 'notes'))) return
@@ -131,7 +145,8 @@ async function notesTick($: EngineInterface): Promise<void> {
   if (value === null) return
   const { key } = shownNote(value, await read($, notesView))
   const stored = noteOf(await $.store.get(key).catch(() => undefined))
-  const seen = `${key} ${stored?.updatedAt ?? 0}`
+  const max = noteMax(key, stored?.text.length ?? 0, await storeRoom($, true))
+  const seen = `${key} ${stored?.updatedAt ?? 0} ${max}`
   if ((await read($, notesSeen)) === seen) return
   await update($, notesSeen, () => seen)
 }
@@ -228,10 +243,17 @@ export function registerNotes(on: On): void {
   on('ui.message', { module: /editor\.tsx$/, requestId: PANEL }, async ($, e, next) => {
     const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown }
     if (!isTab(data.tab) || typeof data.session !== 'string') return next(e)
-    // An edit the editor did not apply, the note too long: said in its turn
-    // among the saves, which a later one clears.
-    if (data.refused === 'too-long') {
-      await queued(() => unsaved($, TOO_LONG))
+    // An edit the editor did not apply, the note too long or the store's room
+    // short: said with that note, in its turn among the saves, which a later
+    // one of the note clears.
+    if (data.refused === 'too-long' || data.refused === 'store-full') {
+      const reason = data.refused === 'too-long' ? TOO_LONG : STORE_FULL
+      const tab = data.tab
+      const session = data.session
+      await queued(async () => {
+        const value = await read($, notes)
+        await unsaved($, value === null ? knownKey(tab, session) : keyOf(value, tab, session), reason)
+      })
       return {}
     }
     if (typeof data.text !== 'string') return next(e)
@@ -315,15 +337,22 @@ export function registerNotes(on: On): void {
 
     const view = restored ?? (await read($, notesView))
     const options = await read($, settings)
-    const failed = await read($, notesUnsaved)
+    const unsavedNote = await read($, notesUnsaved)
     const othersAt = await read($, notesOthersAt)
 
     const other = view.tab === 'session' ? view.other : undefined
     const { session, key } = shownNote(value, view)
+    // Why this note, and no other, is not saved.
+    const failed = unsavedFor(unsavedNote, key)
     const known = view.tab === 'global' ? value.global : view.tab === 'project' ? value.project : (value.sessions[session] ?? null)
     // As the store holds it: another session may have written it since. The
     // editor takes it as it opens; the last one written wins.
     const note = await $.store.get(key).then(noteOf, () => known)
+    // The longest it may grow to, from the store's size as last estimated
+    // (measured here only when not known yet): kept up to date by dx's own
+    // writes, measured again after each load and, the store near full, as
+    // notesTick polls.
+    const max = noteMax(key, note?.text.length ?? 0, await storeRoom($))
     // Every other session's note, `notesOthers` listed at a time from where
     // the list was scrolled.
     const all = othersOf(value)
@@ -351,6 +380,7 @@ export function registerNotes(on: On): void {
     const othersRows = listed ? { first: end - others.length - 1, end, offset: e.props.scroll.offset } : undefined
     const editor: EditorProps = {
       text: note?.text ?? '',
+      max,
       rows,
       placeholder: 'Cliquer pour écrire. Ces notes restent hors du contexte de Claude.',
       tab: view.tab,

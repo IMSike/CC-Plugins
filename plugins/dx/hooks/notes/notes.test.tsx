@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { BAND, click, engine, NOTES_PANE, NOW, shell, showSettings } from '../shared/testing'
+import { entryBytes, STORE_MAX_BYTES } from './store-size'
 
 test('the notes open on the last tab shown, or on the one set', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -378,7 +379,9 @@ test('a note posted while the notes cannot load says it was not saved', async ($
   await pane.unmount()
 })
 
-// The store near its limit: dx refuses the save before the engine would.
+// The store near its limit, a change posted past what the editor allows (as
+// when another session fills the store meanwhile): dx refuses the save before
+// the engine would.
 test('a note that would fill the store is refused, the store left as it was', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const big = { text: 'x'.repeat(3.8 * 1024 * 1024 - 200), updatedAt: NOW - 1000 }
@@ -513,5 +516,111 @@ test('a paste past the longest note is refused whole, and the pane says why', as
   await pane.key({ key: ' lait', in: 'note-global-s1' })
   expect(store.get('notes.global')).toEqual({ text: 'pain lait', updatedAt: NOW })
   expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// Other sessions' notes, of 90,000 characters at most as the editor writes
+// them, leaving between 600 and 660 bytes of room in the store; `old0`, the
+// latest, listed first.
+function nearlyFull(): Record<string, unknown> {
+  const stored: Record<string, unknown> = {}
+  // The store's braces, two bytes.
+  let left = STORE_MAX_BYTES - 600 - 2
+  for (let index = 0; ; index++) {
+    const key = `notes.session.old${index}`
+    const updatedAt = NOW - 1000 - index
+    const overhead = entryBytes(key, { text: '', updatedAt })
+    if (left <= overhead) return stored
+    const note = { text: 'x'.repeat(Math.min(90_000, left - overhead)), updatedAt }
+    stored[key] = note
+    left -= entryBytes(key, note)
+  }
+}
+
+// The store near its limit: the editor refuses, as it is typed, what the room
+// left may not hold, and says why; a shortening always passes.
+test('typing past the store room is refused as typed, until room is made', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, true, [], {}, nearlyFull())
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'pain', in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+
+  // 600 bytes, less the note's own, hold some 80 characters: 100 refused whole.
+  await pane.key({ key: 'y'.repeat(100), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /yyy/, in: 'note-global-s1' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: "store presque plein : supprimez d'anciennes notes" })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /note trop longue/ })).toBeUndefined()
+
+  // Said with that note alone.
+  await click(pane, 'notes:tab-project')
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await click(pane, 'notes:tab-global')
+  expect(await pane.find({ type: 'Text', text: '⚠ non enregistré' })).toBeDefined()
+
+  // A shortening passes, and clears the warning.
+  await pane.pointer({ type: 'down', x: 4, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'backspace', in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pai', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+
+  // Another note deleted from here: typing passes again.
+  await click(pane, 'notes:tab-session')
+  await click(pane, 'notes:session-old0')
+  await click(pane, 'notes:delete')
+  expect(store.get('notes.session.old0')).toBeUndefined()
+  await click(pane, 'notes:tab-global')
+  await pane.pointer({ type: 'down', x: 3, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'y'.repeat(100), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: `pai${'y'.repeat(100)}`, updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// Room made by another session: seen within a poll of the open pane, the
+// editor left open taking the new limit.
+test('room another session makes lets typing go on, the editor left open', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const store = engine(on, true, [], {}, nearlyFull())
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  await click(band, 'notes')
+  await band.unmount()
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'y'.repeat(100), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /store presque plein/ })).toBeDefined()
+
+  store.delete('notes.session.old0')
+  await clock.advance(1000)
+  await pane.key({ key: 'y'.repeat(100), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'y'.repeat(100), updatedAt: NOW + 1000 })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// A save refused at the last guard says so with its note alone, and another
+// note's save leaves the warning.
+test("a refused save is said with its note, another note's save leaving it", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  engine(on, true, [], {}, {}, true, refused)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  refused.add('store.set')
+  await pane.post({ tab: 'global', session: 's1', text: 'pain' }, { in: 'note-global-s1' })
+  expect(await pane.find({ type: 'Text', text: '⚠ non enregistré' })).toBeDefined()
+  refused.clear()
+  await click(pane, 'notes:tab-project')
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.post({ tab: 'project', session: 's1', text: 'migrer' }, { in: 'note-project-s1' })
+  await click(pane, 'notes:tab-global')
+  expect(await pane.find({ type: 'Text', text: '⚠ non enregistré' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /store over 4 MiB/ })).toBeDefined()
   await pane.unmount()
 })

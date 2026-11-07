@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clicked, drawn, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, rowOf, rowsOf, tooLong } from './editor-model'
+import { clicked, drawn, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, refusalOf, rowOf, rowsOf } from './editor-model'
 import type { Editor } from './editor-model'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
@@ -109,13 +109,24 @@ test('ctrl with backspace erases the word before the cursor, ctrl with delete th
 test('an edit past 95,000 characters is refused, a shortening never', () => {
   const full = 'x'.repeat(NOTE_MAX_CHARS)
   expect(NOTE_MAX_CHARS).toBe(95_000)
-  expect(tooLong('', full)).toBe(false)
-  expect(tooLong(full, `${full}y`)).toBe(true)
+  expect(refusalOf('', full, NOTE_MAX_CHARS)).toBeUndefined()
+  expect(refusalOf(full, `${full}y`, NOTE_MAX_CHARS)).toBe('too-long')
   // A paste past the limit, refused whole.
-  expect(tooLong('abc', 'x'.repeat(NOTE_MAX_CHARS + 10))).toBe(true)
+  expect(refusalOf('abc', 'x'.repeat(NOTE_MAX_CHARS + 10), NOTE_MAX_CHARS)).toBe('too-long')
   // A note longer already, from elsewhere: shortened, never lengthened.
-  expect(tooLong(`${full}yz`, `${full}y`)).toBe(false)
-  expect(tooLong(`${full}y`, `${full}yz`)).toBe(true)
+  expect(refusalOf(`${full}yz`, `${full}y`, NOTE_MAX_CHARS)).toBeUndefined()
+  expect(refusalOf(`${full}y`, `${full}yz`, NOTE_MAX_CHARS)).toBe('too-long')
+})
+
+test("an edit past the store's room is refused, a shortening never", () => {
+  expect(refusalOf('abc', 'abcd', 4)).toBeUndefined()
+  expect(refusalOf('abcd', 'abcde', 4)).toBe('store-full')
+  expect(refusalOf('abc', 'abc' + 'x'.repeat(100), 4)).toBe('store-full')
+  // Past the room already (another session filled the store): shortened,
+  // never lengthened.
+  expect(refusalOf('abcdef', 'abcde', 4)).toBeUndefined()
+  // Past 95,000 characters too: the note is too long whatever the room.
+  expect(refusalOf('', 'x'.repeat(NOTE_MAX_CHARS + 1), 4)).toBe('too-long')
 })
 
 test('the longest note is written with its thousands set apart', () => {

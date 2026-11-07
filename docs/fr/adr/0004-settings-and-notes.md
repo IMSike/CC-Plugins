@@ -29,5 +29,5 @@ Les réglages et les notes sont gardés dans `$.store`, et lus dans `$.state` au
 
 - Les notes restent sur la machine, en clair ; elles ne suivent la personne sur une autre machine que si `~/.claude` est synchronisé.
 - Le fichier du store porte le nom de la copie du plugin : le dx installé, une copie chargée avec `--plugin-dir` et un mod en développement ont chacun leurs réglages et leurs notes.
-- Le fichier grossit avec les notes de session, quelques kilo-octets chacune, et il est réécrit en entier à chaque enregistrement. Depuis, il est plafonné : une note contient au plus 95 000 caractères et le store au plus 3,8 Mio de texte JSON (Claude Code refuse d'écrire au-delà de 4 Mio) ; une modification ou un enregistrement qui les dépasserait est refusé, le panneau disant pourquoi.
+- Le fichier grossit avec les notes de session, quelques kilo-octets chacune, et il est réécrit en entier à chaque enregistrement. Depuis, il est plafonné : une note contient au plus 95 000 caractères et le store au plus 3,8 Mio de texte JSON (Claude Code refuse d'écrire au-delà de 4 Mio) ; une modification qui dépasserait l'un ou l'autre est refusée pendant la frappe, un enregistrement qui dépasserait celui du store aussi, le panneau disant pourquoi.
 - À réévaluer si l'API offre un stockage partagé entre les copies d'un plugin, ou une synchronisation.

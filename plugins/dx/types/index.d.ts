@@ -149,6 +149,10 @@ export type Notes = {
 // The notes pane's tab, and the other session whose note it shows, if any.
 export type NotesView = { tab: NoteTab; other?: string }
 
+// A note not saved: its store key, null when it could not be known (the
+// notes not loaded, the project's root unknown), and why.
+export type NotesUnsaved = { key: string | null; reason: string }
+
 declare module 'claude-code' {
   interface PluginState {
     dx: {
@@ -163,11 +167,12 @@ declare module 'claude-code' {
       // Why the notes could not be loaded, shown in their pane; null once loaded.
       notesError: Shaped<string | null>
       notesView: Shaped<NotesView>
-      // The note the notes pane shows, as the store last held it: key and time.
+      // The note the notes pane shows, as the store last held it: key, time,
+      // and the longest it may grow to.
       notesSeen: Shaped<string | null>
-      // Why the last save of a note failed, or an edit was refused; null once
-      // a save succeeds.
-      notesUnsaved: Shaped<string | null>
+      // Why the last save of a note failed, or an edit was refused, and which
+      // note; null once that note saves.
+      notesUnsaved: Shaped<NotesUnsaved | null>
       // The first of the other sessions' notes listed, the list scrolled.
       notesOthersAt: Shaped<number>
       panel: Shaped<PanelView>

@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import { clicked, drawn, keyed, rowOf, rowsOf, tooLong } from './editor-model'
+import { clicked, drawn, keyed, refusalOf, rowOf, rowsOf } from './editor-model'
 import type { EditorState } from './editor-model'
 
 // The notes editor, drawn on the surface's own thread: a click gives it the
@@ -11,6 +11,9 @@ export type EditorProps = {
   // The note's text as the store holds it: taken when the editor opens, and
   // again when another session changed it; an echo of its own posts is not.
   text: string
+  // The longest the note may grow to now: NOTE_MAX_CHARS, or less when the
+  // store's room left holds less. Given again at each draw, the room changed.
+  max: number
   rows: number
   placeholder: string
   // Which note: echoed in every post.
@@ -44,10 +47,12 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
         surface.setState(next)
         return
       }
-      // Too long: not applied, the hooks module told, which says why.
-      if (tooLong(state.text, next.text)) {
+      // Too long, or past the store's room: not applied, the hooks module
+      // told, which says why.
+      const refused = refusalOf(state.text, next.text, latest.props.max)
+      if (refused !== undefined) {
         if (!state.active) surface.setState({ ...state, active: true })
-        surface.post({ tab: latest.props.tab, session: latest.props.session, refused: 'too-long' })
+        surface.post({ tab: latest.props.tab, session: latest.props.session, refused })
         return
       }
       surface.setState({ ...next, sent: [...next.sent, next.text].slice(-SENT_KEPT) })

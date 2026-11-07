@@ -12,11 +12,18 @@ export const NOTE_MAX_CHARS = 95_000
 // NOTE_MAX_CHARS as the pane writes it, its thousands set apart by a space.
 export const NOTE_MAX_SHOWN = String(NOTE_MAX_CHARS).replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
 
-// Whether going from `before` to `after` is refused for length: past
-// NOTE_MAX_CHARS, an edit that lengthens the note is not applied, a paste
-// whole rather than cut. A note already longer may still be shortened.
-export function tooLong(before: string, after: string): boolean {
-  return after.length > NOTE_MAX_CHARS && after.length > before.length
+// Why an edit is not applied: the note past NOTE_MAX_CHARS, or past what the
+// store's room left holds (`max`, which the hooks module gives).
+export type Refusal = 'too-long' | 'store-full'
+
+// Why going from `before` to `after` is refused, or undefined: past `max`
+// characters, NOTE_MAX_CHARS at the most, an edit that lengthens the note is
+// not applied, a paste whole rather than cut. A note already longer may still
+// be shortened. Past NOTE_MAX_CHARS, the note is too long whatever the room.
+export function refusalOf(before: string, after: string, max: number): Refusal | undefined {
+  if (after.length <= before.length) return undefined
+  if (after.length > NOTE_MAX_CHARS) return 'too-long'
+  return after.length > max ? 'store-full' : undefined
 }
 
 // A visual row: `text.slice(start, end)`, its line's newline left out.

@@ -29,5 +29,5 @@ Settings and notes are kept in `$.store`, and read into `$.state` when the sessi
 
 - The notes are kept on the machine, in plain text; they follow the person to another machine only if `~/.claude` is synced.
 - The store file is named after the plugin's copy: the installed dx, a copy loaded with `--plugin-dir` and a mod in development each keep their own settings and notes.
-- The file grows with the session notes, a few kilobytes each, and is written whole at each save. Since then, it is capped: a note holds at most 95,000 characters and the store at most 3.8 MiB of JSON text (Claude Code refuses to write past 4 MiB); an edit or a save past them is refused, the pane saying why.
+- The file grows with the session notes, a few kilobytes each, and is written whole at each save. Since then, it is capped: a note holds at most 95,000 characters and the store at most 3.8 MiB of JSON text (Claude Code refuses to write past 4 MiB); an edit that would pass either is refused as it is typed, a save past the store's limit too, the pane saying why.
 - To be reassessed if the API offers storage shared across copies of a plugin, or syncing.

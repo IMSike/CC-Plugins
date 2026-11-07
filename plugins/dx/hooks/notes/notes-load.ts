@@ -40,6 +40,12 @@ export function keyOf(value: Notes, tab: NoteTab, session: string): string {
   return tab === 'global' ? GLOBAL_KEY : tab === 'project' ? PROJECT_PREFIX + value.root : SESSION_PREFIX + session
 }
 
+// Where a note is kept, the notes not loaded: unknown for the project's,
+// whose key holds the project's root.
+export function knownKey(tab: NoteTab, session: string): string | null {
+  return tab === 'global' ? GLOBAL_KEY : tab === 'project' ? null : SESSION_PREFIX + session
+}
+
 // The note `view` shows: the session whose note the session tab holds (another
 // one's, or this one's), and the note's key.
 export function shownNote(value: Notes, view: NotesView): { session: string; key: string } {
