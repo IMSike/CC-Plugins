@@ -181,36 +181,59 @@ test('a settings read the store refuses keeps the settings', async ($, on) => {
 })
 
 // Never read since the session started, the settings it holds are the
-// defaults: a change is not applied over the store's, and says why.
+// defaults: a change is not applied over the store's, and the pane says why
+// until a change reads them.
 test('a change with the settings never read is not saved over the stored ones', async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set(['store.get settings'])
   refuseSettingsRead(on, refused)
   const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
   shell(on)
-  const toasts: string[] = []
-  on('ui.toast', (_, e) => {
-    toasts.push(e.text)
-
-    return { value: undefined }
-  })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const pane = await showSettings($)
   await click(pane, 'settings:show-total')
   expect(store.get('settings')).toEqual({ frameColor: '#58a6ff' })
-  expect(toasts.some(text => /^dx : réglage non appliqué, réglages illisibles \(.*store locked\)$/.test(text))).toBe(true)
+  const warning = await pane.find({ type: 'Text', text: /^⚠ réglages illisibles : .*store locked \(changement non appliqué\)$/ })
+  expect(warning?.props.color).toBe('error')
 
   refused.clear()
   await click(pane, 'settings:show-total')
+  expect(await pane.find({ type: 'Text', text: /illisibles/ })).toBeUndefined()
   await pane.unmount()
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
+})
+
+// The `⚙` icon reads the settings again: once the store answers, the warning
+// goes, with the stored settings shown.
+test('the settings icon clears the unreadable warning once the store is read', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['store.get settings'])
+  refuseSettingsRead(on, refused)
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  await click(pane, 'settings:show-total')
+  expect(await pane.find({ type: 'Text', text: /illisibles/ })).toBeDefined()
+  await pane.unmount()
+
+  refused.clear()
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await click(band, 'settings')
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+  const again = await $.ui.mount(SETTINGS_PANE)
+  expect(await again.find({ type: 'Text', text: /illisibles/ })).toBeUndefined()
+  await again.unmount()
 })
 
 // Empties dx's settings as the engine may at a `/clear`, from the call it
 // returns on: each read as absent while it stands at the version it had,
 // until written.
-const EMPTIED_KEYS = ['settings', 'settingsUnsaved']
+const EMPTIED_KEYS = ['settings', 'settingsUnsaved', 'settingsUnreadable']
 function emptySettings(on: On): () => void {
   let isEmpty = false
   const emptied = new Map<string, number>()

@@ -177,6 +177,10 @@ declare module 'claude-code' {
       // Why the last change of the settings was not saved, shown in their
       // pane; null once a change saves.
       settingsUnsaved: Shaped<string | null>
+      // Why the settings could not be read, the session having never read
+      // them: a change was not applied. Shown in their pane; null once a read
+      // succeeds.
+      settingsUnreadable: Shaped<string | null>
       notes: Shaped<Notes | null>
       // Why the notes could not be loaded, shown in their pane; null once loaded.
       notesError: Shaped<string | null>

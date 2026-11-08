@@ -44,6 +44,11 @@ const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTIN
 const settingsUnsaved = atom({ plugin: 'dx', key: 'settingsUnsaved' } as const, null as string | null, {
   shape: 'settings-unsaved-1',
 })
+// Why the settings could not be read, the session having never read them: a
+// change was not applied. Said in the pane until a read succeeds.
+const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as const, null as string | null, {
+  shape: 'settings-unreadable-1',
+})
 
 const STORE_KEY = 'settings'
 // The toggles go in two columns from this inner width.
@@ -58,30 +63,32 @@ const ICON_COLUMNS = 26
 // and a change never writes them over those.
 let settingsLoaded = false
 
-// What this session holds of its settings, and the warning said with them:
+// What this session holds of its settings, and the warnings said with them:
 // kept in the hooks module's memory as in the state, since a `/clear` leaves
 // the module (the process goes on, no `session.start` fires) while it may
 // empty dx's state, the settings then read as the defaults. Never in the
 // store, which every session reads.
-type Held = { value: BandSettings; unsaved: string | null }
-let held: Held = { value: DEFAULT_SETTINGS, unsaved: null }
+type Held = { value: BandSettings; unsaved: string | null; unreadable: string | null }
+let held: Held = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
 
 // Takes `changes` into what this session holds, and writes into the state what
 // it lacks of it: with no changes, puts back what a `/clear` emptied. Run among
 // the changes (`changing`), never as a drawing, which may not write the state.
 async function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
   held = { ...held, ...changes }
-  const { value, unsaved } = held
+  const { value, unsaved, unreadable } = held
   if (JSON.stringify(await read($, settings)) !== JSON.stringify(value)) await update($, settings, () => value)
   if ((await read($, settingsUnsaved)) !== unsaved) await update($, settingsUnsaved, () => unsaved)
+  if ((await read($, settingsUnreadable)) !== unreadable) await update($, settingsUnreadable, () => unreadable)
 }
 
-// The settings drawn and their warning: as this session holds them, which the
+// The settings drawn and their warnings: as this session holds them, which the
 // state matches but after a `/clear` emptied it. The state is read all the
 // same, the pane drawn again as it changes.
 async function shownSettings($: EngineInterface): Promise<Held> {
   await read($, settings)
   await read($, settingsUnsaved)
+  await read($, settingsUnreadable)
   return held
 }
 
@@ -95,7 +102,7 @@ async function loadSettings($: EngineInterface): Promise<void> {
     return
   }
   settingsLoaded = true
-  await hold($, { value: settingsOf(stored) })
+  await hold($, { value: settingsOf(stored), unreadable: null })
 }
 
 // Called by ../register once the session has started, before the features
@@ -103,7 +110,11 @@ async function loadSettings($: EngineInterface): Promise<void> {
 // holds.
 export async function startSettings($: EngineInterface): Promise<void> {
   settingsLoaded = false
-  held = { value: await read($, settings), unsaved: await read($, settingsUnsaved) }
+  held = {
+    value: await read($, settings),
+    unsaved: await read($, settingsUnsaved),
+    unreadable: await read($, settingsUnreadable),
+  }
   await loadSettings($)
 }
 
@@ -138,8 +149,8 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
 // Applies `edit` to the settings (`changeBase`) and keeps the result; two
 // changes in a row both land. A save that fails leaves the change applied to
 // this session alone, and the pane says why (`settingsUnsaved`) until one
-// saves. A change with no settings to start from is not applied: a toast says
-// why.
+// saves. A change with no settings to start from is not applied, and the pane
+// says why (`settingsUnreadable`) until a read succeeds.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
     await hold($, {})
@@ -147,10 +158,10 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
     try {
       base = await changeBase($)
     } catch (error) {
-      $.ui.toast(`dx : réglage non appliqué, réglages illisibles (${errorText(error)})`)
+      await hold($, { unreadable: errorText(error) })
       return
     }
-    await hold($, { value: edit(base) })
+    await hold($, { value: edit(base), unreadable: null })
     await save($)
   }).catch(() => undefined)
 
@@ -235,7 +246,7 @@ export function registerSettings(on: On): void {
     // Input and Client are drawn there alone.
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
-    const { value, unsaved } = await shownSettings($)
+    const { value, unsaved, unreadable } = await shownSettings($)
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
@@ -361,6 +372,9 @@ export function registerSettings(on: On): void {
     return (
       <Box flexDirection="column">
         {tabs}
+        {unreadable !== null && (
+          <Text key="unreadable" color="error" wrap="wrap">{`⚠ réglages illisibles : ${unreadable} (changement non appliqué)`}</Text>
+        )}
         {unsaved !== null && <Text key="unsaved" color="error" wrap="wrap">{`⚠ réglages non enregistrés : ${unsaved}`}</Text>}
         {section('show', 'Affichage', [
           <Box key="show-grid" flexWrap="wrap">
