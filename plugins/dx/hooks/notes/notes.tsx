@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesUnsaved, NotesView } from '../../types'
-import { paneTabs } from '../activity/activity'
+import { keepTaskTabs, paneTabs } from '../activity/activity'
 import { dayTime, errorText } from '../shared/format'
 import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
@@ -338,7 +338,7 @@ export function registerNotes(on: On): void {
       }
     }
     const { Box, Client, Text } = $.ui.resolve(e)
-    const { tabs: panes, rows: panesRows } = await paneTabs($, e, 'notes', e.props.bodyColumns)
+    const { tabs: panes, rows: panesRows, actions: paneActions } = await paneTabs($, e, 'notes', e.props.bodyColumns)
     // The presses drawn, whose actions take pressActions' place as the tree is
     // returned.
     const { actions: presses, press } = pressBoard<NotesPress>(Client, 'notes:')
@@ -355,6 +355,7 @@ export function registerNotes(on: On): void {
         </Box>
       )
       pressActions = presses
+      keepTaskTabs(paneActions)
       othersList = undefined
       return unavailable
     }
@@ -479,6 +480,7 @@ export function registerNotes(on: On): void {
     // What the presses and the wheel act on, taken up with nothing awaited any
     // more: it matches the tree returned, never mixed with another render's.
     pressActions = presses
+    keepTaskTabs(paneActions)
     othersList = othersRows
     return tree
   })

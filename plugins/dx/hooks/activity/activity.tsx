@@ -237,6 +237,13 @@ type TabPress = { view: 'notes' | 'settings' } | { task: string }
 // settings' tabs are answered by their own features.
 let taskTabs = new Map<string, string>()
 
+// Takes up the terminals' tabs a render drew (paneTabs' `actions`), called by
+// that render once nothing is awaited any more (../shared/presses), with its
+// own presses.
+export function keepTaskTabs(actions: Map<string, string>): void {
+  taskTabs = actions
+}
+
 // A tab pressed where no Client draws (a Button's press): the notes and the
 // settings draw only where one does, so their own loading is not needed here.
 async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
@@ -247,8 +254,14 @@ async function tabPressed($: EngineInterface, action: TabPress): Promise<void> {
 // The panel's tabs, atop each of its contents: the notes, the settings, and a
 // terminal per background task, the one in front marked; `rows`, what they
 // take with their margin. Each is drawn by ../shared/press.tsx: the terminal
-// selects nothing however the clicks come.
-export async function paneTabs($: EngineInterface, e: PaneRender, current: PanelView, columns: number): Promise<{ tabs: RenderElement; rows: number }> {
+// selects nothing however the clicks come. `actions`, the task each
+// terminal's tab shows, for the render to hand to keepTaskTabs.
+export async function paneTabs(
+  $: EngineInterface,
+  e: PaneRender,
+  current: PanelView,
+  columns: number,
+): Promise<{ tabs: RenderElement; rows: number; actions: Map<string, string> }> {
   const elements = $.ui.resolve(e)
   const { Box, Button, Text } = elements
   const { tasks } = await read($, activity)
@@ -290,8 +303,7 @@ export async function paneTabs($: EngineInterface, e: PaneRender, current: Panel
       {terminals}
     </Box>
   )
-  taskTabs = board?.actions ?? new Map()
-  return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1 }
+  return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1, actions: board?.actions ?? new Map() }
 }
 
 // Puts a subagent's transcript in view (a click on its icon), or the main
@@ -368,7 +380,7 @@ export function registerActivity(on: On): void {
     const view = await read($, taskView)
     if (view === null || (await panelView($)) !== 'task') return next(e)
     const { Box, Text } = $.ui.resolve(e)
-    const { tabs, rows } = await paneTabs($, e, 'task', e.props.bodyColumns)
+    const { tabs, rows, actions } = await paneTabs($, e, 'task', e.props.bodyColumns)
     const columns = Math.max(10, e.props.bodyColumns)
     const commandRows = `$ ${view.command}`
       .split('\n')
@@ -377,6 +389,8 @@ export function registerActivity(on: On): void {
     const room = Math.max(1, e.props.scroll.bodyRows - commandRows - rows - 1)
     const lines = view.lines.slice(-room)
 
+    // Nothing is awaited from here on: the tabs drawn replace the last ones.
+    keepTaskTabs(actions)
     return (
       <Box flexDirection="column">
         {tabs}

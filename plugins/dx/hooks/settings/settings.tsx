@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderChildren } from 'claude-code'
 
 import type { BandSettings, BottomFact } from '../../types'
-import { paneTabs } from '../activity/activity'
+import { keepTaskTabs, paneTabs } from '../activity/activity'
 import {
   ACCENTS,
   ANIMATE_LABELS,
@@ -149,7 +149,7 @@ export function registerSettings(on: On): void {
     if ((await panelView($)) !== 'settings') return next(e)
     const value = await read($, settings)
     const { Box, Client, Input, Text } = $.ui.resolve(e)
-    const { tabs } = await paneTabs($, e, 'settings', e.props.bodyColumns)
+    const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
     const inner = Math.max(20, e.props.bodyColumns - 4)
     const half = inner >= TWO_COLUMNS_FROM ? Math.floor(inner / 2) : inner
@@ -165,6 +165,7 @@ export function registerSettings(on: On): void {
     // Nothing is awaited from here on: the presses drawn replace the last ones.
     const board = pressBoard<(current: BandSettings) => BandSettings>(Client, 'settings:')
     pressActions = board.actions
+    keepTaskTabs(paneActions)
     const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) =>
       board.press(key, edit, parts, hover, width)
     const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })
