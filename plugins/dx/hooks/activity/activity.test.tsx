@@ -24,6 +24,29 @@ test("a background shell's icon opens its command and output, and closes them", 
   await ui.unmount()
 })
 
+// A `/clear` goes on under a new session id: a task started after it writes
+// to that session's folder, not to the one found before.
+test("a task started after a /clear shows its output, from the new session's folder", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const session = { id: 's1' }
+  const files = { ...OUTPUT, '/claude/C--Users-dev-repo-app/s2/tasks/m1.output': 'tail started\n' }
+  engine(on, { files, session })
+  shell(on)
+  on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  await $.tool.call({ tool: 'Monitor', command: 'tail -f app.log' } as never)
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-m1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^tail started$/ })).toBeDefined()
+  await pane.unmount()
+})
+
 test("the panel's tabs lead from the notes to a terminal and the settings", async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: OUTPUT })

@@ -51,8 +51,10 @@ const CHECKS_MS = [2_000, 10_000, 60_000, 300_000, 900_000]
 const ended = new Set<string>()
 
 // The folder the engine writes background output to, once known: named by an
-// Agent result, else worked out from the session (tasksDirOf).
-let tasksDir: string | undefined
+// Agent result, else worked out from the session (tasksDirOf). Kept with the
+// session id it was known for: a `/clear` goes on under a new id, whose tasks
+// write to a folder of their own.
+let tasksDir: { session: string; dir: string } | undefined
 
 async function processTree($: EngineInterface): Promise<ProcessTree> {
   if ((await $.env.get('OS')) === 'Windows_NT') {
@@ -78,19 +80,19 @@ async function refreshAgents($: EngineInterface): Promise<void> {
 async function outputPath($: EngineInterface, id: string, result: unknown): Promise<string | undefined> {
   const named = outputOf(result, id)
   if (named !== undefined) return named
-  if (tasksDir === undefined) {
-    const [override, temp, tmpdir, cwd, session] = await Promise.all([
+  const session = await $.session.id()
+  if (tasksDir?.session !== session) {
+    const [override, temp, tmpdir, cwd] = await Promise.all([
       $.env.get('CLAUDE_CODE_TMPDIR'),
       $.env.get('TEMP'),
       $.env.get('TMPDIR'),
       $.session.cwd(),
-      $.session.id(),
     ])
     const root = override ?? temp ?? tmpdir
     if (root === undefined) return undefined
-    tasksDir = tasksDirOf(root, cwd, session)
+    tasksDir = { session, dir: tasksDirOf(root, cwd, session) }
   }
-  return `${tasksDir}/${id}.output`
+  return `${tasksDir.dir}/${id}.output`
 }
 
 // Reads the shown task's output, while the panel shows it.
@@ -338,7 +340,8 @@ export function registerActivity(on: On): void {
     const ran = await next(e)
     // Cast: of the kinds of Agent result, only some name a file.
     const file = (ran.result as { outputFile?: string } | undefined)?.outputFile
-    if (ran.deny === undefined && file !== undefined) tasksDir = file.replace(/[\\/][^\\/]+$/, '')
+    const session = ran.deny === undefined && file !== undefined ? await $.session.id().catch(() => undefined) : undefined
+    if (session !== undefined && file !== undefined) tasksDir = { session, dir: file.replace(/[\\/][^\\/]+$/, '') }
 
     return ran
   })
