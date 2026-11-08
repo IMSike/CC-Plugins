@@ -35,13 +35,17 @@ export function entryBytes(key: string, value: unknown): number {
 // Every entry's size, by key: measured once (every key read), then kept up
 // to date by the writes that go through `storeWritten`. Other sessions, and
 // dx's other writes, change the store unseen: the estimate is measured again
-// at each load of the notes, and before a write is refused.
+// at each load of the notes, before a write is refused, and, the room short,
+// as the pane polls (`storeRoom` called `fresh`).
 let sizes: Map<string, number> | undefined
 // When `sizes` was last measured, on the engine's clock.
 let measuredAt = 0
 // The last entry `fitsStore` measured: `storeWritten`, writing that very
 // value, takes its size from here rather than turn a long note into JSON again.
 let last: { key: string; value: unknown; size: number } | undefined
+// The writes made while each measurement under way reads the store, by key
+// (null for a deletion): it may have read an entry before its write.
+const writesDuring = new Set<Map<string, number | null>>()
 
 // How old a measurement may be for a refusal to stand on it. Near the limit,
 // each key typed is refused: measuring the whole store again for each would
@@ -50,13 +54,26 @@ let last: { key: string; value: unknown; size: number } | undefined
 // seen within this time, as often as the pane reads its note again.
 const MEASURE_MS = 1000
 
+// Measures the store and keeps the result as `sizes`, the writes made
+// meanwhile laid over it: a save that lands during the reads is never lost.
 async function measure($: EngineInterface): Promise<Map<string, number>> {
-  const keys = await $.store.keys()
-  const values = await Promise.all(keys.map(key => $.store.get(key)))
-  const measured = new Map<string, number>()
-  keys.forEach((key, index) => measured.set(key, entryBytes(key, values[index])))
-  measuredAt = await $.clock.now()
-  return measured
+  const writes = new Map<string, number | null>()
+  writesDuring.add(writes)
+  try {
+    const keys = await $.store.keys()
+    const values = await Promise.all(keys.map(key => $.store.get(key)))
+    const measured = new Map<string, number>()
+    keys.forEach((key, index) => measured.set(key, entryBytes(key, values[index])))
+    measuredAt = await $.clock.now()
+    for (const [key, size] of writes) {
+      if (size === null) measured.delete(key)
+      else measured.set(key, size)
+    }
+    sizes = measured
+    return measured
+  } finally {
+    writesDuring.delete(writes)
+  }
 }
 
 function total(of: Map<string, number>): number {
@@ -81,11 +98,9 @@ export async function fitsStore($: EngineInterface, key: string, value: unknown)
   last = { key, value, size }
   const over = (of: Map<string, number>) => total(of) - (of.get(key) ?? 0) + size > STORE_MAX_BYTES
   try {
-    sizes ??= await measure($)
-    if (!over(sizes)) return true
+    if (!over(sizes ?? (await measure($)))) return true
     if ((await $.clock.now()) - measuredAt < MEASURE_MS) return false
-    sizes = await measure($)
-    return !over(sizes)
+    return !over(await measure($))
   } catch {
     return true
   }
@@ -119,11 +134,11 @@ const SHORT_ROOM = NOTE_MAX_CHARS * UNIT_MAX_BYTES + 1024
 // be read: then it bounds nothing, as `fitsStore` refuses nothing.
 export async function storeRoom($: EngineInterface, fresh = false): Promise<number | undefined> {
   try {
-    sizes ??= await measure($)
-    if (fresh && STORE_MAX_BYTES - total(sizes) < SHORT_ROOM && (await $.clock.now()) - measuredAt >= MEASURE_MS) {
-      sizes = await measure($)
+    let known = sizes ?? (await measure($))
+    if (fresh && STORE_MAX_BYTES - total(known) < SHORT_ROOM && (await $.clock.now()) - measuredAt >= MEASURE_MS) {
+      known = await measure($)
     }
-    return STORE_MAX_BYTES - total(sizes)
+    return STORE_MAX_BYTES - total(known)
   } catch {
     return undefined
   }
@@ -143,9 +158,13 @@ export function noteMax(key: string, stored: number, room: number | undefined): 
   return Math.min(NOTE_MAX_CHARS, stored + growth)
 }
 
-// A write under `key` done: the estimate follows it, `null` for a deletion.
+// A write under `key` done: the estimate follows it, and so will each
+// measurement under way; `null` for a deletion.
 export function storeWritten(key: string, value: unknown): void {
+  if (sizes === undefined && writesDuring.size === 0) return
+  const size = value === null ? null : last !== undefined && last.key === key && last.value === value ? last.size : entryBytes(key, value)
+  for (const writes of writesDuring) writes.set(key, size)
   if (sizes === undefined) return
-  if (value === null) sizes.delete(key)
-  else sizes.set(key, last !== undefined && last.key === key && last.value === value ? last.size : entryBytes(key, value))
+  if (size === null) sizes.delete(key)
+  else sizes.set(key, size)
 }

@@ -1,7 +1,8 @@
 import { expect, test } from 'claude-code/testing'
+import type { EngineInterface } from 'claude-code'
 
 import { NOTE_MAX_CHARS } from './editor-model'
-import { entryBytes, noteMax, STORE_MAX_BYTES, UNIT_MAX_BYTES, utf8Length } from './store-size'
+import { entryBytes, forgetStoreSize, noteMax, STORE_MAX_BYTES, storeRoom, storeWritten, UNIT_MAX_BYTES, utf8Length } from './store-size'
 
 test('a text is measured in UTF-8 bytes', () => {
   expect(utf8Length('abc')).toBe(3)
@@ -44,4 +45,33 @@ test('a note may grow by what the room left holds at six bytes a character', () 
   // Room enough, or a store that cannot be read: 95,000 characters.
   expect(noteMax(key, 10, STORE_MAX_BYTES)).toBe(NOTE_MAX_CHARS)
   expect(noteMax(key, 10, undefined)).toBe(NOTE_MAX_CHARS)
+})
+
+// A render's measurement reading the store as a note is saved: the save's
+// size stays in the estimate, whichever value the measurement read.
+test('a note saved while the store is measured keeps its size in the estimate', async () => {
+  forgetStoreSize()
+  const key = 'notes.global'
+  const before = { text: 'a', updatedAt: 1 }
+  const after = { text: 'x'.repeat(1000), updatedAt: 2 }
+  let release = () => {}
+  const reading = new Promise<void>(resolve => {
+    release = resolve
+  })
+  // The store as the measurement reads it: the note before the save.
+  const $ = {
+    store: {
+      keys: async () => {
+        await reading
+        return [key]
+      },
+      get: async () => before,
+    },
+    clock: { now: async () => 0 },
+  } as unknown as EngineInterface
+  const room = storeRoom($)
+  storeWritten(key, after)
+  release()
+  expect(await room).toBe(STORE_MAX_BYTES - 2 - entryBytes(key, after))
+  forgetStoreSize()
 })
