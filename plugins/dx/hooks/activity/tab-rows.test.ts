@@ -35,3 +35,19 @@ test('a text is counted in cells', () => {
   // A Nerd Font glyph, as the engine counts it.
   expect(cellWidth('\u{F489}')).toBe(1)
 })
+
+test('an emoji sequence counts as one emoji, a flag too', () => {
+  // A skin tone, alone or within a joined sequence: no cell more.
+  expect(cellWidth('\u{1F44D}\u{1F3FB}')).toBe(2)
+  expect(cellWidth('\u{1F469}\u{1F3FD}\u{200D}\u{1F4BB}')).toBe(2)
+  expect(cellWidth('\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}')).toBe(2)
+  // Regional indicators by pairs: one flag, then two.
+  expect(cellWidth('\u{1F1EB}\u{1F1F7}')).toBe(2)
+  expect(cellWidth('\u{1F1EB}\u{1F1F7}\u{1F1E9}\u{1F1EA}')).toBe(4)
+})
+
+// A joiner between letters shapes them; it hides neither.
+test('a joiner between letters leaves each its cell', () => {
+  expect(cellWidth('\u{0644}\u{200D}\u{0627}')).toBe(2)
+  expect(cellWidth('\u{0915}\u{094D}\u{200D}\u{0937}')).toBe(2)
+})
