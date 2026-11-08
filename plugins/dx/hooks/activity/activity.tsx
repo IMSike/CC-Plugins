@@ -16,6 +16,7 @@ import {
   POSIX_TREE,
   SHELLS,
   shellOf,
+  tasksDirFor,
   tasksDirOf,
   WINDOWS_TREE,
 } from './tasks'
@@ -54,7 +55,7 @@ const ended = new Set<string>()
 // The folder the engine writes background output to, once known: named by an
 // Agent result, else worked out from the session (tasksDirOf). Kept with the
 // session id it was known for: a `/clear` goes on under a new id, whose tasks
-// write to a folder of their own.
+// write to a folder of their own: the known one with the new id (tasksDirFor).
 let tasksDir: { session: string; dir: string } | undefined
 
 async function processTree($: EngineInterface): Promise<ProcessTree> {
@@ -84,6 +85,10 @@ async function outputPath($: EngineInterface, id: string, result: unknown): Prom
   if (named !== undefined) return named
   const session = await $.session.id().catch(() => tasksDir?.session)
   if (session === undefined) return undefined
+  // After a `/clear`, the folder known moved to the new session's, else
+  // worked out.
+  const moved = tasksDir === undefined ? undefined : tasksDirFor(tasksDir.dir, tasksDir.session, session)
+  if (tasksDir?.session !== session && moved !== undefined) tasksDir = { session, dir: moved }
   if (tasksDir?.session !== session) {
     const [override, temp, tmpdir, cwd] = await Promise.all([
       $.env.get('CLAUDE_CODE_TMPDIR'),

@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cliAgentUnder, encodeCommand, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirOf } from './tasks'
+import { cliAgentUnder, encodeCommand, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor, tasksDirOf } from './tasks'
 import type { Proc } from './tasks'
 
 const proc = (pid: number, ppid: number, name: string, cmd = name): Proc => ({ pid, ppid, name, cmd })
@@ -56,4 +56,12 @@ test('the output file is the one a result names, else the session tasks folder',
   expect(tasksDirOf('C:\\Users\\dev\\AppData\\Local\\Temp\\', String.raw`C:\Users\dev\repo\CC-Plugins`, 's1'))
     .toBe(String.raw`C:\Users\dev\AppData\Local\Temp/claude/C--Users-dev-repo-CC-Plugins/s1/tasks`)
   expect(tasksDirOf('/tmp/', '/home/dev/app', 's1')).toBe('/tmp/claude/-home-dev-app/s1/tasks')
+})
+
+test("a known tasks folder moves to another session's, whatever the project's name", () => {
+  expect(tasksDirFor(String.raw`C:\Temp\claude\9f3a\s1\tasks`, 's1', 's2')).toBe(String.raw`C:\Temp\claude\9f3a\s2\tasks`)
+  expect(tasksDirFor('/tmp/claude/9f3a/s1/tasks', 's1', 's2')).toBe('/tmp/claude/9f3a/s2/tasks')
+  // Not that session's folder, or one whose name merely ends with its id.
+  expect(tasksDirFor('/tmp/claude/9f3a/s1/other', 's1', 's2')).toBeUndefined()
+  expect(tasksDirFor('/tmp/claude/9f3a/xs1/tasks', 's1', 's2')).toBeUndefined()
 })

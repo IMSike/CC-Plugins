@@ -138,3 +138,14 @@ export function outputOf(result: unknown, id: string): string | undefined {
 export function tasksDirOf(temp: string, cwd: string, session: string): string {
   return `${temp.replace(/[\\/]+$/, '')}/claude/${cwd.replace(/[^A-Za-z0-9]/g, '-')}/${session}/tasks`
 }
+
+// A tasks folder known for one session, moved to another: the engine names
+// each session's `<…>/<session>/tasks`, the part before it however it likes
+// (not always the encoded directory tasksDirOf builds). Undefined when `dir`
+// does not end so.
+export function tasksDirFor(dir: string, from: string, to: string): string | undefined {
+  const start = dir.length - from.length - '/tasks'.length
+  const isSession = /[\\/]$/.test(dir.slice(0, start)) && dir.slice(start, start + from.length) === from
+  if (!isSession || !/^[\\/]tasks$/.test(dir.slice(start + from.length))) return undefined
+  return `${dir.slice(0, start)}${to}${dir.slice(start + from.length)}`
+}
