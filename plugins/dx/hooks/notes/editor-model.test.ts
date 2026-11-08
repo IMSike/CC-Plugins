@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clicked, drawn, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, refusalOf, rowOf, rowsOf, thousands } from './editor-model'
+import { clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, refusalOf, rowOf, rowsOf, thousands } from './editor-model'
 import type { Editor } from './editor-model'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
@@ -118,6 +118,44 @@ test('an edit past 95,000 characters is refused, a shortening never', () => {
   expect(refusalOf(`${full}y`, `${full}yz`, NOTE_MAX_CHARS)).toBe('too-long')
 })
 
+test('a note is counted as written in JSON, an escaped character taking more', () => {
+  expect(encodedLength('')).toBe(0)
+  expect(encodedLength('pain lait')).toBe(9)
+  expect(encodedLength('éà€ß')).toBe(4)
+  // A quote, a backslash, a line break, a tab, a carriage return, a
+  // backspace, a form feed: two each.
+  expect(encodedLength('"')).toBe(2)
+  expect(encodedLength('\\')).toBe(2)
+  expect(encodedLength('a\nb')).toBe(4)
+  expect(encodedLength('\t\r\b\f')).toBe(8)
+  // Any other control character: six, `\u0001`; DEL is not one of them.
+  expect(encodedLength('\u0001')).toBe(6)
+  expect(encodedLength('\u001b')).toBe(6)
+  expect(encodedLength('\u007f')).toBe(1)
+  // An emoji: its two UTF-16 units, as `length` counts it; a lone half, six.
+  expect(encodedLength('😀')).toBe(2)
+  expect(encodedLength('\ud83d')).toBe(6)
+  // U+2028 is left as it is.
+  expect(encodedLength('\u2028')).toBe(1)
+})
+
+test('the limit counts the encoded note, its raw length shorter', () => {
+  // 47,500 line breaks: 95,000 characters encoded.
+  const lines = '\n'.repeat(NOTE_MAX_CHARS / 2)
+  expect(refusalOf('', lines, NOTE_MAX_CHARS)).toBeUndefined()
+  expect(refusalOf(lines, `${lines}y`, NOTE_MAX_CHARS)).toBe('too-long')
+  // Line breaks pasted into a long text: refused, its raw length within.
+  const text = 'x'.repeat(94_000)
+  expect(refusalOf(text, `${text}${'\n'.repeat(600)}`, NOTE_MAX_CHARS)).toBe('too-long')
+  expect(refusalOf(text, `${text}${'"'.repeat(500)}`, NOTE_MAX_CHARS)).toBeUndefined()
+  // Past the limit already: shortened, or left as long, never lengthened.
+  const over = '\n'.repeat(50_000)
+  expect(refusalOf(over, over.slice(1), NOTE_MAX_CHARS)).toBeUndefined()
+  expect(refusalOf(over, `yy${over.slice(1)}`, NOTE_MAX_CHARS)).toBeUndefined()
+  expect(refusalOf(over, `${over}y`, NOTE_MAX_CHARS)).toBe('too-long')
+  expect(refusalOf(over, `y${over}`, NOTE_MAX_CHARS)).toBe('too-long')
+})
+
 test("an edit past the store's room is refused, a shortening never", () => {
   expect(refusalOf('abc', 'abcd', 4)).toBeUndefined()
   expect(refusalOf('abcd', 'abcde', 4)).toBe('store-full')
@@ -140,6 +178,15 @@ test('the editor takes a note up to what a Client takes, once serialized', () =>
   expect(fitsEditor({ text: 'x'.repeat(150_000) })).toBe(false)
   // Each line break is written `\n`, two characters.
   expect(fitsEditor({ text: '\n'.repeat(60_000) })).toBe(false)
+  // At the limit, with the editor's other props at their longest: it fits.
+  expect(fitsEditor({
+    text: '\n'.repeat(NOTE_MAX_CHARS / 2),
+    max: NOTE_MAX_CHARS,
+    rows: 9999,
+    placeholder: 'Cliquer pour écrire. Ces notes restent hors du contexte de Claude.',
+    tab: 'session',
+    session: 'x'.repeat(200),
+  })).toBe(true)
 })
 
 // An editor showing `text`, having posted `sent` since the hooks drew `given`.

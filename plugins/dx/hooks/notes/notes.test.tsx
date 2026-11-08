@@ -521,6 +521,13 @@ test('a paste past the longest note is refused whole, and the pane says why', as
   await pane.key({ key: ' lait', in: 'note-global-s1' })
   expect(store.get('notes.global')).toEqual({ text: 'pain lait', updatedAt: NOW })
   expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  // Line breaks count two: 47,496 of them pass the limit, not their number.
+  await pane.key({ key: '\n'.repeat(47_496), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain lait', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /note trop longue/ })).toBeDefined()
+  await pane.key({ key: '\n'.repeat(47_495), in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: `pain lait${'\n'.repeat(47_495)}`, updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
   await pane.unmount()
 })
 

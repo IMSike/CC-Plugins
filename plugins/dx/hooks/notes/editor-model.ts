@@ -5,13 +5,24 @@
 
 export type Editor = { text: string; cursor: number; top: number }
 
-// The longest note: the editor's props, the text and a few fields, stay
-// under the 100,000 characters a Client's props may take, and so do its
-// posts to the hooks module, as long as few of its characters are escaped
-// once serialized (a line break or a quote counts two: see fitsEditor).
+// The longest note, counted as encodedLength counts it: the 100,000
+// characters a Client's props and posts may take are counted on their JSON
+// text, where the note is written escaped. The editor's other props (its
+// room, height, placeholder, tab and session id) and a post's other fields
+// (tab and session id) take a few hundred characters: 95,000 leaves them a
+// wide margin.
 export const NOTE_MAX_CHARS = 95_000
 // The most a Client's props may take, serialized as JSON.
 const CLIENT_PROPS_MAX = 100_000
+
+// How many characters `text` takes once written as a JSON string, its quotes
+// left out: a quote, a backslash, a line break, a tab, a carriage return, a
+// backspace or a form feed takes two (`\n`); any other control character, or
+// a lone surrogate, six (`\u001b`); any other UTF-16 code unit one, as in
+// `text.length` (an emoji's surrogate pair two).
+export function encodedLength(text: string): number {
+  return JSON.stringify(text).length - 2
+}
 
 // A count as the pane writes it, its thousands set apart by a space.
 export function thousands(count: number): string {
@@ -19,9 +30,9 @@ export function thousands(count: number): string {
 }
 export const NOTE_MAX_SHOWN = thousands(NOTE_MAX_CHARS)
 
-// Whether the editor can take `props`: a note longer than NOTE_MAX_CHARS
-// (stored before notes had a limit, or by another copy of dx), or one whose
-// line breaks and quotes take it past the limit once serialized, cannot.
+// Whether the editor can take `props`. A note within NOTE_MAX_CHARS always
+// fits; one a little past it too, to be shortened there; one far longer
+// (stored before notes had a limit, or by another copy of dx) does not.
 export function fitsEditor(props: unknown): boolean {
   return JSON.stringify(props).length <= CLIENT_PROPS_MAX
 }
@@ -30,14 +41,30 @@ export function fitsEditor(props: unknown): boolean {
 // store's room left holds (`max`, which the hooks module gives).
 export type Refusal = 'too-long' | 'store-full'
 
-// Why going from `before` to `after` is refused, or undefined: past `max`
-// characters, NOTE_MAX_CHARS at the most, an edit that lengthens the note is
-// not applied, a paste whole rather than cut. A note already longer may still
-// be shortened. Past NOTE_MAX_CHARS, the note is too long whatever the room.
+// A text of at most this many code units is within NOTE_MAX_CHARS once
+// encoded, a unit taking six characters at the most: no need to encode it.
+const SURELY_SHORT = Math.floor(NOTE_MAX_CHARS / 6)
+
+// Why going from `before` to `after` is refused, or undefined. An edit that
+// lengthens the note is not applied, a paste whole rather than cut, when the
+// note's encodedLength passes NOTE_MAX_CHARS ('too-long'), or its length
+// passes `max` ('store-full'). Each is measured in its own unit, and an edit
+// that does not lengthen the note by that measure passes even past it: a note
+// longer already may be shortened.
+// `max` counts code units, as `text.length` does, each reckoned at the most
+// bytes one may take in the store (see noteMax): bounding the raw length
+// bounds the store's bytes, whatever the text, the margin wide. It is
+// NOTE_MAX_CHARS at the most, which a raw length cannot pass without the
+// encoded length passing it first (a unit encodes to one character or more):
+// past it, the note is too long whatever the room.
+// Each key encodes `after` at most once, only when it is long enough to
+// matter, and `before` only past the limit.
 export function refusalOf(before: string, after: string, max: number): Refusal | undefined {
-  if (after.length <= before.length) return undefined
-  if (after.length > NOTE_MAX_CHARS) return 'too-long'
-  return after.length > max ? 'store-full' : undefined
+  if (after.length > SURELY_SHORT) {
+    const encoded = encodedLength(after)
+    if (encoded > NOTE_MAX_CHARS && encoded > encodedLength(before)) return 'too-long'
+  }
+  return after.length > max && after.length > before.length ? 'store-full' : undefined
 }
 
 // A visual row: `text.slice(start, end)`, its line's newline left out.

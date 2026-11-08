@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
 import type { EditorProps } from './editor'
-import { fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
+import { encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { firstLine, othersOf, othersStart } from './others'
 import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
@@ -69,7 +69,8 @@ function save($: EngineInterface, tab: NoteTab, session: string, text: string): 
   return queued(() => write($, tab, session, text))
 }
 
-// Why a note was not saved, as the pane says it.
+// Why a note was not saved, as the pane says it. Its length is counted as
+// encodedLength counts it, which the documentation explains.
 const TOO_LONG = `note trop longue (${NOTE_MAX_SHOWN} caractères au plus)`
 const STORE_FULL = "store presque plein : supprimez d'anciennes notes"
 
@@ -93,7 +94,7 @@ function unsavedFor(value: NotesUnsaved | null, key: string): string | null {
 
 // Writes `note` under `key`, `null` deleting it: why it was not, or null.
 async function kept($: EngineInterface, key: string, note: Note | null): Promise<string | null> {
-  if (note !== null && note.text.length > NOTE_MAX_CHARS) return TOO_LONG
+  if (note !== null && encodedLength(note.text) > NOTE_MAX_CHARS) return TOO_LONG
   if (!(await fitsStore($, key, note))) return STORE_FULL
   try {
     await (note === null ? $.store.delete(key) : $.store.set(key, note))
@@ -399,14 +400,15 @@ export function registerNotes(on: On): void {
       tab: view.tab,
       session,
     }
-    // A note the editor cannot take is said so in its place, kept as stored:
+    // A note the editor cannot take is said so in its place, kept as stored,
+    // its length counted as NOTE_MAX_CHARS is:
     // drawn, the Client would fail the whole pane.
     const sheet = fitsEditor(editor)
       ? <Client key={`note-${view.tab}-${session}`} module="./editor.tsx" props={editor} height={rows} />
       : (
         <Box key="too-long" height={rows}>
           <Text color="warning" wrap="wrap">
-            {`Note trop longue pour être modifiée ici (${thousands(editor.text.length)} caractères) : elle reste enregistrée telle quelle.`}
+            {`Note trop longue pour être modifiée ici (${thousands(encodedLength(editor.text))} caractères) : elle reste enregistrée telle quelle.`}
           </Text>
         </Box>
       )
