@@ -718,6 +718,60 @@ test('a turn during a fresh load leaves the unsaved setting to the start', async
   await band.unmount()
 })
 
+// dx's code loaded anew, the store unreadable: the settings the state holds,
+// which the session read before, are shown rather than the defaults, but no
+// change is applied over the store's until a read succeeds.
+test('a fresh load that cannot read the store shows the settings of the state, changes refused', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['store.get settings'])
+  refuseSettingsRead(on, refused)
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  leaveState(on, { settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } } })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#123456')
+  await band.unmount()
+  const pane = await showSettings($)
+  const warning = /^⚠ réglages illisibles : .*store locked \(changement refusé tant qu'ils ne sont pas relus\)$/
+  expect((await pane.find({ type: 'Text', text: warning }))?.props.color).toBe('error')
+  await click(pane, 'settings:show-total')
+  expect(store.get('settings')).toEqual({ frameColor: '#58a6ff' })
+  expect(await pane.find({ type: 'Text', text: /^⚠ réglages illisibles : .*store locked \(changement non appliqué\)$/ })).toBeDefined()
+
+  refused.clear()
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  expect(await pane.find({ type: 'Text', text: /illisibles/ })).toBeUndefined()
+  await pane.unmount()
+  const after = await $.ui.mount(BAND)
+  expect(await frameColors(after)).toContain('#58a6ff')
+  await after.unmount()
+})
+
+// Settings the state holds with the warning that they were never read are the
+// defaults an earlier start wrote: shown and said as such.
+test('a fresh load that cannot read the store shows the defaults over settings never read', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  refuseSettingsRead(on, new Set(['store.get settings']))
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  const unreadable = { reason: 'store locked', isChangeRefused: false, isSessionShown: false }
+  leaveState(on, {
+    settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } },
+    settingsUnreadable: { shape: 'settings-unreadable-3', value: unreadable },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  expect(await pane.find({ type: 'Text', text: /\(réglages par défaut affichés\)$/ })).toBeDefined()
+  await pane.unmount()
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).not.toContain('#123456')
+  await band.unmount()
+})
+
 // A reload of dx whose read of the store fails keeps the settings read
 // earlier, silently, and a change still builds on them.
 test('a reload that cannot read the store keeps the settings read before', async ($, on) => {

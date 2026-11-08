@@ -163,8 +163,10 @@ export type NotesView = { tab: NoteTab; other?: string }
 export type NotesUnsaved = { key: string | null; reason: string }
 
 // Why the settings could not be read, the session having never read them:
-// the defaults shown, or a change not applied (`isChangeRefused`).
-export type SettingsUnreadable = { reason: string; isChangeRefused: boolean }
+// the defaults shown, or a change not applied (`isChangeRefused`). With
+// `isSessionShown`, the settings shown are not the defaults but those the
+// state held as dx's code was loaded anew: read by this session before.
+export type SettingsUnreadable = { reason: string; isChangeRefused: boolean; isSessionShown: boolean }
 
 declare module 'claude-code' {
   interface PluginState {
