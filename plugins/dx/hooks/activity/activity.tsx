@@ -295,7 +295,7 @@ export async function paneTabs(
 // conversation back when that subagent's is the one in view.
 export async function openAgent($: EngineInterface, id: string, viewed: string | undefined): Promise<void> {
   const shown = await $.ui.view(viewed === id ? {} : { agentId: id })
-  if ('deny' in shown && shown.deny !== undefined) $.ui.toast(`dx : ${shown.deny}`)
+  if (shown.deny !== undefined) $.ui.toast(`dx : ${shown.deny}`)
 }
 
 // The tool hooks hand back the call's result whatever becomes of following it.

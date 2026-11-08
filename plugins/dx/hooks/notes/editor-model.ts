@@ -44,7 +44,7 @@ export function fitsEditor(props: { text: string; [prop: string]: unknown }): bo
 
 // Why an edit is not applied: the note past NOTE_MAX_CHARS, or past what the
 // store's room left holds (`max`, which the hooks module gives).
-export type Refusal = 'too-long' | 'store-full'
+type Refusal = 'too-long' | 'store-full'
 
 // Why going from `before` to `after` is refused, or undefined. An edit that
 // lengthens the note is not applied, a paste whole rather than cut, when the

@@ -92,7 +92,7 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
 }
 
 // What each stepper sets, from the number it posts.
-const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSettings> = {
+const STEPPERS = {
   'max-agent-icons': (current, maxAgentIcons) => ({ ...current, maxAgentIcons }),
   'max-task-icons': (current, maxTaskIcons) => ({ ...current, maxTaskIcons }),
   'heat-orange': (current, heatOrange) => {
@@ -104,6 +104,11 @@ const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSe
     return { ...current, heatOrange: orange, heatRed: red }
   },
   'notes-others': (current, notesOthers) => ({ ...current, notesOthers }),
+} satisfies Record<string, (current: BandSettings, picked: number) => BandSettings>
+type Stepper = keyof typeof STEPPERS
+
+function isStepper(value: unknown): value is Stepper {
+  return typeof value === 'string' && Object.hasOwn(STEPPERS, value)
 }
 
 // What each press drawn in the pane (../shared/press.tsx) changes, by its key:
@@ -117,8 +122,8 @@ export function registerSettings(on: On): void {
   // Each number a stepper posts.
   on('ui.message', { module: /stepper\.tsx$/, requestId: PANEL }, async ($, e, next) => {
     const data = e.data as { setting?: unknown; value?: unknown }
-    const set = typeof data.setting === 'string' ? STEPPERS[data.setting] : undefined
-    if (set === undefined || typeof data.value !== 'number') return next(e)
+    if (!isStepper(data.setting) || typeof data.value !== 'number') return next(e)
+    const set = STEPPERS[data.setting]
     const picked = data.value
     await change($, current => set(current, picked))
 
@@ -186,7 +191,7 @@ export function registerSettings(on: On): void {
     )
     // A number, a step down and up within bounds (one of STEPPERS), drawn by
     // ./stepper.tsx; its label whole, wrapped when the pane is narrow.
-    const stepper = (setting: string, label: string, current: number, suffix: string, [min, max]: readonly [number, number], step: number) => {
+    const stepper = (setting: Stepper, label: string, current: number, suffix: string, [min, max]: readonly [number, number], step: number) => {
       const props: StepperProps = { setting, value: current, min, max, step, suffix }
       return (
         <Box key={setting} columnGap={1}>

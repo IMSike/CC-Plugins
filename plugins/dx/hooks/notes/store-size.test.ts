@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { EngineInterface } from 'claude-code'
 
 import { NOTE_MAX_CHARS } from './editor-model'
-import { entryBytes, forgetStoreSize, noteMax, STORE_MAX_BYTES, storeRoom, storeWritten, UNIT_MAX_BYTES, utf8Length } from './store-size'
+import { entryBytes, fitsStore, forgetStoreSize, noteMax, STORE_MAX_BYTES, storeRoom, storeWritten, UNIT_MAX_BYTES, utf8Length } from './store-size'
 
 test('a text is measured in UTF-8 bytes', () => {
   expect(utf8Length('abc')).toBe(3)
@@ -19,8 +19,19 @@ test("an entry adds its key, its value's JSON text, a colon and a comma", () => 
   expect(entryBytes('notes.global', note)).toBe(14 + 1 + JSON.stringify(note).length + 1)
 })
 
-test('the store is kept under 3.8 MiB', () => {
-  expect(STORE_MAX_BYTES).toBe(Math.floor(3.8 * 1024 * 1024))
+test('a note is let into the store up to 3.8 MiB in all, not a byte past', async () => {
+  forgetStoreSize()
+  const key = 'notes.global'
+  const note = (length: number) => ({ text: 'n'.repeat(length), updatedAt: 1 })
+  // The store's `{}`, a `"filler":"xx…",` entry, and the note's: exactly full.
+  const filler = 'x'.repeat(Math.floor(3.8 * 1024 * 1024) - 2 - entryBytes(key, note(100)) - entryBytes('filler', ''))
+  const $ = {
+    store: { keys: async () => ['filler'], get: async () => filler },
+    clock: { now: async () => 0 },
+  } as unknown as EngineInterface
+  expect(await fitsStore($, key, note(100))).toBe(true)
+  expect(await fitsStore($, key, note(101))).toBe(false)
+  forgetStoreSize()
 })
 
 test('no code unit of a note takes more than six bytes in the store', () => {

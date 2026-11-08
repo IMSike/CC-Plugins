@@ -25,7 +25,7 @@ export const BAND = {
 // The engine beneath the plugin: a session on Opus started an hour ago, in a
 // repository on `dev`; context at 12%, 5-hour window at 20% resetting in 3h24,
 // 7-day window at 90% resetting in 1j15h. Each option changes that.
-export type EngineOptions = {
+type EngineOptions = {
   // false: no rate limits reported.
   rateLimits?: boolean
   // The session's agents.
