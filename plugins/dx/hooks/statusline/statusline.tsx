@@ -152,9 +152,10 @@ async function refreshOrLog($: EngineInterface): Promise<void> {
   }
 }
 
-// Called by ../register once the session has started, after the settings it
-// draws with: the band's clocks, then its first snapshot. A first snapshot that
-// fails is left to the next refresh, the clocks already running.
+// Called by ../register once the session has started, alongside the settings
+// it draws with, read from the state as they change: the band's clocks, then
+// its first snapshot. A first snapshot that fails is left to the next refresh,
+// the clocks already running.
 export async function startStatusline($: EngineInterface): Promise<void> {
   $.clock.every(TICK_MS, () => turnTick($))
   $.clock.every(SPIN_MS, () => spinTick($))

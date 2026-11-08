@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { BAND, engine, frameColors, NOTES_PANE, NOW } from './shared/testing'
+import { BAND, click, engine, frameColors, NOTES_PANE, NOW, shell, showSettings } from './shared/testing'
 
 test('the session start loads every feature', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -38,6 +38,48 @@ test('a feature that fails to start leaves the next ones to start', async ($, on
   const band = await $.ui.mount(BAND)
   expect(await frameColors(band)).toContain('#58a6ff')
   await band.unmount()
+})
+
+// A reload of dx while a setting's save is under way, which the settings'
+// start waits for: the band starts meanwhile, its snapshot taken.
+test("a reload during a setting's save leaves the band to start", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let saving = () => {}
+  const isSaving = new Promise<void>(resolve => {
+    saving = resolve
+  })
+  let release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  on('store.set', { key: 'settings' }, async (_, e, next) => {
+    saving()
+    await released
+    return next(e)
+  })
+  let isReloading = false
+  let banded = () => {}
+  const isBanded = new Promise<void>(resolve => {
+    banded = resolve
+  })
+  on('state.set', { plugin: 'dx', key: 'statusline' }, (_, e, next) => {
+    if (isReloading) banded()
+    return next(e)
+  })
+  engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const clicked = click(pane, 'settings:show-total')
+  await isSaving
+  isReloading = true
+  const reloaded = $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await isBanded
+  release()
+  await clicked
+  await reloaded
+  await pane.unmount()
 })
 
 // A feature that fails to start is never silent: the debug log says which and
