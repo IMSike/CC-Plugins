@@ -28,10 +28,13 @@ test('a wide character counts the two cells it takes', () => {
 test('a text is counted in cells', () => {
   expect(cellWidth('npm run dev')).toBe(11)
   expect(cellWidth('\u{1F600} \u{65E5}\u{672C}')).toBe(7)
-  // Accents combined, a variation selector, a joined emoji: no cell more.
+  // Accents combined, a text variation selector, a joined emoji: no cell more.
   expect(cellWidth('e\u{301}te\u{301}')).toBe(3)
-  expect(cellWidth('\u{2764}\u{FE0F}')).toBe(1)
+  expect(cellWidth('\u{2764}\u{FE0E}')).toBe(1)
   expect(cellWidth('\u{1F469}\u{200D}\u{1F4BB}')).toBe(2)
+  // Hangul spelled in jamo: the vowel and the final consonant join the first.
+  expect(cellWidth('\u{1112}\u{1161}\u{11AB}')).toBe(2)
+  expect(cellWidth('\u{1100}\u{D7B0}')).toBe(2)
   // A Nerd Font glyph, as the engine counts it.
   expect(cellWidth('\u{F489}')).toBe(1)
 })
@@ -44,6 +47,26 @@ test('an emoji sequence counts as one emoji, a flag too', () => {
   // Regional indicators by pairs: one flag, then two.
   expect(cellWidth('\u{1F1EB}\u{1F1F7}')).toBe(2)
   expect(cellWidth('\u{1F1EB}\u{1F1F7}\u{1F1E9}\u{1F1EA}')).toBe(4)
+  // A subdivision flag: a black flag spelling England in tags.
+  expect(cellWidth('\u{1F3F4}\u{E0067}\u{E0062}\u{E0065}\u{E006E}\u{E0067}\u{E007F}')).toBe(2)
+  // A skin tone after no emoji: a swatch of its own.
+  expect(cellWidth('\u{1F3FD}')).toBe(2)
+  expect(cellWidth('a\u{1F3FD}')).toBe(3)
+})
+
+// A heart, a check mark or a keycap's digit is text by default: the emoji
+// variation selector draws it as emoji, over two cells.
+test('an emoji made emoji by its variation selector counts two', () => {
+  expect(cellWidth('\u{2764}\u{FE0F}')).toBe(2)
+  expect(cellWidth('\u{2714}\u{FE0F}')).toBe(2)
+  expect(cellWidth('1\u{FE0F}\u{20E3}')).toBe(2)
+  // Already wide, or not an emoji: unchanged.
+  expect(cellWidth('\u{1F600}\u{FE0F}')).toBe(2)
+  expect(cellWidth('a\u{FE0F}')).toBe(1)
+  // The rainbow flag: a white flag made emoji, joined to a rainbow.
+  expect(cellWidth('\u{1F3F3}\u{FE0F}\u{200D}\u{1F308}')).toBe(2)
+  // A selector after the joiner leaves what follows joined.
+  expect(cellWidth('\u{1F469}\u{200D}\u{FE0F}\u{1F4BB}')).toBe(2)
 })
 
 // A joiner between letters shapes them; it hides neither.

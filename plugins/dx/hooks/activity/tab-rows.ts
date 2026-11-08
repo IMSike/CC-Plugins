@@ -10,30 +10,51 @@ const JOINER = '\u{200D}'
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
 // Two of them make a flag.
 const REGIONAL = /[\u{1F1E6}-\u{1F1FF}]/u
-// Code points drawn over no cell of their own: combining marks, variation
-// selectors, zero-width spaces and joiners, skin tone modifiers.
-const ZERO = /[\p{Mn}\p{Me}\u{FE00}-\u{FE0F}\u{200B}-\u{200D}\u{1F3FB}-\u{1F3FF}]/u
+// Draws the emoji before it as emoji, over two cells, when it is text by
+// default (a heart, a check mark, a keycap's digit).
+const EMOJI_STYLE = '\u{FE0F}'
+const EMOJI = /\p{Emoji}/u
+// Skin tone modifiers: drawn on the emoji before them, as a swatch of their
+// own after anything else.
+const MODIFIER = /[\u{1F3FB}-\u{1F3FF}]/u
+// Code points drawn over no cell of their own: combining marks, the other
+// variation selectors, zero-width spaces and joiners, the Hangul vowels and
+// final consonants joined to the leading consonant before them, and the tags
+// spelling a subdivision flag.
+const ZERO = /[\p{Mn}\p{Me}\u{FE00}-\u{FE0E}\u{200B}-\u{200D}\u{1160}-\u{11FF}\u{D7B0}-\u{D7FF}\u{E0020}-\u{E007F}]/u
 
 // The cells a text takes in the terminal: a wide code point counts two, a
 // zero-width one none, one joined to an emoji before it (an emoji sequence
 // such as a technologist) none more, and a flag, a pair of regional
-// indicators, two. A joiner between letters (Arabic, Indic scripts) joins
-// nothing away. A Nerd Font glyph counts one, as the engine counts it
-// (../shared/crew's iconGap leaves the cell after it). Simple on purpose: no
-// full grapheme clusters, no ambiguous widths.
+// indicators, two. An emoji drawn as text by default counts two when made
+// emoji (a red heart, a keycap). A joiner between letters (Arabic, Indic
+// scripts) joins nothing away. A Nerd Font glyph counts one, as the engine
+// counts it (../shared/crew's iconGap leaves the cell after it). Simple on
+// purpose: no full grapheme clusters, no ambiguous widths.
 export function cellWidth(text: string): number {
   let width = 0
-  // The last code point drawn over cells of its own, or joined to one.
+  // The last code point drawn over cells of its own, or joined to one, and
+  // the cells it was counted.
   let base = ''
+  let cells = 0
   let isJoined = false
   let isFlagOpen = false
   for (const char of text) {
-    const isZero = ZERO.test(char)
     const isRegional = REGIONAL.test(char)
-    if (!isZero && !isJoined && !(isRegional && isFlagOpen)) width += WIDE.test(char) ? 2 : 1
+    if (char === EMOJI_STYLE) {
+      if (cells === 1 && EMOJI.test(base)) {
+        width += 1
+        cells = 2
+      }
+    } else if (ZERO.test(char) || (MODIFIER.test(char) && PICTOGRAPHIC.test(base))) {
+      if (char === JOINER) isJoined = PICTOGRAPHIC.test(base)
+    } else {
+      cells = isJoined || (isRegional && isFlagOpen) ? 0 : WIDE.test(char) ? 2 : 1
+      width += cells
+      isJoined = false
+      base = char
+    }
     isFlagOpen = isRegional && !isFlagOpen
-    isJoined = char === JOINER && PICTOGRAPHIC.test(base)
-    if (!isZero) base = char
   }
   return width
 }
