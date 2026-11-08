@@ -6,7 +6,7 @@ import { openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
-import { clockTime } from '../shared/format'
+import { clockTime, errorText } from '../shared/format'
 import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
 import {
   compactNumber,
@@ -126,14 +126,30 @@ async function refresh($: EngineInterface): Promise<void> {
   await update($, snapshot, () => status)
 }
 
+// Whether the last refresh failed: refreshes that keep failing are said once
+// in the debug log, as they start failing, not every 30 seconds.
+let refreshFailing = false
+
+// A refresh that fails keeps the last snapshot, for the next to replace, and
+// says why in the debug log, never thrown.
+async function refreshOrLog($: EngineInterface): Promise<void> {
+  try {
+    await refresh($)
+    refreshFailing = false
+  } catch (error) {
+    if (!refreshFailing) $.ui.log(`dx : bandeau non rafraîchi (${errorText(error)})`, { to: 'debug' })
+    refreshFailing = true
+  }
+}
+
 // Called by ../register once the session has started, after the settings it
 // draws with: the band's clocks, then its first snapshot. A first snapshot that
 // fails is left to the next refresh, the clocks already running.
 export async function startStatusline($: EngineInterface): Promise<void> {
   $.clock.every(TICK_MS, () => turnTick($))
   $.clock.every(SPIN_MS, () => spinTick($))
-  $.clock.every(REFRESH_MS, () => refresh($))
-  await refresh($).catch(() => undefined)
+  $.clock.every(REFRESH_MS, () => refreshOrLog($))
+  await refreshOrLog($)
 }
 
 // Called by ../register as a turn starts: the main loop's turn is timed.
@@ -158,8 +174,7 @@ export function registerStatusline(on: On): void {
     if (e.agentId === undefined) {
       const now = await $.clock.now()
       await update($, turn, current => ({ startedAt: current?.startedAt ?? now - e.durationMs, durationMs: e.durationMs, endedAt: now }))
-      // A refresh that fails keeps the last snapshot, for the next to replace.
-      await refresh($).catch(() => undefined)
+      await refreshOrLog($)
     }
 
     return completed

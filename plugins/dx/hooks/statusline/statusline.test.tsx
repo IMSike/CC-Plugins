@@ -336,6 +336,42 @@ test('stored settings hide elements, and may keep an idle 5-hour row', async ($,
   await ui.unmount()
 })
 
+// A plugin beneath dx (the builtin tier) whose usage reads are malformed but
+// the fourth: the band's refreshes fail three times, succeed, then fail again.
+const FAILING_USAGE = {
+  name: 'failing-usage',
+  tier: 'builtin' as const,
+  register: (on: On) => {
+    let usageReads = 0
+    on('session.usage', async (_, e, next) => {
+      usageReads += 1
+      return usageReads === 4 ? next(e) : { value: { rateLimits: null } as never }
+    })
+  },
+}
+
+test('refreshes that keep failing are said once in the debug log, as they start failing', { plugins: [FAILING_USAGE] }, async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  engine(on)
+  const logged: { text: string; to?: string }[] = []
+  on('ui.log', (_, e) => {
+    logged.push(e)
+
+    return { value: undefined }
+  })
+  const failures = () => logged.filter(line => line.to === 'debug' && /^dx : bandeau non rafraîchi \(.+\)$/.test(line.text))
+
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(failures()).toHaveLength(1)
+  await clock.advance(60_000)
+  expect(failures()).toHaveLength(1)
+  // The fourth refresh succeeds, the fifth fails: said again.
+  await clock.advance(30_000)
+  expect(failures()).toHaveLength(1)
+  await clock.advance(30_000)
+  expect(failures()).toHaveLength(2)
+})
+
 // A plugin beneath dx (the builtin tier) refusing the first lookup of a
 // `.git`, as a guard or a network location does: dx's lookup rejects. It runs
 // on its own, its count inside.
