@@ -47,6 +47,40 @@ test("a task started after a /clear shows its output, from the new session's fol
   await pane.unmount()
 })
 
+// A session id that cannot be read for a moment never loses a task: the last
+// one known finds its output; none known, the task is followed all the same.
+test('a task started while the session id cannot be read is still followed', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const files = { ...OUTPUT, '/claude/C--Users-dev-repo-app/s1/tasks/m1.output': 'tail started\n' }
+  engine(on, { files, refused })
+  shell(on)
+  on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+  refused.add('session.id')
+  await $.tool.call({ tool: 'Monitor', command: 'tail -f app.log' } as never)
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-m1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^tail started$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+test('a first task started while the session id cannot be read is followed, its output unknown', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { refused: new Set(['session.id']) })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'crew-b1' })).toBeDefined()
+  await ui.unmount()
+})
+
 test("the panel's tabs lead from the notes to a terminal and the settings", async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: OUTPUT })

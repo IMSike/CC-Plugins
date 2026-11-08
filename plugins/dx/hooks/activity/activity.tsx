@@ -78,10 +78,12 @@ async function refreshAgents($: EngineInterface): Promise<void> {
 }
 
 // Where a task's output is written: the Bash and Monitor results do not say.
+// The session id unread, the last one known stands; none known, no file.
 async function outputPath($: EngineInterface, id: string, result: unknown): Promise<string | undefined> {
   const named = outputOf(result, id)
   if (named !== undefined) return named
-  const session = await $.session.id()
+  const session = await $.session.id().catch(() => tasksDir?.session)
+  if (session === undefined) return undefined
   if (tasksDir?.session !== session) {
     const [override, temp, tmpdir, cwd] = await Promise.all([
       $.env.get('CLAUDE_CODE_TMPDIR'),
