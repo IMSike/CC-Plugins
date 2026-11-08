@@ -39,3 +39,25 @@ test('a feature that fails to start leaves the next ones to start', async ($, on
   expect(await frameColors(band)).toContain('#58a6ff')
   await band.unmount()
 })
+
+// A feature that fails to start is never silent: the debug log says which and
+// why, at the session's start as at a turn's.
+test("a feature's failed start is written to the debug log", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  on('state.set', { plugin: 'dx', key: 'activity' }, () => ({ deny: 'refused' }))
+  on('state.set', { plugin: 'dx', key: 'turn' }, () => ({ deny: 'turn refused' }))
+  const logged: { text: string; to?: string }[] = []
+  on('ui.log', (_, e) => {
+    logged.push(e)
+
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+
+  const debug = logged.filter(line => line.to === 'debug').map(line => line.text)
+  expect(debug.some(text => /^dx : échec du démarrage \(activité\) : .*refused/.test(text))).toBe(true)
+  expect(debug.some(text => /^dx : échec du démarrage \(bandeau, tour\) : .*turn refused/.test(text))).toBe(true)
+})

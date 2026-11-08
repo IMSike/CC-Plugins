@@ -4,6 +4,8 @@
 
 Install: `/plugin install dx@cc-plugins` (after `/plugin marketplace add IMSike/CC-Plugins`). Requires Claude Code 2.1.310 or later.
 
+If one of dx's parts (settings, notes, activity, band) fails to start, at the session's start or a turn's, the others start all the same, and the debug log (`claude --debug-file <file>`) has a `dx : échec du démarrage (…)` line naming it, with the reason.
+
 ## Status band
 
 ```text
