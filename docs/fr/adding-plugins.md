@@ -17,8 +17,9 @@ plugins/<nom>/
 │   │   ├── <fonctionnalité>.tsx   les hooks de la fonctionnalité, ses fonctions d'enregistrement et de démarrage
 │   │   ├── <partie>.tsx     un module Client, dessiné sur le fil de la surface elle-même (<Client module="./<partie>.tsx">)
 │   │   ├── <logique>.ts     sa logique pure, sans $
+│   │   ├── <module>.ts      un autre module de ses hooks, qui peut utiliser $
 │   │   └── *.test.ts(x)     ses tests
-│   └── shared/              modules qui n'appartiennent à aucune fonctionnalité en particulier, avec leurs tests
+│   └── shared/              modules qui n'appartiennent à aucune fonctionnalité en particulier (modules Client compris), avec leurs tests
 │       └── testing.ts       ce que les tests partagent, importé par les seuls *.test.ts(x)
 ├── types/
 │   └── index.d.ts           contrat : les valeurs gardées dans $.state
@@ -26,7 +27,7 @@ plugins/<nom>/
 └── README.md                résumé court, qui renvoie à docs/{en,fr}/plugins/<nom>.md
 ```
 
-Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Le moteur n'accepte qu'un hook par événement sans filtre dans tout le plugin : les hooks des événements auxquels plusieurs fonctionnalités répondent, comme `session.start` et `turn.start`, sont dans `register.ts`, qui appelle une fonction de démarrage par fonctionnalité (dans dx `startSettings`, `startNotes`, `startActivity`, `startStatusline`) dans un ordre écrit et expliqué là ; chaque fonctionnalité y fait son propre chargement et lance ses propres horloges. Une fonctionnalité peut appeler les fonctions qu'exporte une autre : dans dx, le bandeau ouvre les panneaux de notes et de réglages, et ces panneaux dessinent la ligne d'onglets de l'activité. Un module qui n'appartient à aucune fonctionnalité en particulier va dans `hooks/shared/` ; un module d'une seule fonctionnalité reste dans son dossier. Un module que seuls les tests importent (`shared/testing.ts` dans dx) n'est jamais importé par le module de hooks. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
+Un plugin a **un seul** module de hooks : une nouvelle fonctionnalité est un dossier sous `hooks/`, qui enregistre ses propres hooks et dont `register.ts` appelle la fonction d'enregistrement, pas un nouveau plugin. Le moteur n'accepte qu'un hook par événement sans filtre dans tout le plugin : les hooks des événements auxquels plusieurs fonctionnalités répondent, comme `session.start` et `turn.start`, sont dans `register.ts`, qui appelle une fonction de démarrage par fonctionnalité (dans dx `startSettings`, `startNotes`, `startActivity`, `startStatusline`) dans un ordre écrit et expliqué là ; chaque fonctionnalité y fait son propre chargement et lance ses propres horloges. Une fonctionnalité peut appeler les fonctions qu'exporte une autre : dans dx, le bandeau ouvre les panneaux de notes et de réglages, et ces panneaux dessinent la ligne d'onglets de l'activité. Une fonctionnalité peut répartir ses hooks sur plusieurs modules qui utilisent `$` (dans dx, le chargement des notes et l'estimation de la taille du store, `notes-load.ts` et `store-size.ts`), à côté de sa logique pure. Un module qui n'appartient à aucune fonctionnalité en particulier va dans `hooks/shared/`, y compris un module Client que dessinent plusieurs fonctionnalités (`shared/press.tsx` dans dx) ; un module d'une seule fonctionnalité reste dans son dossier. Un module que seuls les tests importent (`shared/testing.ts` dans dx) n'est jamais importé par le module de hooks. Un nouveau plugin correspond à un thème distinct qu'on installerait séparément.
 
 ## Manifeste
 
