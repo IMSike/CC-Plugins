@@ -46,7 +46,7 @@ test("a monitor's icon is a pulse unless another offered one is chosen", () => {
   expect(settingsOf({ monitorIcon: '◉' }).monitorIcon).toBe('◉')
 })
 
-test("the 7-day gauge reads 7j unless 7d is chosen", () => {
+test('the 7-day gauge reads 7j unless 7d is chosen', () => {
   expect(DEFAULT_SETTINGS.sevenDayLabel).toBe('7j')
   expect(settingsOf({ sevenDayLabel: '7d' }).sevenDayLabel).toBe('7d')
   expect(settingsOf({ sevenDayLabel: '7w' }).sevenDayLabel).toBe('7j')
