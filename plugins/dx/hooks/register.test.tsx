@@ -40,6 +40,21 @@ test('a feature that fails to start leaves the next ones to start', async ($, on
   await band.unmount()
 })
 
+// The session's start failing beneath dx: its features start all the same, the
+// band drawn in the settings read from the store.
+test('the features start when the session start beneath them fails', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const beforeStart = async () => {
+    throw new Error('core failed')
+  }
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } }, beforeStart })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true }).catch(() => undefined)
+
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+})
+
 // A reload of dx while a setting's save is under way, which the settings'
 // start waits for: the band starts meanwhile, its snapshot taken.
 test("a reload during a setting's save leaves the band to start", async ($, on) => {

@@ -23,18 +23,21 @@ export const register: Register = on => {
   registerNotes(on)
 
   on('session.start', async ($, e, next) => {
-    const result = await next(e)
-    // The notes after the settings: they read the tab a pane opens on. The
-    // activity and the band read no settings to start, drawing them from the
-    // state as they change: they start meanwhile, never waiting on a settings
-    // save under way, which the settings' start waits for at a reload.
-    await Promise.all([
-      started($, 'réglages', startSettings($)).then(() => started($, 'notes', startNotes($))),
-      started($, 'activité', startActivity($)),
-      started($, 'bandeau', startStatusline($)),
-    ])
-
-    return result
+    // Started even when the start beneath dx fails: otherwise the band, the
+    // activity and the notes would never start, nor the settings be read.
+    try {
+      return await next(e)
+    } finally {
+      // The notes after the settings: they read the tab a pane opens on. The
+      // activity and the band read no settings to start, drawing them from the
+      // state as they change: they start meanwhile, never waiting on a settings
+      // save under way, which the settings' start waits for at a reload.
+      await Promise.all([
+        started($, 'réglages', startSettings($)).then(() => started($, 'notes', startNotes($))),
+        started($, 'activité', startActivity($)),
+        started($, 'bandeau', startStatusline($)),
+      ])
+    }
   })
 
   on('turn.start', async ($, e, next) => {
