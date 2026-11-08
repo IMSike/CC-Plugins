@@ -28,12 +28,16 @@ function parentOf(dir: string): string {
 // The HEAD of the repository holding `cwd`: its `.git/HEAD`, or for a
 // worktree or a submodule the HEAD its `.git` file points to. A `.git` folder
 // without a HEAD is passed over, as Git does. 'none' when no directory up from
-// `cwd` holds a `.git`; undefined when one does but its HEAD could not be read
+// `cwd`, its root included, holds a `.git`; undefined when one does but its HEAD could not be read
 // now (git renaming it as it writes it, on Windows), or when a lookup could
 // not be answered: nothing is concluded then.
 async function headOf(read: ReadFile, exists: Exists, cwd: string): Promise<{ path: string; text: string } | 'none' | undefined> {
+  // A POSIX path goes up to '', its root, looked in as `/.git`; a Windows
+  // path stops at its drive (`C:`), its own parent. A network path (`\\host`)
+  // ends at '' too, which is no root of its own.
+  const posix = /^\/(?![\\/])/.test(cwd)
   let dir = cwd.replace(/[\\/]+$/, '')
-  for (let depth = 0; depth < MAX_DEPTH && dir !== ''; depth += 1) {
+  for (let depth = 0; depth < MAX_DEPTH && (dir !== '' || posix); depth += 1) {
     const git = await exists(`${dir}/.git`)
     if (git === undefined) return undefined
     if (git) {

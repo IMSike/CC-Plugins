@@ -69,6 +69,33 @@ test('a HEAD whose lookup cannot be answered is not passed over', async () => {
   expect(heads.has('C:/repo/app')).toBe(false)
 })
 
+test('the root is looked in too, then the way up stops: a Windows drive', async () => {
+  const { read, exists, lookups } = disk({})
+  expect(await branchFrom(read, exists, 'C:/a', new Map())).toBeUndefined()
+  expect(lookups).toEqual(['C:/a/.git', 'C:/.git'])
+
+  const root = disk({ 'C:/.git/HEAD': 'ref: refs/heads/root\n' })
+  expect(await branchFrom(root.read, root.exists, 'C:/a', new Map())).toBe('root')
+  expect(await branchFrom(root.read, root.exists, 'C:/', new Map())).toBe('root')
+})
+
+test('the root is looked in too, then the way up stops: POSIX', async () => {
+  const { read, exists, lookups } = disk({})
+  expect(await branchFrom(read, exists, '/home/dev', new Map())).toBeUndefined()
+  expect(lookups).toEqual(['/home/dev/.git', '/home/.git', '/.git'])
+
+  const root = disk({ '/.git/HEAD': 'ref: refs/heads/root\n' })
+  expect(await branchFrom(root.read, root.exists, '/home', new Map())).toBe('root')
+  expect(await branchFrom(root.read, root.exists, '/', new Map())).toBe('root')
+  expect(root.lookups.filter(path => path === '/.git')).toHaveLength(2)
+})
+
+test('a network path stops at its share', async () => {
+  const { read, exists, lookups } = disk({})
+  expect(await branchFrom(read, exists, '//host/share/app', new Map())).toBeUndefined()
+  expect(lookups).toEqual(['//host/share/app/.git', '//host/share/.git', '//host/.git'])
+})
+
 test('the HEAD found is read again each time: a branch switch shows', async () => {
   const { files, read, exists, reads, lookups } = disk({ 'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n' })
   const heads: HeadPaths = new Map()
