@@ -155,6 +155,24 @@ test("the panel's tabs space each icon by its width", async ($, on) => {
   await notes.unmount()
 })
 
+// A tab's label is cut to the pane by the cells it takes: 20 characters of
+// which 15 wide take 35 cells, past a pane of 30.
+test("a tab of wide characters is cut to the pane's cells", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: OUTPUT })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: '日本語の開発サーバーを起動する', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 30 } })
+  expect((await pane.find({ key: 'pane-task-b1' }))?.props.width).toBe(30)
+  expect((await pane.find({ key: 'pane-notes' }))?.props.width).toBeUndefined()
+  await pane.unmount()
+})
+
 test('a stopped shell leaves the border', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: OUTPUT })

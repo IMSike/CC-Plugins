@@ -6,7 +6,7 @@ import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
 import { DEFAULT_SETTINGS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
-import { wrappedRows } from './tab-rows'
+import { cellWidth, wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
   encodeCommand,
@@ -271,8 +271,9 @@ export async function paneTabs(
         </Button>
       )
     }
-    // As wide as drawn, cut to the pane only when longer.
-    const width = Array.from(label).length > columns ? columns : undefined
+    // As wide as drawn, cut to the pane only when longer, in terminal cells as
+    // wrappedRows counts them: the region's `width` is in columns.
+    const width = cellWidth(label) > columns ? columns : undefined
     const parts = [{ text: label, color: isCurrent ? 'claude' : 'subtle', inverse: isCurrent, bold: isCurrent }]
     return board.press(key, isCurrent || !('task' in action) ? undefined : action.task, parts, { bold: true }, width)
   }
