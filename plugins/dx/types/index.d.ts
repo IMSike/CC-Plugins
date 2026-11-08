@@ -178,8 +178,8 @@ declare module 'claude-code' {
       // Counted up each second while the turn runs, so its duration is redrawn.
       tick: Shaped<number>
       settings: Shaped<BandSettings>
-      // Why the last change of the settings was not saved, shown in their
-      // pane; null once a change saves.
+      // Why the settings the session holds were not saved, shown in their
+      // pane; null once a save succeeds (a change or the `⚙` icon).
       settingsUnsaved: Shaped<string | null>
       // Why the settings could not be read, the session having never read
       // them, and what followed. Shown in their pane; null once a read of the

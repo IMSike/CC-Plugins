@@ -3,8 +3,9 @@ import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
 import type { Note, Notes, NoteTab, NotesUnsaved, NotesView } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
+import { heldSettings } from '../settings/settings'
 import { dayTime, errorText } from '../shared/format'
-import { DEFAULT_SETTINGS, NOTE_TABS } from '../shared/options'
+import { NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
 import type { EditorProps } from './editor'
@@ -21,8 +22,6 @@ import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
 const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-2' })
 const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
 const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
-// What the band shows, set in ../settings/settings: the notes' tab and list here.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 // The note shown, as the store last held it, and the longest it may grow to:
 // drawn again when either changes there.
 const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })
@@ -44,7 +43,7 @@ async function loadNotes($: EngineInterface): Promise<void> {
 
 // The tab a pane opens on: the last one shown, or the one set.
 async function openingTab($: EngineInterface): Promise<void> {
-  const { notesTab, resumeNotesTab } = await read($, settings)
+  const { notesTab, resumeNotesTab } = await heldSettings($)
   const last = resumeNotesTab ? await $.store.get(TAB_KEY).catch(() => undefined) : undefined
   await update($, notesView, () => ({ tab: isTab(last) ? last : notesTab }))
 }
@@ -210,7 +209,7 @@ let othersList: { first: number; end: number; offset: number } | undefined
 async function scrollOthers($: EngineInterface, by: number): Promise<boolean> {
   const value = await read($, notes)
   if (value === null) return false
-  const { notesOthers } = await read($, settings)
+  const { notesOthers } = await heldSettings($)
   const count = othersOf(value).length
   const stored = await read($, notesOthersAt)
   const from = othersStart(stored, count, notesOthers)
@@ -353,7 +352,7 @@ export function registerNotes(on: On): void {
     }
 
     const view = restored ?? (await read($, notesView))
-    const options = await read($, settings)
+    const options = await heldSettings($)
     const unsavedNote = await read($, notesUnsaved)
     const othersAt = await read($, notesOthersAt)
 

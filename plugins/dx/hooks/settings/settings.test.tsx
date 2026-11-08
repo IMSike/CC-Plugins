@@ -403,6 +403,27 @@ test('saved settings outlast a /clear that empties the state', async ($, on) => 
   await band.unmount()
 })
 
+// Before the next turn too, the panel's tabs follow the settings a `/clear`
+// emptied from the state, not the defaults.
+test("the panel's tabs keep the settings through a /clear that empties the state", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const session = { id: 's1' }
+  engine(on, { session, stored: { settings: { notesIcon: '✎' } } })
+  shell(on)
+  const emptied = emptySettings(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  emptied()
+  const band = await $.ui.mount(BAND)
+  await click(band, 'notes')
+  await band.unmount()
+  const notes = await $.ui.mount(NOTES_PANE)
+  expect(await notes.find({ type: 'Text', text: /^ ✎ Notes $/, in: 'pane-notes' })).toBeDefined()
+  await notes.unmount()
+})
+
 // After a `/clear` that empties the state, a change the store cannot be read
 // for starts from this session's settings, never from the defaults it would
 // write over the stored ones.

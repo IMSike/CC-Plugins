@@ -40,7 +40,8 @@ import type { StepperProps } from './stepper'
 // The settings pane: what the band shows, animates and is colored with, kept
 // in `$.store` across sessions and read into `$.state` for the drawings.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
-// Why the last change was not saved, said in the pane until a change saves.
+// Why the settings this session holds were not saved, said in the pane until a
+// save succeeds: at a later change or at the `⚙` icon.
 const settingsUnsaved = atom({ plugin: 'dx', key: 'settingsUnsaved' } as const, null as string | null, {
   shape: 'settings-unsaved-1',
 })
@@ -105,6 +106,12 @@ async function shownSettings($: EngineInterface): Promise<Held> {
   return held
 }
 
+// The settings as this session holds them, for the panel's tabs (../activity)
+// and the notes (../notes) as for this pane (`shownSettings`).
+export async function heldSettings($: EngineInterface): Promise<BandSettings> {
+  return (await shownSettings($)).value
+}
+
 // The settings as the store holds them. A read that fails keeps the ones this
 // session holds, which a change would otherwise write over the store's, and
 // rejects; the settings never read, the pane says the defaults are shown
@@ -166,10 +173,11 @@ export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): 
 }
 
 // The settings a change starts from: as the store holds them, another
-// session's changes included; while a change of this session is unsaved, as
-// this session holds them, so the next save writes that change too. A read
-// that fails falls back on this session's settings, once read from the store;
-// never read, it rejects: they are the defaults, not the store's.
+// session's changes included, the key absent read as the defaults as
+// everywhere else; while a change of this session is unsaved, as this session
+// holds them, so the next save writes that change too. A read that fails
+// falls back on this session's settings, once read from the store; never
+// read, it rejects: they are the defaults, not the store's.
 async function changeBase($: EngineInterface): Promise<BandSettings> {
   if (held.unsaved !== null) return held.value
   let stored: unknown
@@ -180,14 +188,14 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
     return held.value
   }
   settingsLoaded = true
-  return stored === undefined ? held.value : settingsOf(stored)
+  return settingsOf(stored)
 }
 
 // Applies `edit` to the settings (`changeBase`) and keeps the result; two
 // changes in a row both land. A save that fails leaves the change applied to
-// this session alone, and the pane says why (`settingsUnsaved`) until one
-// saves. A change with no settings to start from is not applied, and the pane
-// says why (`settingsUnreadable`) until a read succeeds.
+// this session alone, and the pane says why (`settingsUnsaved`). A change
+// with no settings to start from is not applied, and the pane says why
+// (`settingsUnreadable`); each warning goes as its atom's comment says.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
     await hold($, {})

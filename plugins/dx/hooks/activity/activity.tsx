@@ -2,8 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderElement } from 'claude-code'
 
 import type { Activity, PanelView, Task, TaskView } from '../../types'
+import { heldSettings } from '../settings/settings'
 import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
-import { DEFAULT_SETTINGS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
 import { cellWidth, wrappedRows } from './tab-rows'
@@ -28,9 +28,6 @@ import type { ProcessTree } from './tasks'
 // or, as a safety net, from the system's process list, read only when a task
 // is due for a check: soon after it starts (to tell an agent CLI in it), then
 // further and further apart (ADR 0003).
-
-// What the band shows, set in ../settings/settings: the panes' icons here.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
 
 // The agents and the tasks followed, drawn on the band's bottom border.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
@@ -260,7 +257,7 @@ export async function paneTabs(
   const { Box, Button, Text } = elements
   const { tasks } = await read($, activity)
   const view = await read($, taskView)
-  const { notesIcon, settingsIcon, monitorIcon } = await read($, settings)
+  const { notesIcon, settingsIcon, monitorIcon } = await heldSettings($)
   const labels: string[] = []
   // A surface with no Client draws a Button, the one way to press there.
   const board = 'Client' in elements ? pressBoard<string>(elements.Client, 'pane-') : undefined
