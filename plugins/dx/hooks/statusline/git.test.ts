@@ -187,6 +187,41 @@ test('a .git file that never leads to a HEAD is kept as no repository', async ()
   }
 })
 
+// Git reads `gitdir:` at the start of the file only, the path ending with the
+// first line, whatever its line ending.
+test('a .git file is read for its gitdir on its first line only', async () => {
+  for (const link of ['gitdir: ../repo/.git/worktrees/wt\n', 'gitdir:../repo/.git/worktrees/wt \r\n']) {
+    const fs = disk({ 'C:/wt/.git': link, 'C:/wt/../repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n' })
+    expect(await branchFrom(fs, 'C:/wt', new Map())).toBe('feature')
+  }
+
+  const fs = disk({
+    'C:/wt/.git': 'garbage\ngitdir: C:/repo/.git/worktrees/wt\n',
+    'C:/repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n',
+  })
+  const heads: HeadPaths = new Map()
+  expect(await branchFrom(fs, 'C:/wt', heads)).toBeUndefined()
+  expect(heads.get('C:/wt')).toBe(null)
+})
+
+// Git writes the `.git` file ending with a newline: read without it, the file
+// may be cut short by the write, its `gitdir:` not there yet or its path cut
+// in the middle. Nothing is kept; once written, it is read.
+test('a .git file without its final newline keeps nothing', async () => {
+  for (const partial of ['gitd', 'gitdir: C:/repo/.git/work']) {
+    const fs = disk({
+      'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n',
+      'C:/repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n',
+      'C:/wt/.git': partial,
+    })
+    const heads: HeadPaths = new Map()
+    expect(await branchFrom(fs, 'C:/wt', heads)).toBeUndefined()
+    expect(heads.has('C:/wt')).toBe(false)
+    fs.files['C:/wt/.git'] = 'gitdir: C:/repo/.git/worktrees/wt\n'
+    expect(await branchFrom(fs, 'C:/wt', heads)).toBe('feature')
+  }
+})
+
 // Git creates the `.git` file, then writes it; a worktree's HEAD is renamed
 // over as it is written: neither is concluded on.
 test('an empty .git file, or a linked HEAD missing from its folder, keeps nothing', async () => {
