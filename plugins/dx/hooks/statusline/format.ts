@@ -1,6 +1,10 @@
-// The band's figures as text, without `$`: the windows' pace and exhaustion,
-// durations and countdowns, numbers, the model, the effort and the path.
+// The band's figures and their text, without `$`: the windows' gauges, pace
+// and exhaustion, durations and countdowns, numbers, the model, the effort and
+// the path.
 
+import type { SessionRateLimit } from 'claude-code'
+
+import type { Gauge } from '../../types'
 import type { DayUnit } from '../shared/format'
 
 // Where a steady consumption would stand in a window `windowSeconds` long
@@ -29,6 +33,15 @@ export function exhaustionOf(percent: number, resetsAt: string, windowSeconds: n
 
   const left = ((100 - percent) / percent) * elapsed
   return left < remaining ? left : undefined
+}
+
+// The window of `kind` (`five_hour`, `seven_day`) among the session's rate
+// limits, as a gauge's figures; undefined when none is reported.
+export function gaugeOf(rateLimits: readonly SessionRateLimit[], kind: string): Gauge | undefined {
+  const window = rateLimits.find(limit => limit.kind === kind)
+  if (window === undefined) return undefined
+
+  return { percent: window.percentUsed, resetsAt: window.resetsAt }
 }
 
 // A duration: `2j15h` (`2d15h` with `d` days), `3h24`, `12m`.

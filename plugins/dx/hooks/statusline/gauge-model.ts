@@ -60,8 +60,8 @@ export function lighten(hex: string, amount: number): string {
   return `#${channel(16)}${channel(8)}${channel(0)}`
 }
 
-// One run of identical glyphs in one style: what a gauge is drawn with.
-type Run = { text: string; color: string; dim?: true; bold?: true }
+// One run of glyphs in one style: what a gauge, and the frame, are drawn with.
+export type Run = { text: string; color: string; dim?: true; bold?: true }
 
 // A gauge is a string of beads: double circles for what is consumed, dotted
 // circles for the gap to the pace (pale ahead of the consumption, in full
@@ -90,8 +90,8 @@ export function filledCells(percent: number, width: number): number {
   return clamped > 0 ? Math.max(1, Math.round((clamped / 100) * cells)) : 0
 }
 
-// Runs with neighbours of one style merged.
-function merged(runs: Run[]): Run[] {
+// Runs with neighbours of one style merged, as copies: `runs` is left as is.
+export function merged(runs: Run[]): Run[] {
   const out: Run[] = []
   for (const run of runs) {
     const last = out[out.length - 1]

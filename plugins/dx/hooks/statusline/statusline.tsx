@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On, SessionUsage, TurnStartInput } from 'claude-code'
+import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
-import type { Activity, BottomFact, Gauge, StatusSnapshot, TurnTime } from '../../types'
+import type { Activity, BottomFact, StatusSnapshot, TurnTime } from '../../types'
 import { openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { toggleSettings } from '../settings/settings'
@@ -14,6 +14,7 @@ import {
   duration,
   effortRank,
   exhaustionOf,
+  gaugeOf,
   modelLabel,
   paceOf,
   shortenPath,
@@ -46,6 +47,11 @@ async function turnTick($: EngineInterface): Promise<void> {
   if (current !== null && current.endedAt === undefined) await update($, tick, value => value + 1)
 }
 
+// What runs beside the main loop, followed by ../activity/activity.
+const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
+  shape: 'activity-1',
+})
+
 // The spinner's frame, advanced while a subagent works.
 const spin = atom({ plugin: 'dx', key: 'spin' } as const, 0, { shape: 'spin-1' })
 
@@ -53,11 +59,6 @@ async function spinTick($: EngineInterface): Promise<void> {
   const crew = await read($, activity)
   if (crew.agents.some(agent => isWorking(agent.status))) await update($, spin, frame => frame + 1)
 }
-
-// What runs beside the main loop, followed by ../activity/activity.
-const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
-  shape: 'activity-1',
-})
 
 // Countdowns are shown to the minute; the model, effort and branch may change
 // between two turns.
@@ -76,13 +77,6 @@ const SHUTTLE_STAGGER_MS = 1400
 // The effort a main-loop request was really sent with (after a downgrade for
 // the model), kept until the setting or the model changes again.
 const effort: { turn?: string; setting?: string; model?: string } = {}
-
-function gaugeOf(usage: SessionUsage, kind: string): Gauge | undefined {
-  const window = usage.rateLimits.find(limit => limit.kind === kind)
-  if (window === undefined) return undefined
-
-  return { percent: window.percentUsed, resetsAt: window.resetsAt }
-}
 
 // Where the HEAD of the repository holding each directory is, kept from one
 // refresh to the next (./git).
@@ -118,8 +112,8 @@ async function refresh($: EngineInterface): Promise<void> {
     context: usage.context.percent,
     contextTokens: usage.context.tokens,
     contextWindow: usage.context.window,
-    fiveHour: gaugeOf(usage, 'five_hour'),
-    sevenDay: gaugeOf(usage, 'seven_day'),
+    fiveHour: gaugeOf(usage.rateLimits, 'five_hour'),
+    sevenDay: gaugeOf(usage.rateLimits, 'seven_day'),
     startedAt: usage.startedAt,
     refreshedAt: now,
   }
@@ -263,7 +257,7 @@ export function registerStatusline(on: On): void {
     // The frame's perimeter, clockwise from the top left corner, for its glint.
     const height = gaugeRows + 2
     const perimeter = 2 * (width - 1) + 2 * (height - 1)
-    const leftAt = (line: number) => (2 * (width - 1) + 2 * (height - 1) - line) % perimeter
+    const leftAt = (line: number) => (perimeter - line) % perimeter
     const rightAt = (line: number) => width - 1 + line
     const bottomAt = (column: number) => width - 1 + height - 1 + (width - 1 - column)
     const piece = (key: string, runs: FrameRun[], start: number, step: 1 | -1) => {

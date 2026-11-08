@@ -6,6 +6,7 @@ import {
   duration,
   effortRank,
   exhaustionOf,
+  gaugeOf,
   modelLabel,
   paceOf,
   shortenPath,
@@ -39,6 +40,17 @@ test('a window used too fast says when it runs out', () => {
   expect(exhaustionOf(0, '2026-10-25T13:00:00Z', 5 * 3600, NOW)).toBeUndefined()
   // A minute into the window: too early to tell.
   expect(exhaustionOf(10, '2026-10-25T14:59:00Z', 5 * 3600, NOW)).toBeUndefined()
+})
+
+test("a gauge's figures are its window's, among the rate limits reported", () => {
+  const limits = [
+    { kind: 'five_hour', percentUsed: 20, resetsAt: '2026-10-25T13:24:00Z' },
+    { kind: 'spend_limit', percentUsed: 104 },
+  ]
+  expect(gaugeOf(limits, 'five_hour')).toEqual({ percent: 20, resetsAt: '2026-10-25T13:24:00Z' })
+  expect(gaugeOf(limits, 'spend_limit')).toEqual({ percent: 104, resetsAt: undefined })
+  expect(gaugeOf(limits, 'seven_day')).toBeUndefined()
+  expect(gaugeOf([], 'five_hour')).toBeUndefined()
 })
 
 test('durations and countdowns read in days, hours or minutes', () => {

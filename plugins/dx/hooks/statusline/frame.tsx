@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import { lighten } from './gauge-model'
+import { lighten, merged } from './gauge-model'
 
 // One piece of the band's frame, two slow glints going round it, half a
 // lap apart: every piece knows where its cells sit along the frame's perimeter
@@ -93,20 +93,17 @@ const Frame: ClientModule<FrameProps, FrameState> = (props, surface) => {
   const latest = instances.get(surface)
   if (latest !== undefined) latest.props = props
   if (latest !== undefined && latest.lights.props !== props) latest.lights = { props, values: lightsOf(props) }
+  // The first call records the instance: the lights are found afresh only if
+  // that record were missing.
   const lights = latest?.lights.values ?? lightsOf(props)
 
-  const cells: { text: string; color: string; bold?: true; dim?: true }[] = []
+  // Each cell in its run's style, lit where a glint is, then merged in runs.
   let index = 0
-  for (const run of props.runs) {
-    for (const char of Array.from(run.text)) {
-      const light = lights[index] ?? 0
-      index += 1
-      const color = light > 0 ? lighten(props.hex, light) : run.color
-      const last = cells[cells.length - 1]
-      if (last !== undefined && last.color === color && last.bold === run.bold && last.dim === run.dim) last.text += char
-      else cells.push({ text: char, color, bold: run.bold, dim: run.dim })
-    }
-  }
+  const cells = merged(props.runs.flatMap(run => Array.from(run.text, char => {
+    const light = lights[index] ?? 0
+    index += 1
+    return { text: char, color: light > 0 ? lighten(props.hex, light) : run.color, bold: run.bold, dim: run.dim }
+  })))
 
   return (
     <Box>

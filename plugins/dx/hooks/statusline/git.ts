@@ -1,7 +1,7 @@
 // The band's Git branch, without `$`: the files are read through `read`, which
 // resolves undefined for a file it cannot read.
 
-export type ReadFile = (path: string) => Promise<string | undefined>
+type ReadFile = (path: string) => Promise<string | undefined>
 
 // Where the HEAD of the repository holding each directory is, null for none.
 export type HeadPaths = Map<string, string | null>
