@@ -759,6 +759,39 @@ test('a turn during a fresh load leaves the unsaved setting to the start', async
   await band.unmount()
 })
 
+// dx's code loaded anew, a change made before the settings' start: it builds
+// on the unsaved change the state holds, never on the defaults or the store.
+test('a change before a fresh load starts the settings keeps the unsaved setting', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let starting = () => {}
+  const isStarting = new Promise<void>(resolve => {
+    starting = resolve
+  })
+  let release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  const beforeStart = async () => {
+    starting()
+    await released
+  }
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } }, beforeStart })
+  shell(on)
+  leaveState(on, {
+    panel: { shape: 'panel-1', value: 'settings' },
+    settings: leftSettings({ frameColor: '#123456' }, { unsaved: 'disk full' }),
+  })
+
+  const started = $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await isStarting
+  const pane = await $.ui.mount(SETTINGS_PANE)
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  release()
+  await started
+  expect(store.get('settings')).toMatchObject({ frameColor: '#123456', show: { total: false } })
+})
+
 // dx's code loaded anew, the store unreadable: the settings the state holds,
 // which the session read before, are shown rather than the defaults, but no
 // change is applied over the store's until a read succeeds.

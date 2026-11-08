@@ -41,6 +41,8 @@ type EngineOptions = {
   refused?: ReadonlySet<string>
   // `session.id` and its start, which a test changes as a `/clear` does.
   session?: { id: string; startedAt?: number }
+  // Awaited before the engine answers the session's start.
+  beforeStart?: () => Promise<void>
 }
 
 export function engine(on: On, options: EngineOptions = {}) {
@@ -52,6 +54,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     fiveHour = true,
     refused = new Set<string>(),
     session = { id: 's1' },
+    beforeStart = async () => {},
   } = options
   // dx's store, read back by the tests.
   const store = new Map(Object.entries(stored))
@@ -102,7 +105,11 @@ export function engine(on: On, options: EngineOptions = {}) {
         : [],
     },
   }))
-  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.start', async (_, e) => {
+    await beforeStart()
+
+    return { cwd: e.cwd }
+  })
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('agent.list', () => ({ value: agents as never }))
   // No process list: tasks are followed from the engine's signals alone.

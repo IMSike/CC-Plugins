@@ -130,8 +130,10 @@ async function stateHeld($: EngineInterface): Promise<HeldSettings | undefined> 
   return value !== undefined && value.shape === settings.shape ? value.value : undefined
 }
 
-// Once in this hooks module, before what this session holds is written:
-// with the module loaded anew, a change of this session still unsaved, which
+// Once in this hooks module, before what this session holds is written: run
+// in `changing` by the first of the start, a change and the `⚙` icon, which
+// may come before the start, the session's own start still under way. With
+// the module loaded anew, a change of this session still unsaved, which
 // the store lacks, is taken up from the state (`stateHeld`), to be kept
 // rather than read over; otherwise the change is lost and the store read.
 // Settings the state holds that were shown as this session's own, read from
@@ -260,6 +262,7 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
 // outcome, which puts back what a `/clear` emptied meanwhile.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
+    await takeUp($)
     let base: BandSettings
     try {
       base = await changeBase($)
@@ -285,6 +288,7 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
   // Another session's changes shown, after this one's under way; a change of
   // this session still unsaved, which the store lacks, saved again instead.
   changing = changing.then(async () => {
+    await takeUp($)
     await hold($, {})
     if (held.unsaved === null) await loadSettings($)
     else await save($)
