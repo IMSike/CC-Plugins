@@ -2,7 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { registerActivity, startActivity } from './activity/activity'
 import { registerNotes, startNotes, startNotesTurn } from './notes/notes'
-import { registerSettings, startSettings } from './settings/settings'
+import { registerSettings, startSettings, startSettingsTurn } from './settings/settings'
 import { errorText } from './shared/format'
 import { registerStatusline, startStatusline, startStatuslineTurn } from './statusline/statusline'
 
@@ -38,8 +38,10 @@ export const register: Register = on => {
 
   on('turn.start', async ($, e, next) => {
     const result = await next(e)
-    // The band times the turn before the notes follow a `/clear`.
+    // The band times the turn before the settings and the notes follow a
+    // `/clear`.
     await started($, 'bandeau, tour', startStatuslineTurn($, e))
+    await started($, 'réglages, tour', startSettingsTurn($))
     await started($, 'notes, tour', startNotesTurn($, e))
 
     return result

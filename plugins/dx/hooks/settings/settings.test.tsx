@@ -181,3 +181,60 @@ test('a change with the settings never read is not saved over the stored ones', 
   await pane.unmount()
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
 })
+
+// Empties dx's settings as the engine may at a `/clear`, from the call it
+// returns on: each read as absent while it stands at the version it had,
+// until written.
+const EMPTIED_KEYS = ['settings', 'settingsUnsaved']
+function emptySettings(on: On): () => void {
+  let isEmpty = false
+  const emptied = new Map<string, number>()
+  on('state.get', async (_, e, next) => {
+    const read = await next(e)
+    if (!isEmpty || e.plugin !== 'dx' || !EMPTIED_KEYS.includes(e.key) || !('value' in read) || read.value === undefined) return read
+    if (!emptied.has(e.key)) emptied.set(e.key, read.value.version)
+
+    return read.value.version === emptied.get(e.key) ? { value: { ...read.value, value: undefined } } : read
+  })
+
+  return () => {
+    isEmpty = true
+  }
+}
+
+// A `/clear` may empty dx's state, not the hooks module's memory: an unsaved
+// change and its warning stand, drawn by the pane at once, by the band from
+// the next turn, and saved by the next change.
+test('an unsaved setting and its warning outlast a /clear that empties the state', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const session = { id: 's1' }
+  const store = engine(on, { refused, session })
+  shell(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const emptied = emptySettings(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  refused.add('store.set settings')
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  emptied()
+
+  const after = await $.ui.mount(SETTINGS_PANE)
+  expect(await after.find({ type: 'Text', text: /^⚠ réglages non enregistrés : .*disk full$/ })).toBeDefined()
+  await after.unmount()
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  await band.unmount()
+
+  refused.clear()
+  const again = await $.ui.mount(SETTINGS_PANE)
+  await click(again, 'settings:show-branch')
+  expect(await again.find({ type: 'Text', text: /non enregistrés/ })).toBeUndefined()
+  await again.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false, branch: false } })
+})

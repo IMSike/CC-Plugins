@@ -71,15 +71,47 @@ async function loadSettings($: EngineInterface): Promise<void> {
   await update($, settings, () => settingsOf(stored))
 }
 
+// The last change not saved and why, until a change saves: kept in the hooks
+// module's memory too, which a `/clear` leaves (the process goes on, no
+// `session.start` fires) while it may empty dx's state, `settingsUnsaved`
+// then read as null. Never in the store, which every session reads.
+type Unsaved = { value: BandSettings; reason: string }
+let unsavedCopy: Unsaved | undefined
+
+// The unsaved change shown, its warning with it: from the state, or from
+// memory when a `/clear` emptied the state, which a render may not write back.
+async function shownSettings($: EngineInterface): Promise<{ value: BandSettings; unsaved: string | null }> {
+  const unsaved = await read($, settingsUnsaved)
+  if (unsaved === null && unsavedCopy !== undefined) return { value: unsavedCopy.value, unsaved: unsavedCopy.reason }
+  return { value: await read($, settings), unsaved }
+}
+
+// The unsaved change put back into the state a `/clear` emptied. Run among
+// the changes (`changing`).
+async function restoreUnsaved($: EngineInterface): Promise<void> {
+  const copy = unsavedCopy
+  if (copy === undefined || (await read($, settingsUnsaved)) !== null) return
+  await update($, settings, () => copy.value)
+  await update($, settingsUnsaved, () => copy.reason)
+}
+
 // Called by ../register once the session has started, before the features
-// that read the settings.
+// that read the settings: a fresh load of the plugin, nothing unsaved.
 export async function startSettings($: EngineInterface): Promise<void> {
   settingsLoaded = false
+  unsavedCopy = undefined
   await loadSettings($)
 }
 
 // The changes under way, one after the other.
 let changing: Promise<void> = Promise.resolve()
+
+// Called by ../register as a turn starts: an unsaved change a `/clear`
+// emptied from the state is restored, for the band to draw it again.
+export async function startSettingsTurn($: EngineInterface): Promise<void> {
+  changing = changing.then(() => restoreUnsaved($)).catch(() => undefined)
+  await changing
+}
 
 // The settings a change starts from: as the store holds them, another
 // session's changes included; while a change of this session is unsaved, as
@@ -106,6 +138,7 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
 // why.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
+    await restoreUnsaved($)
     let base: BandSettings
     try {
       base = await changeBase($)
@@ -116,6 +149,7 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
     const next = edit(base)
     await update($, settings, () => next)
     const reason = await $.store.set(STORE_KEY, next).then(() => null, (error: unknown) => errorText(error))
+    unsavedCopy = reason === null ? undefined : { value: next, reason }
     if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)
   }).catch(() => undefined)
 
@@ -126,6 +160,7 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
   // Another session's changes shown, after this one's under way; not over a
   // change of this session still unsaved, which the store lacks.
   changing = changing.then(async () => {
+    await restoreUnsaved($)
     if ((await read($, settingsUnsaved)) === null) await loadSettings($)
   }).catch(() => undefined)
   await changing
@@ -191,8 +226,7 @@ export function registerSettings(on: On): void {
     // Input and Client are drawn there alone.
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
-    const value = await read($, settings)
-    const unsaved = await read($, settingsUnsaved)
+    const { value, unsaved } = await shownSettings($)
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
