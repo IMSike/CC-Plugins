@@ -336,6 +336,36 @@ test('stored settings hide elements, and may keep an idle 5-hour row', async ($,
   await ui.unmount()
 })
 
+// A plugin beneath dx (the builtin tier) refusing the first lookup of a
+// `.git`, as a guard or a network location does: dx's lookup rejects. It runs
+// on its own, its count inside.
+const REFUSED_EXISTS = {
+  name: 'refused-exists',
+  tier: 'builtin' as const,
+  register: (on: On) => {
+    let gitLookups = 0
+    on('fs.exists', async (_, e, next) => {
+      if (!e.path.endsWith('.git')) return next(e)
+      gitLookups += 1
+      return gitLookups === 1 ? { deny: 'network location' } : next(e)
+    })
+  },
+}
+
+test('a lookup refused is no proof of no repository: the branch shows once answered', { plugins: [REFUSED_EXISTS] }, async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const refused = await $.ui.mount(BAND)
+  expect(await refused.find({ type: 'Text', text: /⎇/, in: 'frame-top' })).toBeUndefined()
+  await refused.unmount()
+
+  await clock.advance(30_000)
+  const answered = await $.ui.mount(BAND)
+  expect((await answered.find({ type: 'Text', text: /⎇/, in: 'frame-top' }))?.text).toBe(' ⎇ dev')
+  await answered.unmount()
+})
+
 // A plugin beneath dx (the builtin tier) whose first usage read is malformed:
 // the band's first snapshot fails. It runs on its own, its count inside.
 const MALFORMED_USAGE = {

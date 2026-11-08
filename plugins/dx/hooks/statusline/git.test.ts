@@ -5,8 +5,9 @@ import type { HeadPaths } from './git'
 
 // A file system holding `files`, by path, that records every read and every
 // lookup; a path exists when it is a file or a folder holding one. The paths
-// in `unreadable` exist but cannot be read.
-function disk(files: Record<string, string>, unreadable = new Set<string>()) {
+// in `unreadable` exist but cannot be read; whether those in `unanswered`
+// exist cannot be told.
+function disk(files: Record<string, string>, unreadable = new Set<string>(), unanswered = new Set<string>()) {
   const reads: string[] = []
   const lookups: string[] = []
   const read = async (path: string) => {
@@ -15,9 +16,10 @@ function disk(files: Record<string, string>, unreadable = new Set<string>()) {
   }
   const exists = async (path: string) => {
     lookups.push(path)
+    if (unanswered.has(path)) return undefined
     return Object.keys(files).some(file => file === path || file.startsWith(`${path}/`))
   }
-  return { files, unreadable, reads, lookups, read, exists }
+  return { files, unreadable, unanswered, reads, lookups, read, exists }
 }
 
 test("a repository's branch is read from its HEAD, up from the directory", async () => {
@@ -42,6 +44,29 @@ test('outside a repository, the .git is looked for once, not on every refresh', 
   expect(reads).toHaveLength(0)
   expect(await branchFrom(read, exists, 'C:/a/b/c', heads)).toBeUndefined()
   expect(lookups).toHaveLength(4)
+})
+
+// A network location, or a guard refusing the lookup: that no repository
+// holds the directory is not concluded, nor kept for the session.
+test('a lookup that cannot be answered keeps nothing: the next refresh looks again', async () => {
+  const { read, exists, unanswered } = disk({ 'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n' })
+  const heads: HeadPaths = new Map()
+  unanswered.add('C:/repo/app/.git')
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBeUndefined()
+  expect(heads.has('C:/repo/app')).toBe(false)
+  unanswered.clear()
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('dev')
+})
+
+test('a HEAD whose lookup cannot be answered is not passed over', async () => {
+  const head = 'C:/repo/app/.git/HEAD'
+  const { read, exists } = disk({
+    'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n',
+    [head]: 'ref: refs/heads/feature\n',
+  }, new Set([head]), new Set([head]))
+  const heads: HeadPaths = new Map()
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBeUndefined()
+  expect(heads.has('C:/repo/app')).toBe(false)
 })
 
 test('the HEAD found is read again each time: a branch switch shows', async () => {

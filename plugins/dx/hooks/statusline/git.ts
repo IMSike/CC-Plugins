@@ -1,9 +1,10 @@
 // The band's Git branch, without `$`: the files are read through `read`, which
 // resolves undefined for a file it cannot read, and looked for through
-// `exists`, which resolves false for a path it cannot find.
+// `exists`, which resolves false for a path it cannot find and undefined when
+// that cannot be told (a network location, a guard refusing the lookup).
 
 type ReadFile = (path: string) => Promise<string | undefined>
-type Exists = (path: string) => Promise<boolean>
+type Exists = (path: string) => Promise<boolean | undefined>
 
 // Where the HEAD of the repository holding each directory is, null for none.
 export type HeadPaths = Map<string, string | null>
@@ -28,15 +29,18 @@ function parentOf(dir: string): string {
 // worktree or a submodule the HEAD its `.git` file points to. A `.git` folder
 // without a HEAD is passed over, as Git does. 'none' when no directory up from
 // `cwd` holds a `.git`; undefined when one does but its HEAD could not be read
-// now (git renaming it as it writes it, on Windows).
+// now (git renaming it as it writes it, on Windows), or when a lookup could
+// not be answered: nothing is concluded then.
 async function headOf(read: ReadFile, exists: Exists, cwd: string): Promise<{ path: string; text: string } | 'none' | undefined> {
   let dir = cwd.replace(/[\\/]+$/, '')
   for (let depth = 0; depth < MAX_DEPTH && dir !== ''; depth += 1) {
-    if (await exists(`${dir}/.git`)) {
+    const git = await exists(`${dir}/.git`)
+    if (git === undefined) return undefined
+    if (git) {
       const path = `${dir}/.git/HEAD`
       const head = await read(path)
       if (head !== undefined) return { path, text: head }
-      if (await exists(path)) return undefined
+      if (await exists(path) !== false) return undefined
 
       // No `.git/HEAD`: a `.git` file pointing to the HEAD, or a folder
       // without one, which cannot be read as a file.
@@ -64,7 +68,8 @@ async function headOf(read: ReadFile, exists: Exists, cwd: string): Promise<{ pa
 // looked for once per directory and kept in `heads`, one lookup for each
 // parent; the HEAD itself is read again each time, so a branch switch shows,
 // and looked for again once gone (the repository moved, a worktree removed).
-// A HEAD that cannot be read now keeps nothing: the next refresh reads again.
+// A HEAD that cannot be read now, or a lookup that cannot be answered, keeps
+// nothing: the next refresh looks again.
 export async function branchFrom(read: ReadFile, exists: Exists, cwd: string, heads: HeadPaths): Promise<string | undefined> {
   const known = heads.get(cwd)
   if (known === null) return undefined

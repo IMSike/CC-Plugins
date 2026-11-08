@@ -87,9 +87,10 @@ function readFile($: EngineInterface, path: string): Promise<string | undefined>
   return $.fs.read(path).catch(() => undefined)
 }
 
-// Whether `path` exists, false when that cannot be told.
-function pathExists($: EngineInterface, path: string): Promise<boolean> {
-  return $.fs.exists(path).catch(() => false)
+// Whether `path` exists, undefined when that cannot be told (a network
+// location, a guard refusing the lookup).
+function pathExists($: EngineInterface, path: string): Promise<boolean | undefined> {
+  return $.fs.exists(path).catch(() => undefined)
 }
 
 async function refresh($: EngineInterface): Promise<void> {
