@@ -53,6 +53,9 @@ test('an emoji sequence counts as one emoji, a flag too', () => {
   // A skin tone after no emoji: a swatch of its own.
   expect(cellWidth('\u{1F3FD}')).toBe(2)
   expect(cellWidth('a\u{1F3FD}')).toBe(3)
+  // After an emoji that takes none: a swatch beside it.
+  expect(cellWidth('\u{2764}\u{1F3FD}')).toBe(3)
+  expect(cellWidth('\u{1F600}\u{1F3FD}')).toBe(4)
 })
 
 // A heart, a check mark or a keycap's digit is text by default: the emoji

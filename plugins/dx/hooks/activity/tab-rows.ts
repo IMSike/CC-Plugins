@@ -14,10 +14,11 @@ const REGIONAL = /[\u{1F1E6}-\u{1F1FF}]/u
 // default (a heart, a check mark, a keycap's digit).
 const EMOJI_STYLE = '\u{FE0F}'
 const EMOJI = /\p{Emoji}/u
-// Skin tone modifiers: drawn on the emoji before them, making it emoji over
-// two cells when it is text by default (a victory hand), as a swatch of their
-// own after anything else.
+// Skin tone modifiers: drawn on the emoji before them that takes one, making
+// it emoji over two cells when it is text by default (a victory hand), as a
+// swatch of their own after anything else (a heart, a letter).
 const MODIFIER = /[\u{1F3FB}-\u{1F3FF}]/u
+const MODIFIED = /\p{Emoji_Modifier_Base}/u
 // Code points drawn over no cell of their own: combining marks (the other
 // variation selectors among them), zero-width spaces and joiners, the Hangul
 // vowels and final consonants joined to the leading consonant before them,
@@ -43,7 +44,7 @@ export function cellWidth(text: string): number {
   let isFlagOpen = false
   for (const char of text) {
     const isRegional = REGIONAL.test(char)
-    const isModifier = MODIFIER.test(char) && PICTOGRAPHIC.test(base)
+    const isModifier = MODIFIER.test(char) && MODIFIED.test(base)
     if (char === EMOJI_STYLE || isModifier) {
       if (cells === 1 && (isModifier || EMOJI.test(base))) {
         width += 1
