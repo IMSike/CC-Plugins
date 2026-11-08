@@ -93,6 +93,12 @@ function pathExists($: EngineInterface, path: string): Promise<boolean | undefin
   return $.fs.exists(path).catch(() => undefined)
 }
 
+// What `path` leads to, undefined when that cannot be told (the path gone, a
+// guard refusing the lookup).
+function pathKind($: EngineInterface, path: string): Promise<'file' | 'dir' | 'other' | undefined> {
+  return $.fs.stat(path).then(stat => stat.kind, () => undefined)
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   const [model, cwd, usage, setting, home, now] = await Promise.all([
     $.session.model(),
@@ -114,7 +120,11 @@ async function refresh($: EngineInterface): Promise<void> {
     model: modelLabel(model),
     effort: effort.turn ?? configured,
     cwd: shortenPath(cwd, home),
-    branch: await branchFrom(path => readFile($, path), path => pathExists($, path), cwd, heads),
+    branch: await branchFrom({
+      read: path => readFile($, path),
+      exists: path => pathExists($, path),
+      kind: path => pathKind($, path),
+    }, cwd, heads),
     context: usage.context.percent,
     contextTokens: usage.context.tokens,
     contextWindow: usage.context.window,

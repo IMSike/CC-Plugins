@@ -373,7 +373,7 @@ test('refreshes that keep failing are said once in the debug log, as they start 
 })
 
 // A plugin beneath dx (the builtin tier) refusing the first lookup of a
-// `.git`, as a guard or a network location does: dx's lookup rejects. It runs
+// `.git`, as a guard may for a moment: dx's lookup rejects. It runs
 // on its own, its count inside.
 const REFUSED_EXISTS = {
   name: 'refused-exists',
