@@ -471,3 +471,43 @@ test('a change after a /clear, the store unreadable, keeps the stored settings',
   await after.unmount()
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
 })
+
+// A reload of dx while a change's save is under way waits for it: should the
+// save fail, the change is kept unsaved, never the settings read before it.
+test("a reload during a setting's save keeps the change", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  let saving = () => {}
+  const isSaving = new Promise<void>(resolve => {
+    saving = resolve
+  })
+  let release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  on('store.set', { key: 'settings' }, async (_, e, next) => {
+    saving()
+    await released
+    return next(e)
+  })
+  const store = engine(on, { refused })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const clicked = click(pane, 'settings:show-total')
+  await isSaving
+  const reloaded = $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  refused.add('store.set settings')
+  release()
+  await clicked
+  await reloaded
+  await pane.unmount()
+
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  refused.clear()
+  await click(band, 'settings')
+  await band.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false } })
+})

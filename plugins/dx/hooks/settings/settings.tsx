@@ -137,23 +137,29 @@ async function takeStored($: EngineInterface, stored: unknown): Promise<void> {
   await hold($, { value: settingsOf(stored), unreadable: null })
 }
 
+// The changes under way, one after the other, and the `⚙` icon's and a
+// reload's reads of the settings among them.
+let changing: Promise<void> = Promise.resolve()
+
 // Called by ../register once the session has started, before the features
 // that read the settings: a fresh load of the plugin, from what its state
-// holds. A change of this session still unsaved, which the store lacks, is
-// kept rather than read over, as the `⚙` icon does. A read that fails rejects,
-// for ../register to write it to the debug log.
+// holds, once a change under way is done, its save included, which decides
+// what is unsaved. A change of this session still unsaved, which the store
+// lacks, is kept rather than read over, as the `⚙` icon does. A read that
+// fails rejects, for ../register to write it to the debug log.
 export async function startSettings($: EngineInterface): Promise<void> {
-  held = {
-    value: await read($, settings),
-    unsaved: await read($, settingsUnsaved),
-    unreadable: await read($, settingsUnreadable),
-  }
-  settingsLoaded = held.unsaved !== null
-  if (!settingsLoaded) await loadSettings($)
+  const started = changing.then(async () => {
+    held = {
+      value: await read($, settings),
+      unsaved: await read($, settingsUnsaved),
+      unreadable: await read($, settingsUnreadable),
+    }
+    settingsLoaded = held.unsaved !== null
+    if (!settingsLoaded) await loadSettings($)
+  })
+  changing = started.catch(() => undefined)
+  await started
 }
-
-// The changes under way, one after the other.
-let changing: Promise<void> = Promise.resolve()
 
 // Called by ../register as a turn starts: the settings a `/clear` emptied from
 // the state are restored, for the band to draw them again; a subagent's turn
