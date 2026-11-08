@@ -139,10 +139,11 @@ async function stateHeld($: EngineInterface): Promise<HeldSettings | undefined> 
 // Settings the state holds that were shown as this session's own, read from
 // the store, changed, or taken up so by an earlier load of the module's code,
 // are taken up to be shown; not those held with the warning that the
-// defaults were shown.
+// defaults were shown. A state that cannot be read holds nothing: the store
+// is read as at a first start.
 async function takeUp($: EngineInterface): Promise<void> {
   if (isTakenUp) return
-  const left = await stateHeld($)
+  const left = await stateHeld($).catch(() => undefined)
   if (left !== undefined && left.unsaved !== null) {
     held = { ...left, unreadable: null }
     settingsLoaded = true
@@ -179,10 +180,10 @@ async function takeStored($: EngineInterface, stored: unknown): Promise<void> {
 // reload's reads of the settings among them.
 let changing: Promise<void> = Promise.resolve()
 
-// Called by ../register once the session has started, as at a reload of the
-// plugin; the notes' start waits for it, the band's and the activity's run
-// alongside. It runs once a change under way is done, its save included,
-// which decides what is unsaved. A change of this
+// Called by ../register as the session starts, as at a reload of the plugin,
+// even when the start beneath dx failed; the notes' start waits for it, the
+// band's and the activity's run alongside. It runs once a change under way is
+// done, its save included, which decides what is unsaved. A change of this
 // session still unsaved, which the store lacks, is kept rather than read
 // over, as the `⚙` icon does: from the hooks module's memory, which a
 // `/clear` may have left alone with it, put back into the state; with the
@@ -193,7 +194,9 @@ let changing: Promise<void> = Promise.resolve()
 // the defaults this module holds. Neither is the store's: a change is
 // refused until a read succeeds. A hex field's warning ends meanwhile: with
 // the module loaded anew, it would outlive the text it was about, which no
-// keystroke or color of this module then knows to clear.
+// keystroke or color of this module then knows to clear. Both are waited
+// for; the clearing's failure is thrown only when the settings' start did
+// not fail.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
     await takeUp($)
@@ -209,7 +212,9 @@ export async function startSettings($: EngineInterface): Promise<void> {
     }
   })
   changing = started.catch(() => undefined)
-  await Promise.all([started, clearBadHex($)])
+  const [loaded, cleared] = await Promise.allSettled([started, clearBadHex($)])
+  if (loaded.status === 'rejected') throw loaded.reason
+  if (cleared.status === 'rejected') throw cleared.reason
 }
 
 // Called by ../register as a turn starts: the settings a `/clear` emptied from
@@ -220,7 +225,7 @@ export async function startSettings($: EngineInterface): Promise<void> {
 // succeeds; one that fails leaves the pane's warning as it stands. Before
 // `takeUp` decided what this session holds, nothing: the defaults this
 // module holds then would be written over what it takes up from the state,
-// and the start reads the store itself.
+// and the start, under way, reads the store itself.
 export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
   if (e.agentId !== undefined || !isTakenUp) return
   await hold($, {})

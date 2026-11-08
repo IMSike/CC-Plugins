@@ -275,7 +275,7 @@ test('typing in a hex field writes the warning only when it changes', async ($, 
 })
 
 // The warning's write refused: the typed text is left as it stands, nothing
-// rejected unhandled.
+// rejected unhandled. No `expect`: a rejection nothing handled fails the file.
 test('a hex warning the state refuses leaves the field as it stands', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on)
@@ -394,6 +394,35 @@ test('a change with the settings never read is not saved over the stored ones', 
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
 })
 
+// The hex warning's clearing refused as well at the start: the debug log still
+// says why the settings were not read.
+test("a start's unread settings are logged over a refused hex warning's end", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  // The read refused once the clearing was: its failure comes second.
+  let clearingRefused = () => {}
+  const isClearingRefused = new Promise<void>(resolve => {
+    clearingRefused = resolve
+  })
+  on('store.get', { key: 'settings' }, async () => {
+    await isClearingRefused
+    return { deny: 'store locked' }
+  })
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  on('state.set', { plugin: 'dx', key: 'settingsBadHex' }, () => {
+    clearingRefused()
+    return { deny: 'state refused' }
+  })
+  const debug: string[] = []
+  on('ui.log', (_, e) => {
+    if (e.to === 'debug') debug.push(e.text)
+
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  expect(debug.some(text => /^dx : démarrage échoué, réglages \(.*store locked\)$/.test(text))).toBe(true)
+})
+
 // The settings unreadable as the session starts are never silent: the pane says
 // the defaults are shown, the debug log why, and each main turn reads them
 // again until the store answers.
@@ -433,6 +462,24 @@ test('settings unreadable at the start say so, and are read again at each turn',
   const after = await $.ui.mount(BAND)
   expect(await frameColors(after)).toContain('#58a6ff')
   await after.unmount()
+})
+
+// dx's state unreadable as its settings are taken up: it holds nothing, and
+// the store is read as at a first start.
+test('a state that cannot be read leaves the settings read from the store', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  let isFirst = true
+  on('state.get', { plugin: 'dx', key: 'settings' }, (_, e, next) => {
+    if (!isFirst) return next(e)
+    isFirst = false
+    return { deny: 'state unreadable' }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
 })
 
 // The `⚙` icon reads the settings again: once the store answers, the warning

@@ -48,7 +48,12 @@ test('the features start when the session start beneath them fails', async ($, o
     throw new Error('core failed')
   }
   engine(on, { stored: { settings: { frameColor: '#58a6ff' } }, beforeStart })
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true }).catch(() => undefined)
+  const failure = await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true }).then(
+    () => undefined,
+    (error: unknown) => error,
+  )
+  // The start rejects all the same once the features have started.
+  expect(String(failure)).toContain('session.start')
 
   const band = await $.ui.mount(BAND)
   expect(await frameColors(band)).toContain('#58a6ff')
