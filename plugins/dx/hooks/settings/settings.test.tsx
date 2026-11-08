@@ -237,6 +237,20 @@ test('a hex color warning goes with a color picked or the pane shown again', asy
   await shown.unmount()
 })
 
+// The reset applies a color to every element: no hex field's warning stays.
+test('a hex color warning goes with the reset', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  await pane.input({ key: 'gauge-color-hex', text: 'bleu' })
+  await click(pane, 'settings:reset')
+  expect(await pane.find({ type: 'Text', text: /^⚠ couleur non appliquée/ })).toBeUndefined()
+  await pane.unmount()
+})
+
 // Its text changed while a submit with no color is said: the warning goes
 // all the same, never kept by a read made before it was written.
 test('a hex color warning goes with a change of text made meanwhile', async ($, on) => {

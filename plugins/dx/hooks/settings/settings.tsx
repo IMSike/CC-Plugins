@@ -53,8 +53,8 @@ const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as c
   shape: 'settings-unreadable-3',
 })
 // The hex field whose text is no color, by the key of its colors: said in red
-// under it until its text changes, a color is applied for it, typed or
-// picked, or the pane is shown anew.
+// under it until its text changes, a color is applied for it, typed, picked
+// or by the reset, or the pane is shown anew.
 const settingsBadHex = atom({ plugin: 'dx', key: 'settingsBadHex' } as const, null as string | null, { shape: 'settings-bad-hex-1' })
 
 const STORE_KEY = 'settings'
@@ -363,8 +363,8 @@ function isStepper(value: unknown): value is Stepper {
 }
 
 // A press's change; a color's, also the key of its colors, whose hex field's
-// warning it ends.
-type SettingsPress = { edit: (current: BandSettings) => BandSettings; colors?: string }
+// warning it ends; the reset's, applying a color to each, ends any (`isReset`).
+type SettingsPress = { edit: (current: BandSettings) => BandSettings; colors?: string; isReset?: true }
 // What each press drawn in the pane (../shared/press.tsx) changes, by its key:
 // set as the pane draws, applied to the settings as they stand when it lands.
 // Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
@@ -398,7 +398,8 @@ export function registerSettings(on: On): void {
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^settings:/ }, async ($, e) => {
     const action = pressActions.get(e.element)
     if (action === undefined) return {}
-    if (action.colors !== undefined) await markBadHex($, action.colors, false)
+    if (action.isReset) await clearBadHex($)
+    else if (action.colors !== undefined) await markBadHex($, action.colors, false)
     await change($, action.edit)
 
     return {}
@@ -637,7 +638,7 @@ export function registerSettings(on: On): void {
           </Box>,
         ])}
         <Box key="footer" justifyContent="flex-end" paddingX={1}>
-          {press('reset', () => DEFAULT_SETTINGS, [{ text: '[ ↺ Réinitialiser ]' }], undefined, { color: 'claude' })}
+          {board.press('reset', { edit: () => DEFAULT_SETTINGS, isReset: true }, [{ text: '[ ↺ Réinitialiser ]' }], { color: 'claude' })}
         </Box>
       </Box>
     )
