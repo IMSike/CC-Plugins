@@ -412,8 +412,8 @@ export function registerNotes(on: On): void {
       session,
     }
     // A note the editor cannot take is said so in its place, kept as stored,
-    // its length counted as NOTE_MAX_CHARS is:
-    // drawn, the Client would fail the whole pane.
+    // its length counted as NOTE_MAX_CHARS is: drawn, the Client would fail
+    // the whole pane.
     const sheet = fitsEditor(editor)
       ? <Client key={`note-${view.tab}-${session}`} module="./editor.tsx" props={editor} height={rows} />
       : (

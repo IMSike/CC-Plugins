@@ -30,20 +30,21 @@ export function thousands(count: number): string {
 }
 export const NOTE_MAX_SHOWN = thousands(NOTE_MAX_CHARS)
 
+// A text of at most this many code units is within NOTE_MAX_CHARS once
+// encoded, a unit taking six characters at the most: no need to encode it.
+const SURELY_SHORT = Math.floor(NOTE_MAX_CHARS / 6)
+
 // Whether the editor can take `props`. A note within NOTE_MAX_CHARS always
 // fits; one a little past it too, to be shortened there; one far longer
-// (stored before notes had a limit, or by another copy of dx) does not.
-export function fitsEditor(props: unknown): boolean {
-  return JSON.stringify(props).length <= CLIENT_PROPS_MAX
+// (stored before notes had a limit, or by another copy of dx) does not. A
+// note surely short fits, its props not serialized at each render.
+export function fitsEditor(props: { text: string; [prop: string]: unknown }): boolean {
+  return props.text.length <= SURELY_SHORT || JSON.stringify(props).length <= CLIENT_PROPS_MAX
 }
 
 // Why an edit is not applied: the note past NOTE_MAX_CHARS, or past what the
 // store's room left holds (`max`, which the hooks module gives).
 export type Refusal = 'too-long' | 'store-full'
-
-// A text of at most this many code units is within NOTE_MAX_CHARS once
-// encoded, a unit taking six characters at the most: no need to encode it.
-const SURELY_SHORT = Math.floor(NOTE_MAX_CHARS / 6)
 
 // Why going from `before` to `after` is refused, or undefined. An edit that
 // lengthens the note is not applied, a paste whole rather than cut, when the

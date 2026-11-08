@@ -187,6 +187,13 @@ test('the editor takes a note up to what a Client takes, once serialized', () =>
     tab: 'session',
     session: 'x'.repeat(200),
   })).toBe(true)
+  // On either side of the length under which a note is not serialized: the
+  // heaviest characters, six each once encoded.
+  const surelyShort = Math.floor(NOTE_MAX_CHARS / 6)
+  expect(fitsEditor({ text: '\u0001'.repeat(surelyShort) })).toBe(true)
+  expect(fitsEditor({ text: '\u0001'.repeat(surelyShort + 1) })).toBe(true)
+  // 100,002 characters once encoded: past what a Client takes.
+  expect(fitsEditor({ text: '\u0001'.repeat(16_667) })).toBe(false)
 })
 
 // An editor showing `text`, having posted `sent` since the hooks drew `given`.
