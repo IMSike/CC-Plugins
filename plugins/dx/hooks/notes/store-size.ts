@@ -148,10 +148,10 @@ export async function storeRoom($: EngineInterface, fresh = false): Promise<numb
 // may grow to now: its length, plus as many characters as the room left
 // holds at UNIT_MAX_BYTES each once its entry's overhead is set aside, and
 // NOTE_MAX_CHARS at the most (an encoded length, never below the raw one: a
-// bound on it too). Every character typed then fits, whatever it
-// is. Only an edit that weighs more than its new characters (a letter
-// replaced by a control character, a surrogate pair split apart) may not,
-// which `fitsStore` still refuses at the save.
+// bound on it too). Every character typed then fits, whatever it is. Only an
+// edit that weighs more than its new characters (a letter replaced by a
+// control character, a surrogate pair split apart) may not, which `fitsStore`
+// still refuses at the save.
 export function noteMax(key: string, stored: number, room: number | undefined): number {
   if (room === undefined) return NOTE_MAX_CHARS
   const growth = Math.max(0, Math.floor((room - entryOverhead(key)) / UNIT_MAX_BYTES))

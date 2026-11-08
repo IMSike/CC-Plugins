@@ -7,8 +7,9 @@ import { forgetStoreSize, storeWritten } from './store-size'
 
 // The notes as ./notes draws them, loaded from `$.store` when the session
 // starts, and again when their pane is shown, a tab chosen, a note written or
-// a prompt sent while they are not loaded, or loaded for another session id: a `/clear`
-// may empty dx's state, and goes on under a new id with no `session.start`.
+// a prompt sent while they are not loaded, or loaded for another session id:
+// a `/clear` may empty dx's state, and goes on under a new id with no
+// `session.start`.
 const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-2' })
 // Why the last load failed, shown in the pane in place of the notes.
 const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
