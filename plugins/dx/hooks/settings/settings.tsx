@@ -94,25 +94,31 @@ let isHeld = false
 // The writes of what this session holds into the state, one after the other.
 let holding: Promise<void> = Promise.resolve()
 
+const HELD_KEYS = ['value', 'unsaved', 'unreadable'] as const
+type HeldKey = (typeof HELD_KEYS)[number]
+
 // Takes `changes` into what this session holds, at once, and writes it into
-// the state once the writes before are done: with no changes, puts back what
-// a `/clear` emptied. Each write takes what this session holds as it runs, so
-// the last one writes the last changes, whoever made them. Never run as a
-// drawing, which may not write the state.
-function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
+// the state once the writes before are done: every value, `keys` alone when
+// given, as a change does for its settings ahead of its save. With every
+// value written, a hold puts back what a `/clear` emptied, no changes or
+// some. Each write takes what this session holds as it runs, so the last one
+// writes the last changes, whoever made them. Never run as a drawing, which
+// may not write the state.
+function hold($: EngineInterface, changes: Partial<Held>, keys: readonly HeldKey[] = HELD_KEYS): Promise<void> {
   held = { ...held, ...changes }
-  const written = holding.then(() => writeHeld($))
+  const written = holding.then(() => writeHeld($, keys))
   holding = written.catch(() => undefined)
   return written
 }
 
-// Every value written, never skipped on a read that finds it already there:
-// every read of one dispatch answers one moment, and a write queued under an
-// older dispatch's `$` would read the state from before a `/clear` emptied it.
-async function writeHeld($: EngineInterface): Promise<void> {
-  await update($, settings, () => held.value)
-  await update($, settingsUnsaved, () => held.unsaved)
-  await update($, settingsUnreadable, () => held.unreadable)
+// The values of `keys` written, never skipped on a read that finds them
+// already there: every read of one dispatch answers one moment, and a write
+// queued under an older dispatch's `$` would read the state from before a
+// `/clear` emptied it.
+async function writeHeld($: EngineInterface, keys: readonly HeldKey[]): Promise<void> {
+  if (keys.includes('value')) await update($, settings, () => held.value)
+  if (keys.includes('unsaved')) await update($, settingsUnsaved, () => held.unsaved)
+  if (keys.includes('unreadable')) await update($, settingsUnreadable, () => held.unreadable)
 }
 
 // The settings drawn and their warnings: as this session holds them, which the
@@ -267,10 +273,11 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
 // changes in a row both land. A save that fails leaves the change applied to
 // this session alone, and the pane says why (`settingsUnsaved`). A change
 // with no settings to start from is not applied, and the pane says why
-// (`settingsUnreadable`); each warning goes as its atom's comment says.
+// (`settingsUnreadable`); each warning goes as its atom's comment says. The
+// settings written at once, for the band to show them; every value with the
+// save, which puts back what a `/clear` emptied, before the change or since.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
-    await hold($, {})
     let base: BandSettings
     try {
       base = await changeBase($)
@@ -278,7 +285,7 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
       await hold($, { unreadable: { reason: errorText(error), isChangeRefused: true, isSessionShown: isStateShown } })
       return
     }
-    await hold($, { value: edit(base), unreadable: null })
+    await hold($, { value: edit(base), unreadable: null }, ['value', 'unreadable'])
     await save($)
   }).catch(() => undefined)
 

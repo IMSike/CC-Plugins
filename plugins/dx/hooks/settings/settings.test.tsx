@@ -24,6 +24,27 @@ test('a setting changed in its pane is kept and redraws the band', async ($, on)
   await ui.unmount()
 })
 
+// A change writes the settings into the state at once, then each value held
+// with its save: no more.
+test('a setting changed writes its settings, then each value held with its save', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  let writes = 0
+  let isCounting = false
+  on('state.set', (_, e, next) => {
+    if (isCounting && e.plugin === 'dx' && e.key.startsWith('settings') && e.key !== 'settingsBadHex') writes += 1
+    return next(e)
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  isCounting = true
+  await click(pane, 'settings:show-total')
+  expect(writes).toBe(5)
+  await pane.unmount()
+})
+
 // A change the store refuses is never silent: the pane says so until one saves.
 test('a setting the store refuses says so in the pane, until a change saves', async ($, on) => {
   mock.clock(on, { now: NOW })
