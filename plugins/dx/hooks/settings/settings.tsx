@@ -68,14 +68,22 @@ export async function startSettings($: EngineInterface): Promise<void> {
 // The changes under way, one after the other.
 let changing: Promise<void> = Promise.resolve()
 
-// Applies `edit` to the settings as the store holds them, another session's
-// changes included, and keeps the result; two changes in a row both land. A
-// save that fails leaves the change applied to this session alone, and the
-// pane says why (`settingsUnsaved`) until one saves.
+// The settings a change starts from: as the store holds them, another
+// session's changes included; while a change of this session is unsaved, as
+// this session holds them, so the next save writes that change too.
+async function changeBase($: EngineInterface): Promise<BandSettings> {
+  if ((await read($, settingsUnsaved)) !== null) return read($, settings)
+  const stored = await $.store.get(STORE_KEY).catch(() => undefined)
+  return stored === undefined ? read($, settings) : settingsOf(stored)
+}
+
+// Applies `edit` to the settings (`changeBase`) and keeps the result; two
+// changes in a row both land. A save that fails leaves the change applied to
+// this session alone, and the pane says why (`settingsUnsaved`) until one
+// saves.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
-    const stored = await $.store.get(STORE_KEY).catch(() => undefined)
-    const next = edit(stored === undefined ? await read($, settings) : settingsOf(stored))
+    const next = edit(await changeBase($))
     await update($, settings, () => next)
     const reason = await $.store.set(STORE_KEY, next).then(() => null, (error: unknown) => errorText(error))
     if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)
@@ -85,8 +93,11 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
 }
 
 export async function toggleSettings($: EngineInterface): Promise<void> {
-  // Another session's changes shown, after this one's under way.
-  changing = changing.then(() => loadSettings($)).catch(() => undefined)
+  // Another session's changes shown, after this one's under way; not over a
+  // change of this session still unsaved, which the store lacks.
+  changing = changing.then(async () => {
+    if ((await read($, settingsUnsaved)) === null) await loadSettings($)
+  }).catch(() => undefined)
   await changing
   await togglePanel($, 'settings')
 }

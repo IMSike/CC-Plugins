@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 
-import { BAND, click, engine, frameColors, NOTES_PANE, NOW, shell, showSettings } from '../shared/testing'
+import { BAND, click, engine, frameColors, NOTES_PANE, NOW, SETTINGS_PANE, shell, showSettings } from '../shared/testing'
 
 test('a setting changed in its pane is kept and redraws the band', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -41,6 +41,38 @@ test('a setting the store refuses says so in the pane, until a change saves', as
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff' })
   expect(await pane.find({ type: 'Text', text: /non enregistrés/ })).toBeUndefined()
   await pane.unmount()
+})
+
+// An unsaved change is never dropped: neither the next change nor the `⚙`
+// icon's reload starts from a store that lacks it.
+test('an unsaved setting is kept until a later change saves it', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const store = engine(on, { refused })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  refused.add('store.set settings')
+  await click(pane, 'settings:show-total')
+  await click(pane, 'settings:frame-color-58a6ff')
+  await pane.unmount()
+  expect(store.get('settings')).toBeUndefined()
+
+  // The `⚙` icon closes the panel then shows it again, reloading the settings.
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await click(band, 'settings')
+  expect(await band.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+
+  refused.clear()
+  const again = await $.ui.mount(SETTINGS_PANE)
+  expect(await again.find({ type: 'Text', text: /non enregistrés/ })).toBeDefined()
+  await click(again, 'settings:show-branch')
+  await again.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false, branch: false }, frameColor: '#58a6ff' })
 })
 
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
