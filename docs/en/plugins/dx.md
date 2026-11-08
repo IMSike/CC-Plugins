@@ -29,7 +29,7 @@ On screen, colors tell apart what plain text cannot: on `5h`, the `◉` are the 
   - The `5h` and `7j` lines only appear with a Claude subscription (the API reports no limits otherwise); `ctx` shows `—` until the first response, and after a compaction until the next one.
   - `total` counts from the session's start, for a resumed session from its first launch; a `/clear` starts it over.
   - The band takes up to five rows: one per gauge shown, and its two borders. It is drawn in the terminal and the desktop app; other surfaces (VS Code, mobile) do not show it.
-  - The repository is located once per directory, its `HEAD` read again on each refresh: a branch switch shows, but a repository created after the session started (`git init`) only shows its branch in the next session or after a reload.
+  - The repository is located once per directory, its `HEAD` read again on each refresh: a branch switch shows, and a `HEAD` Git is rewriting at that moment only hides the branch until the next refresh; but a repository created after the session started (`git init`) only shows its branch in the next session or after a reload.
   - It is not the status line: it sits **above** the prompt, and a `statusLine` configured in `settings.json` keeps being shown under it. Remove `statusLine` to avoid seeing the same figures twice.
   - The frame, the gauges, the effort meter and the branch use characters (`╭ ◎ ◉ ▰ ⎇`) present in common terminal fonts (Cascadia, Nerd Fonts); the robot and terminal icons, and the default notes, settings and monitor icons, need a [Nerd Font](https://www.nerdfonts.com).
   - While Claude Code shows a survey in that band, the survey takes its place.

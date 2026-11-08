@@ -87,6 +87,11 @@ function readFile($: EngineInterface, path: string): Promise<string | undefined>
   return $.fs.read(path).catch(() => undefined)
 }
 
+// Whether `path` exists, false when that cannot be told.
+function pathExists($: EngineInterface, path: string): Promise<boolean> {
+  return $.fs.exists(path).catch(() => false)
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   const [model, cwd, usage, setting, home, now] = await Promise.all([
     $.session.model(),
@@ -108,7 +113,7 @@ async function refresh($: EngineInterface): Promise<void> {
     model: modelLabel(model),
     effort: effort.turn ?? configured,
     cwd: shortenPath(cwd, home),
-    branch: await branchFrom(path => readFile($, path), cwd, heads),
+    branch: await branchFrom(path => readFile($, path), path => pathExists($, path), cwd, heads),
     context: usage.context.percent,
     contextTokens: usage.context.tokens,
     contextWindow: usage.context.window,

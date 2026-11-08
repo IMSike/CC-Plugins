@@ -85,6 +85,11 @@ export function engine(on: On, options: EngineOptions = {}) {
 
     return file === undefined ? { deny: 'ENOENT' } : { value: files[file] ?? '' }
   })
+  // The repository's `.git`, and the files above.
+  on('fs.exists', (_, e) => {
+    const path = e.path.replace(/\\/g, '/')
+    return { value: path.endsWith('C:/Users/dev/repo/app/.git') || Object.keys(files).some(end => path.endsWith(end)) }
+  })
   on('session.usage', () => ({
     value: {
       startedAt: session.startedAt ?? NOW - 3600_000,

@@ -3,57 +3,89 @@ import { expect, test } from 'claude-code/testing'
 import { branchFrom, branchOf } from './git'
 import type { HeadPaths } from './git'
 
-// A file system holding `files`, by path, that records every read.
-function disk(files: Record<string, string>) {
+// A file system holding `files`, by path, that records every read and every
+// lookup; a path exists when it is a file or a folder holding one. The paths
+// in `unreadable` exist but cannot be read.
+function disk(files: Record<string, string>, unreadable = new Set<string>()) {
   const reads: string[] = []
+  const lookups: string[] = []
   const read = async (path: string) => {
     reads.push(path)
-    return files[path]
+    return unreadable.has(path) ? undefined : files[path]
   }
-  return { files, reads, read }
+  const exists = async (path: string) => {
+    lookups.push(path)
+    return Object.keys(files).some(file => file === path || file.startsWith(`${path}/`))
+  }
+  return { files, unreadable, reads, lookups, read, exists }
 }
 
 test("a repository's branch is read from its HEAD, up from the directory", async () => {
-  const { read } = disk({ 'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n' })
-  expect(await branchFrom(read, 'C:/repo/app/src', new Map())).toBe('dev')
+  const { read, exists } = disk({ 'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n' })
+  expect(await branchFrom(read, exists, 'C:/repo/app/src', new Map())).toBe('dev')
 })
 
 test('a worktree reads the HEAD its .git file points to', async () => {
-  const { read } = disk({
+  const { read, exists } = disk({
     'C:/wt/.git': 'gitdir: C:/repo/.git/worktrees/wt\n',
     'C:/repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n',
   })
-  expect(await branchFrom(read, 'C:/wt', new Map())).toBe('feature')
+  expect(await branchFrom(read, exists, 'C:/wt', new Map())).toBe('feature')
 })
 
-test('outside a repository, the HEAD is looked for once, not on every refresh', async () => {
-  const { read, reads } = disk({})
+test('outside a repository, the .git is looked for once, not on every refresh', async () => {
+  const { read, exists, reads, lookups } = disk({})
   const heads: HeadPaths = new Map()
-  expect(await branchFrom(read, 'C:/a/b/c', heads)).toBeUndefined()
-  // Two reads for each directory up to the root: c, b, a, C:.
-  expect(reads).toHaveLength(8)
-  expect(await branchFrom(read, 'C:/a/b/c', heads)).toBeUndefined()
-  expect(reads).toHaveLength(8)
+  expect(await branchFrom(read, exists, 'C:/a/b/c', heads)).toBeUndefined()
+  // One lookup for each directory up to the root: c, b, a, C:; nothing read.
+  expect(lookups).toHaveLength(4)
+  expect(reads).toHaveLength(0)
+  expect(await branchFrom(read, exists, 'C:/a/b/c', heads)).toBeUndefined()
+  expect(lookups).toHaveLength(4)
 })
 
 test('the HEAD found is read again each time: a branch switch shows', async () => {
-  const { files, read, reads } = disk({ 'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n' })
+  const { files, read, exists, reads, lookups } = disk({ 'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n' })
   const heads: HeadPaths = new Map()
-  expect(await branchFrom(read, 'C:/repo/app', heads)).toBe('dev')
-  const looked = reads.length
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('dev')
+  const looked = lookups.length
+  const read1 = reads.length
   files['C:/repo/.git/HEAD'] = 'ref: refs/heads/main\n'
-  expect(await branchFrom(read, 'C:/repo/app', heads)).toBe('main')
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('main')
   // The HEAD alone, not the way up to it.
-  expect(reads).toHaveLength(looked + 1)
+  expect(reads).toHaveLength(read1 + 1)
+  expect(lookups).toHaveLength(looked)
 })
 
 test('a HEAD gone is looked for again', async () => {
-  const { files, read } = disk({ 'C:/repo/app/.git/HEAD': 'ref: refs/heads/dev\n' })
+  const { files, read, exists } = disk({ 'C:/repo/app/.git/HEAD': 'ref: refs/heads/dev\n' })
   const heads: HeadPaths = new Map()
-  expect(await branchFrom(read, 'C:/repo/app', heads)).toBe('dev')
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('dev')
   delete files['C:/repo/app/.git/HEAD']
   files['C:/repo/.git/HEAD'] = 'ref: refs/heads/main\n'
-  expect(await branchFrom(read, 'C:/repo/app', heads)).toBe('main')
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('main')
+})
+
+// Git renames HEAD.lock over HEAD as it writes it: on Windows a read at that
+// moment fails. The repository is not taken for none: the next refresh reads.
+test('a HEAD that cannot be read for a moment shows again at the next refresh', async () => {
+  const head = 'C:/repo/.git/HEAD'
+  const { read, exists, unreadable } = disk({ [head]: 'ref: refs/heads/dev\n' })
+  const heads: HeadPaths = new Map()
+
+  // Unreadable at the first lookup: nothing kept.
+  unreadable.add(head)
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBeUndefined()
+  expect(heads.has('C:/repo/app')).toBe(false)
+  unreadable.delete(head)
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('dev')
+
+  // Unreadable once known: the path kept.
+  unreadable.add(head)
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBeUndefined()
+  expect(heads.get('C:/repo/app')).toBe(head)
+  unreadable.delete(head)
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('dev')
 })
 
 test('the branch is read from .git/HEAD', () => {
