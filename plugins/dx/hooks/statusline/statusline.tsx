@@ -6,23 +6,23 @@ import { openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
+import { clockTime } from '../shared/format'
+import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
 import {
-  clockTime,
   compactNumber,
   countdown,
   duration,
   effortRank,
   exhaustionOf,
-  heat,
   modelLabel,
   paceOf,
   shortenPath,
   truncateStart,
   turnDuration,
-} from '../shared/format'
-import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
+} from './format'
 import type { FrameProps, FrameRun } from './frame'
 import type { GaugeProps } from './gauge'
+import { heat } from './gauge-model'
 import { branchFrom } from './git'
 import type { HeadPaths } from './git'
 

@@ -1,10 +1,11 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { SPIN_MS } from '../shared/crew'
-import { clockTime, heat, travelMs } from '../shared/format'
+import { clockTime } from '../shared/format'
 import { BAND, click, engine, frameColors, NOW, OUTPUT, shell, showSettings, views } from '../shared/testing'
 import type { Mounted } from '../shared/testing'
 import { FRAME_MS } from './gauge'
+import { heat, travelMs } from './gauge-model'
 
 test('the band frames the model, the effort, the directory and the branch', async ($, on) => {
   mock.clock(on, { now: NOW })

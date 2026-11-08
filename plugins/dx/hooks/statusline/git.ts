@@ -1,5 +1,3 @@
-import { branchOf } from '../shared/format'
-
 // The band's Git branch, without `$`: the files are read through `read`, which
 // resolves undefined for a file it cannot read.
 
@@ -10,6 +8,15 @@ export type HeadPaths = Map<string, string | null>
 
 // How far up from the session's directory a `.git` is looked for.
 const MAX_DEPTH = 32
+
+// The branch a `.git/HEAD` names, or a short commit when it is detached.
+export function branchOf(head: string): string | undefined {
+  const text = head.trim()
+  const ref = /^ref:\s*refs\/heads\/(.+)$/.exec(text)
+  if (ref !== null) return ref[1]
+  if (/^[0-9a-f]{40,64}$/i.test(text)) return text.slice(0, 7)
+  return undefined
+}
 
 function parentOf(dir: string): string {
   return dir.replace(/[\\/]+[^\\/]*$/, '')

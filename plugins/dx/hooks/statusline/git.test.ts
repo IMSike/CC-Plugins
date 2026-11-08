@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { branchFrom } from './git'
+import { branchFrom, branchOf } from './git'
 import type { HeadPaths } from './git'
 
 // A file system holding `files`, by path, that records every read.
@@ -54,4 +54,11 @@ test('a HEAD gone is looked for again', async () => {
   delete files['C:/repo/app/.git/HEAD']
   files['C:/repo/.git/HEAD'] = 'ref: refs/heads/main\n'
   expect(await branchFrom(read, 'C:/repo/app', heads)).toBe('main')
+})
+
+test('the branch is read from .git/HEAD', () => {
+  expect(branchOf('ref: refs/heads/dev\n')).toBe('dev')
+  expect(branchOf('ref: refs/heads/feat/status-band')).toBe('feat/status-band')
+  expect(branchOf('1ec6454f0e6c3b1d2a9f8e7d6c5b4a3928170615\n')).toBe('1ec6454')
+  expect(branchOf('garbage')).toBeUndefined()
 })
