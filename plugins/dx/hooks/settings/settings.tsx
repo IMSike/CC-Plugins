@@ -82,11 +82,11 @@ let held: Held = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
 // The writes of what this session holds into the state, one after the other.
 let holding: Promise<void> = Promise.resolve()
 
-// Takes `changes` into what this session holds, at once, and writes into the
-// state what it lacks of it once the writes before are done: with no changes,
-// puts back what a `/clear` emptied. Each write takes what this session holds
-// as it runs, so the last one writes the last changes, whoever made them.
-// Never run as a drawing, which may not write the state.
+// Takes `changes` into what this session holds, at once, and writes it into
+// the state once the writes before are done: with no changes, puts back what
+// a `/clear` emptied. Each write takes what this session holds as it runs, so
+// the last one writes the last changes, whoever made them. Never run as a
+// drawing, which may not write the state.
 function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
   held = { ...held, ...changes }
   const written = holding.then(() => writeHeld($))
@@ -94,10 +94,13 @@ function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
   return written
 }
 
+// Every value written, never skipped on a read that finds it already there:
+// every read of one dispatch answers one moment, and a write queued under an
+// older dispatch's `$` would read the state from before a `/clear` emptied it.
 async function writeHeld($: EngineInterface): Promise<void> {
-  if (JSON.stringify(await read($, settings)) !== JSON.stringify(held.value)) await update($, settings, () => held.value)
-  if ((await read($, settingsUnsaved)) !== held.unsaved) await update($, settingsUnsaved, () => held.unsaved)
-  if (JSON.stringify(await read($, settingsUnreadable)) !== JSON.stringify(held.unreadable)) await update($, settingsUnreadable, () => held.unreadable)
+  await update($, settings, () => held.value)
+  await update($, settingsUnsaved, () => held.unsaved)
+  await update($, settingsUnreadable, () => held.unreadable)
 }
 
 // The settings drawn and their warnings: as this session holds them, which the

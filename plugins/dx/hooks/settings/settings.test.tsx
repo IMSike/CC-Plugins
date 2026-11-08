@@ -1,5 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, StateRead } from 'claude-code'
 
 import { BAND, click, engine, frameColors, NOTES_PANE, NOW, SETTINGS_PANE, shell, showSettings } from '../shared/testing'
 
@@ -402,19 +402,28 @@ test('the settings icon clears the unreadable warning once the store is read', a
   await again.unmount()
 })
 
+const EMPTIED_KEYS = ['settings', 'settingsUnsaved', 'settingsUnreadable']
+// Every read of one dispatch answers one moment: `last`, dx's settings as
+// last read; `frozen`, set from it, what a dispatch begun then reads.
+type SettingsMoment = { last: Map<string, StateRead>; frozen?: ReadonlyMap<string, StateRead> }
+
 // Empties dx's settings as the engine may at a `/clear`, from the call it
 // returns on: each read as absent while it stands at the version it had,
-// until written.
-const EMPTIED_KEYS = ['settings', 'settingsUnsaved', 'settingsUnreadable']
-function emptySettings(on: On): () => void {
+// until written. With `moment`, they read as its `frozen` holds them while
+// it is set.
+function emptySettings(on: On, moment?: SettingsMoment): () => void {
   let isEmpty = false
   const emptied = new Map<string, number>()
   on('state.get', async (_, e, next) => {
     const read = await next(e)
-    if (!isEmpty || e.plugin !== 'dx' || !EMPTIED_KEYS.includes(e.key) || !('value' in read) || read.value === undefined) return read
-    if (!emptied.has(e.key)) emptied.set(e.key, read.value.version)
+    if (e.plugin !== 'dx' || !EMPTIED_KEYS.includes(e.key) || !('value' in read) || read.value === undefined) return read
+    if (isEmpty && !emptied.has(e.key)) emptied.set(e.key, read.value.version)
+    const frozen = moment?.frozen?.get(e.key)
+    if (frozen !== undefined) return { value: frozen }
+    const shown = isEmpty && read.value.version === emptied.get(e.key) ? { ...read.value, value: undefined } : read.value
+    moment?.last.set(e.key, shown)
 
-    return read.value.version === emptied.get(e.key) ? { value: { ...read.value, value: undefined } } : read
+    return { value: shown }
   })
 
   return () => {
@@ -523,6 +532,51 @@ test('a change after a /clear, the store unreadable, keeps the stored settings',
   await click(after, 'settings:show-total')
   await after.unmount()
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
+})
+
+// A change whose save outlasts a `/clear` that empties the state writes its
+// settings back whatever its reads, from before the `/clear`, say.
+test("a change's save across a /clear that empties the state writes the settings back", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let saving = () => {}
+  const isSaving = new Promise<void>(resolve => {
+    saving = resolve
+  })
+  let release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  on('store.set', { key: 'settings' }, async (_, e, next) => {
+    saving()
+    await released
+    return next(e)
+  })
+  const session = { id: 's1' }
+  engine(on, { session })
+  shell(on)
+  const moment: SettingsMoment = { last: new Map() }
+  const emptied = emptySettings(on, moment)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const clicked = click(pane, 'settings:show-total')
+  await isSaving
+  const before = await $.ui.mount(BAND)
+  expect(await before.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  await before.unmount()
+  // The change's reads answer the moment before the `/clear`.
+  moment.frozen = new Map(moment.last)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  emptied()
+  release()
+  await clicked
+  await pane.unmount()
+  moment.frozen = undefined
+
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  await band.unmount()
 })
 
 // A reload of dx while a change's save is under way waits for it: should the
