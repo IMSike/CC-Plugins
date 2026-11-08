@@ -26,3 +26,16 @@ test('the session start loads every feature', async ($, on) => {
   expect(await pane.find({ type: 'Text', text: /piste en cours/, in: 'note-session-s1' })).toBeDefined()
   await pane.unmount()
 })
+
+test('a feature that fails to start leaves the next ones to start', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  // The activity's first write refused: its start fails, before the band's.
+  on('state.set', { plugin: 'dx', key: 'activity' }, () => ({ deny: 'refused' }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  // The band, started after it, drawn all the same.
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+})
