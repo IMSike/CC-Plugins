@@ -1,6 +1,7 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { On, StateRead } from 'claude-code'
 
+import { DEFAULT_SETTINGS } from '../shared/options'
 import { BAND, click, engine, frameColors, NOTES_PANE, NOW, SETTINGS_PANE, shell, showSettings } from '../shared/testing'
 
 test('a setting changed in its pane is kept and redraws the band', async ($, on) => {
@@ -645,6 +646,76 @@ test('an unsaved setting outlasts a /clear then a reload', async ($, on) => {
   await click(band, 'settings')
   await band.unmount()
   expect(store.get('settings')).toMatchObject({ show: { total: false } })
+})
+
+// dx's state as an earlier load of its code left it, this one's memory fresh:
+// each value of `left`, by its key, read so until written.
+function leaveState(on: On, left: Record<string, unknown>): void {
+  const unwritten = new Set(Object.keys(left))
+  on('state.set', (_, e, next) => {
+    if (e.plugin === 'dx') unwritten.delete(e.key)
+    return next(e)
+  })
+  on('state.get', (_, e, next) => (e.plugin === 'dx' && unwritten.has(e.key) ? { value: { value: left[e.key], version: 0 } } : next(e)))
+}
+
+// dx's code loaded anew, after an update that changed the settings' shape: an
+// unsaved warning left in the state never makes this session hold the
+// defaults the settings then read as, which a change would save.
+test('an unsaved warning left with settings of another shape is not taken up', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  leaveState(on, {
+    settings: { shape: 'settings-2', value: { frameColor: '#123456' } },
+    settingsUnsaved: { shape: 'settings-unsaved-1', value: 'disk full' },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  expect(await pane.find({ type: 'Text', text: /non enregistrés/ })).toBeUndefined()
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
+})
+
+// dx's code loaded anew, a turn starting while the start takes up an unsaved
+// change from the state: the turn never writes the defaults over it first.
+test('a turn during a fresh load leaves the unsaved setting to the start', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let reading = () => {}
+  const isReading = new Promise<void>(resolve => {
+    reading = resolve
+  })
+  let release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  let isFirst = true
+  on('state.get', { plugin: 'dx', key: 'settings' }, async (_, e, next) => {
+    if (isFirst) {
+      isFirst = false
+      reading()
+      await released
+    }
+    return next(e)
+  })
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  leaveState(on, {
+    settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } },
+    settingsUnsaved: { shape: 'settings-unsaved-1', value: 'disk full' },
+  })
+
+  const started = $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await isReading
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  release()
+  await started
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#123456')
+  await band.unmount()
 })
 
 // A reload of dx whose read of the store fails keeps the settings read

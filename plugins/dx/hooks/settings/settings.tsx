@@ -79,6 +79,11 @@ let settingsLoaded = false
 type Held = { value: BandSettings; unsaved: string | null; unreadable: SettingsUnreadable | null }
 let held: Held = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
 
+// Whether `startSettings` has decided what this session holds, once in this
+// hooks module. Until then, the state is left as it stands: written by an
+// earlier load of this module's code, it may hold what the start takes up.
+let isHeld = false
+
 // The writes of what this session holds into the state, one after the other.
 let holding: Promise<void> = Promise.resolve()
 
@@ -121,6 +126,15 @@ export async function heldSettings($: EngineInterface): Promise<BandSettings> {
   return held.value
 }
 
+// The settings the state holds, written by this shape of them; none when the
+// state holds no settings: never written, emptied by a `/clear`, or written
+// by a dx whose settings had another shape (an update), which the atom would
+// read as the defaults.
+async function stateSettings($: EngineInterface): Promise<BandSettings | undefined> {
+  const { value } = await $.state.get({ plugin: 'dx', key: 'settings' })
+  return value !== undefined && value.shape === settings.shape ? value.value : undefined
+}
+
 // The settings as the store holds them. A read that fails keeps the ones this
 // session holds, which a change would otherwise write over the store's, and
 // rejects; the settings never read, the pane says the defaults are shown
@@ -153,30 +167,36 @@ let changing: Promise<void> = Promise.resolve()
 // session still unsaved, which the store lacks, is kept rather than read
 // over, as the `⚙` icon does: from the hooks module's memory, which a
 // `/clear` may have left alone with it, put back into the state; with the
-// module loaded anew, from the state. A read that fails keeps the settings
-// read before by this module, silently, as the `⚙` icon does; with none,
-// the defaults it holds, said by the pane, it rejects, for ../register to
-// write it to the debug log. A module loaded anew cannot tell whether the
-// settings the state holds were read from the store or are the defaults a
-// start that could not read them wrote.
+// module loaded anew, from the state, when it holds settings of this shape
+// (`stateSettings`); otherwise the change is lost and the store read. A read
+// that fails keeps the settings read before by this module, silently, as the
+// `⚙` icon does; with none, the defaults it holds, said by the pane, it
+// rejects, for ../register to write it to the debug log. A module loaded anew
+// cannot tell whether the settings the state holds were read from the store
+// or are the defaults a start that could not read them wrote.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
-    if (!settingsLoaded) {
-      const unsaved = await read($, settingsUnsaved)
-      if (unsaved !== null) {
-        held = { value: await read($, settings), unsaved, unreadable: null }
-        settingsLoaded = true
-      }
-    }
-    if (held.unsaved !== null) {
-      await hold($, {})
-      return
-    }
     try {
-      await loadSettings($)
-    } catch (error) {
-      if (!settingsLoaded) throw error
-      await hold($, {})
+      if (!settingsLoaded) {
+        const value = await stateSettings($)
+        const unsaved = await read($, settingsUnsaved)
+        if (value !== undefined && unsaved !== null) {
+          held = { value, unsaved, unreadable: null }
+          settingsLoaded = true
+        }
+      }
+      if (held.unsaved !== null) {
+        await hold($, {})
+        return
+      }
+      try {
+        await loadSettings($)
+      } catch (error) {
+        if (!settingsLoaded) throw error
+        await hold($, {})
+      }
+    } finally {
+      isHeld = true
     }
   })
   changing = started.catch(() => undefined)
@@ -188,9 +208,12 @@ export async function startSettings($: EngineInterface): Promise<void> {
 // leaves them. A change under way is not waited for, its save included: what
 // it holds is written by its own `hold` or by this one, whichever runs last.
 // The settings never read, they are read again, at each turn until a read
-// succeeds; one that fails leaves the pane's warning as it stands.
+// succeeds; one that fails leaves the pane's warning as it stands. Before
+// `startSettings` decided what this session holds, nothing: the defaults this
+// module holds then would be written over what the start takes up from the
+// state, and the start reads the store itself.
 export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
-  if (e.agentId !== undefined) return
+  if (e.agentId !== undefined || !isHeld) return
   await hold($, {})
   if (settingsLoaded) return
   let stored: unknown
