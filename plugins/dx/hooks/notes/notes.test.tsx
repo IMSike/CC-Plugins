@@ -505,6 +505,24 @@ test("deleting another session's note deletes the links to it", async ($, on) =>
   await pane.unmount()
 })
 
+
+// A note already past the limit (an older dx kept it): a shortening is saved,
+// a lengthening refused, until it is back under the limit.
+test('a note past the longest is saved as it is shortened', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const long = `ab${'\n'.repeat(48_000)}`
+  const store = engine(on, { stored: { 'notes.global': { text: long, updatedAt: NOW - 1000 } } })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'delete', in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: long.slice(1), updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.key({ key: 'x', in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: long.slice(1), updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /note trop longue/ })).toBeDefined()
+  await pane.unmount()
+})
 // The editor applies no edit past 95,000 characters: a paste is refused whole.
 test('a paste past the longest note is refused whole, and the pane says why', async ($, on) => {
   mock.clock(on, { now: NOW })

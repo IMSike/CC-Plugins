@@ -92,9 +92,19 @@ function unsavedFor(value: NotesUnsaved | null, key: string): string | null {
   return value !== null && (value.key === key || value.key === null) ? value.reason : null
 }
 
+// Whether `text` may be kept under `key` for its length: within the limit, or
+// past it no longer than the note stored there (one an older dx kept past
+// it), as the editor lets it be shortened.
+async function fitsLength($: EngineInterface, key: string, text: string): Promise<boolean> {
+  const length = encodedLength(text)
+  if (length <= NOTE_MAX_CHARS) return true
+  const stored = noteOf(await $.store.get(key).catch(() => undefined))
+  return stored !== null && length <= encodedLength(stored.text)
+}
+
 // Writes `note` under `key`, `null` deleting it: why it was not, or null.
 async function kept($: EngineInterface, key: string, note: Note | null): Promise<string | null> {
-  if (note !== null && encodedLength(note.text) > NOTE_MAX_CHARS) return TOO_LONG
+  if (note !== null && !(await fitsLength($, key, note.text))) return TOO_LONG
   if (!(await fitsStore($, key, note))) return STORE_FULL
   try {
     await (note === null ? $.store.delete(key) : $.store.set(key, note))
