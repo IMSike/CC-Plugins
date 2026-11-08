@@ -36,7 +36,8 @@ export type EngineOptions = {
   stored?: Record<string, unknown>
   // false: the 5-hour window has not started.
   fiveHour?: boolean
-  // Calls refused, as by a session not there yet.
+  // Calls refused, as by a session not there yet; `store.set <key>`, the
+  // store's writes under that key.
   refused?: ReadonlySet<string>
   // `session.id` and its start, which a test changes as a `/clear` does.
   session?: { id: string; startedAt?: number }
@@ -58,6 +59,8 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('store.set', (_, e) => {
     // A full store refuses the notes.
     if (refused.has('store.set') && e.key.startsWith('notes.')) return { deny: 'store over 4 MiB' }
+    // A write refused under that key alone.
+    if (refused.has(`store.set ${e.key}`)) return { deny: 'disk full' }
     store.set(e.key, e.value)
 
     return { value: undefined }

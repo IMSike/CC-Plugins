@@ -22,6 +22,27 @@ test('a setting changed in its pane is kept and redraws the band', async ($, on)
   await ui.unmount()
 })
 
+// A change the store refuses is never silent: the pane says so until one saves.
+test('a setting the store refuses says so in the pane, until a change saves', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const store = engine(on, { refused })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  refused.add('store.set settings')
+  await click(pane, 'settings:show-total')
+  expect(store.get('settings')).toBeUndefined()
+  expect((await pane.find({ type: 'Text', text: /^⚠ réglages non enregistrés : .*disk full$/ }))?.props.color).toBe('error')
+
+  refused.clear()
+  await click(pane, 'settings:frame-color-58a6ff')
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff' })
+  expect(await pane.find({ type: 'Text', text: /non enregistrés/ })).toBeUndefined()
+  await pane.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)

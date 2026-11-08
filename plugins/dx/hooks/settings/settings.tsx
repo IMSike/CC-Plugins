@@ -29,6 +29,7 @@ import {
   SPEEDS,
   thresholdsOf,
 } from '../shared/options'
+import { errorText } from '../shared/format'
 import { PANEL, panelView, showPanel, togglePanel } from '../shared/panes'
 import type { PressPart, PressStyle } from '../shared/press'
 import { pressBoard } from '../shared/presses'
@@ -38,6 +39,10 @@ import type { StepperProps } from './stepper'
 // The settings pane: what the band shows, animates and is colored with, kept
 // in `$.store` across sessions and read into `$.state` for the drawings.
 const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
+// Why the last change was not saved, said in the pane until a change saves.
+const settingsUnsaved = atom({ plugin: 'dx', key: 'settingsUnsaved' } as const, null as string | null, {
+  shape: 'settings-unsaved-1',
+})
 
 const STORE_KEY = 'settings'
 // The toggles go in two columns from this inner width.
@@ -63,13 +68,16 @@ export async function startSettings($: EngineInterface): Promise<void> {
 let changing: Promise<void> = Promise.resolve()
 
 // Applies `edit` to the settings as the store holds them, another session's
-// changes included, and keeps the result; two changes in a row both land.
+// changes included, and keeps the result; two changes in a row both land. A
+// save that fails leaves the change applied to this session alone, and the
+// pane says why (`settingsUnsaved`) until one saves.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
     const stored = await $.store.get(STORE_KEY).catch(() => undefined)
     const next = edit(stored === undefined ? await read($, settings) : settingsOf(stored))
     await update($, settings, () => next)
-    await $.store.set(STORE_KEY, next).catch(() => undefined)
+    const reason = await $.store.set(STORE_KEY, next).then(() => null, (error: unknown) => errorText(error))
+    if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)
   }).catch(() => undefined)
 
   return changing
@@ -148,6 +156,7 @@ export function registerSettings(on: On): void {
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
     const value = await read($, settings)
+    const unsaved = await read($, settingsUnsaved)
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
@@ -273,6 +282,7 @@ export function registerSettings(on: On): void {
     return (
       <Box flexDirection="column">
         {tabs}
+        {unsaved !== null && <Text key="unsaved" color="error" wrap="wrap">{`⚠ réglages non enregistrés : ${unsaved}`}</Text>}
         {section('show', 'Affichage', [
           <Box key="show-grid" flexWrap="wrap">
             {SHOW_LABELS.map(([key, label]) =>
