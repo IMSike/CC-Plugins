@@ -4,7 +4,7 @@
 
 Installation : `/plugin install dx@cc-plugins` (après `/plugin marketplace add IMSike/CC-Plugins`). Demande Claude Code 2.1.310 ou plus récent.
 
-Si une des parties de dx (réglages, notes, activité, bandeau) ne démarre pas, au début de la session ou d'un tour, les autres démarrent quand même, et le journal de débogage (`claude --debug-file <fichier>`) contient une ligne `dx : échec du démarrage (…)` qui la nomme, avec la raison.
+Si une des parties de dx (réglages, notes, activité, bandeau) ne démarre pas, au début de la session ou d'un tour, les autres démarrent quand même, et le journal de débogage (`claude --debug-file <fichier>`) contient une ligne `dx : démarrage échoué, … (…)` qui la nomme, avec la raison entre parenthèses.
 
 ## Bandeau d'état
 

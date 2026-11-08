@@ -58,6 +58,6 @@ test("a feature's failed start is written to the debug log", async ($, on) => {
   await $.turn.start({ text: 'go', turnId: 't1' })
 
   const debug = logged.filter(line => line.to === 'debug').map(line => line.text)
-  expect(debug.some(text => /^dx : échec du démarrage \(activité\) : .*refused/.test(text))).toBe(true)
-  expect(debug.some(text => /^dx : échec du démarrage \(bandeau, tour\) : .*turn refused/.test(text))).toBe(true)
+  expect(debug.some(text => /^dx : démarrage échoué, activité \(.*refused\)$/.test(text))).toBe(true)
+  expect(debug.some(text => /^dx : démarrage échoué, bandeau, tour \(.*turn refused\)$/.test(text))).toBe(true)
 })

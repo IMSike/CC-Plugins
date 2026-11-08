@@ -10,7 +10,7 @@ import { registerStatusline, startStatusline, startStatuslineTurn } from './stat
 // start, rather than every feature after it never started, and the debug log
 // says which and why.
 async function started($: EngineInterface, feature: string, start: Promise<void>): Promise<void> {
-  await start.catch((error: unknown) => $.ui.log(`dx : échec du démarrage (${feature}) : ${errorText(error)}`, { to: 'debug' }))
+  await start.catch((error: unknown) => $.ui.log(`dx : démarrage échoué, ${feature} (${errorText(error)})`, { to: 'debug' }))
 }
 
 // One hooks module per plugin: each feature of dx registers its own hooks here.
