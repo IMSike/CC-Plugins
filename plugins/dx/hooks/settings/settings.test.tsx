@@ -215,6 +215,23 @@ test('a hex color warning goes with a color picked or the pane shown again', asy
   await shown.unmount()
 })
 
+// Its text changed while a submit with no color is said: the warning goes
+// all the same, never kept by a read made before it was written.
+test('a hex color warning goes with a change of text made meanwhile', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const submitted = pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  const changed = pane.input({ key: 'frame-color-hex', text: 'ble', kind: 'change' })
+  await submitted
+  await changed
+  expect(await pane.find({ type: 'Text', text: /^⚠ couleur non appliquée/ })).toBeUndefined()
+  await pane.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)

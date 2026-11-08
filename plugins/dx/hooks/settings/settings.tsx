@@ -266,11 +266,10 @@ async function clearBadHex($: EngineInterface): Promise<void> {
 }
 
 // Says under the hex field of the colors `key` that its text is no color, or
-// no longer: one field's at a time, the last submitted with no color.
+// no longer: one field's at a time, the last submitted with no color. Decided
+// on the value as the write finds it, never on a read made before.
 async function markBadHex($: EngineInterface, key: string, isBad: boolean): Promise<void> {
-  const current = await read($, settingsBadHex)
-  if (isBad && current !== key) await update($, settingsBadHex, () => key)
-  if (!isBad && current === key) await update($, settingsBadHex, () => null)
+  await update($, settingsBadHex, current => (isBad ? key : current === key ? null : current))
 }
 
 // What each stepper sets, from the number it posts.
