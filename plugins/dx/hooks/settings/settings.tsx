@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On, RenderChildren } from 'claude-code'
+import type { EngineInterface, On, RenderChildren, TurnStartInput } from 'claude-code'
 
 import type { BandSettings } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
@@ -58,9 +58,10 @@ const CHOICE_COLUMNS = 13
 // An icon choice's cell: its mark, the glyph, the longest name.
 const ICON_COLUMNS = 26
 
-// Whether this session has read the settings from the store, the key absent
-// included: until then, the defaults it holds are not the store's settings,
-// and a change never writes them over those.
+// Whether the settings this session holds are its own: read from the store,
+// the key absent included, or carrying a change of its own the store lacks
+// (`unsaved`). Until then, the defaults it holds are not the store's
+// settings, and a change never writes them over those.
 let settingsLoaded = false
 
 // What this session holds of its settings, and the warnings said with them:
@@ -71,15 +72,25 @@ let settingsLoaded = false
 type Held = { value: BandSettings; unsaved: string | null; unreadable: string | null }
 let held: Held = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
 
-// Takes `changes` into what this session holds, and writes into the state what
-// it lacks of it: with no changes, puts back what a `/clear` emptied. Run among
-// the changes (`changing`), never as a drawing, which may not write the state.
-async function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
+// The writes of what this session holds into the state, one after the other.
+let holding: Promise<void> = Promise.resolve()
+
+// Takes `changes` into what this session holds, at once, and writes into the
+// state what it lacks of it once the writes before are done: with no changes,
+// puts back what a `/clear` emptied. Each write takes what this session holds
+// as it runs, so the last one writes the last changes, whoever made them.
+// Never run as a drawing, which may not write the state.
+function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
   held = { ...held, ...changes }
-  const { value, unsaved, unreadable } = held
-  if (JSON.stringify(await read($, settings)) !== JSON.stringify(value)) await update($, settings, () => value)
-  if ((await read($, settingsUnsaved)) !== unsaved) await update($, settingsUnsaved, () => unsaved)
-  if ((await read($, settingsUnreadable)) !== unreadable) await update($, settingsUnreadable, () => unreadable)
+  const written = holding.then(() => writeHeld($))
+  holding = written.catch(() => undefined)
+  return written
+}
+
+async function writeHeld($: EngineInterface): Promise<void> {
+  if (JSON.stringify(await read($, settings)) !== JSON.stringify(held.value)) await update($, settings, () => held.value)
+  if ((await read($, settingsUnsaved)) !== held.unsaved) await update($, settingsUnsaved, () => held.unsaved)
+  if ((await read($, settingsUnreadable)) !== held.unreadable) await update($, settingsUnreadable, () => held.unreadable)
 }
 
 // The settings drawn and their warnings: as this session holds them, which the
@@ -107,25 +118,28 @@ async function loadSettings($: EngineInterface): Promise<void> {
 
 // Called by ../register once the session has started, before the features
 // that read the settings: a fresh load of the plugin, from what its state
-// holds.
+// holds. A change of this session still unsaved, which the store lacks, is
+// kept rather than read over, as the `⚙` icon does.
 export async function startSettings($: EngineInterface): Promise<void> {
-  settingsLoaded = false
   held = {
     value: await read($, settings),
     unsaved: await read($, settingsUnsaved),
     unreadable: await read($, settingsUnreadable),
   }
-  await loadSettings($)
+  settingsLoaded = held.unsaved !== null
+  if (!settingsLoaded) await loadSettings($)
 }
 
 // The changes under way, one after the other.
 let changing: Promise<void> = Promise.resolve()
 
 // Called by ../register as a turn starts: the settings a `/clear` emptied from
-// the state are restored, for the band to draw them again.
-export async function startSettingsTurn($: EngineInterface): Promise<void> {
-  changing = changing.then(() => hold($, {})).catch(() => undefined)
-  await changing
+// the state are restored, for the band to draw them again; a subagent's turn
+// leaves them. A change under way is not waited for, its save included: what
+// it holds is written by its own `hold` or by this one, whichever runs last.
+export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
+  if (e.agentId !== undefined) return
+  await hold($, {})
 }
 
 // The settings a change starts from: as the store holds them, another

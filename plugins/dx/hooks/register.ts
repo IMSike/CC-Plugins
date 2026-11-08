@@ -41,7 +41,7 @@ export const register: Register = on => {
     // The band times the turn before the settings and the notes follow a
     // `/clear`.
     await started($, 'bandeau, tour', startStatuslineTurn($, e))
-    await started($, 'réglages, tour', startSettingsTurn($))
+    await started($, 'réglages, tour', startSettingsTurn($, e))
     await started($, 'notes, tour', startNotesTurn($, e))
 
     return result

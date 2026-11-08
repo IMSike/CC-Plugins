@@ -101,6 +101,61 @@ test('the settings icon saves an unsaved setting again', async ($, on) => {
   await again.unmount()
 })
 
+// A fresh load of dx (`session.start` again, its state kept) keeps an unsaved
+// change rather than reading over it the store, which lacks it.
+test('an unsaved setting outlasts a reload of the plugin', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const store = engine(on, { refused })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  refused.add('store.set settings')
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  refused.clear()
+  await click(band, 'settings')
+  await band.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false } })
+})
+
+// A turn's start never waits on a save under way, however slow.
+test("a turn starts while a setting's save is under way", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let saving = () => {}
+  const isSaving = new Promise<void>(resolve => {
+    saving = resolve
+  })
+  let release = () => {}
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  on('store.set', { key: 'settings' }, async (_, e, next) => {
+    saving()
+    await released
+    return next(e)
+  })
+  const store = engine(on)
+  shell(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const clicked = click(pane, 'settings:show-total')
+  await isSaving
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  expect(store.get('settings')).toBeUndefined()
+  release()
+  await clicked
+  await pane.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false } })
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)
