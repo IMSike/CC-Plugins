@@ -305,17 +305,28 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
   await togglePanel($, 'settings')
 }
 
+// The hex field said to hold no color, as `settingsBadHex` last had it
+// written: decided here, as each handler runs, one at a time, so a keystroke
+// writes the state only when the warning goes. Each write takes this value as
+// it runs: the last one decided lands, whatever the order the writes end in.
+let badHex: string | null = null
+
 // The pane shown anew, from the `⚙` icon or its tab, no hex field's warning
-// outlives the text it was about.
+// outlives the text it was about. Written whatever `badHex` says, as is a
+// submit with no color: a `/clear` may have emptied the state.
 async function clearBadHex($: EngineInterface): Promise<void> {
-  await update($, settingsBadHex, () => null)
+  badHex = null
+  await update($, settingsBadHex, () => badHex)
 }
 
 // Says under the hex field of the colors `key` that its text is no color, or
-// no longer: one field's at a time, the last submitted with no color. Decided
-// on the value as the write finds it, never on a read made before.
+// no longer: one field's at a time, the last submitted with no color. Its
+// text changed, or a color applied for it, nothing is written unless it was
+// the field said.
 async function markBadHex($: EngineInterface, key: string, isBad: boolean): Promise<void> {
-  await update($, settingsBadHex, current => (isBad ? key : current === key ? null : current))
+  if (!isBad && badHex !== key) return
+  badHex = isBad ? key : null
+  await update($, settingsBadHex, () => badHex)
 }
 
 // What followed the settings unreadable, as the pane says it after the reason.

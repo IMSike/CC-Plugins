@@ -233,6 +233,33 @@ test('a hex color warning goes with a change of text made meanwhile', async ($, 
   await pane.unmount()
 })
 
+// A keystroke in a hex field writes the warning's state, which redraws the
+// pane, only when the warning goes.
+test('typing in a hex field writes the warning only when it changes', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  let writes = 0
+  on('state.set', { plugin: 'dx', key: 'settingsBadHex' }, (_, e, next) => {
+    writes += 1
+    return next(e)
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const shown = writes
+  for (const text of ['#', '#5', '#58']) await pane.input({ key: 'frame-color-hex', text, kind: 'change' })
+  expect(writes).toBe(shown)
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  await pane.input({ key: 'effort-color-hex', text: 'b', kind: 'change' })
+  expect(writes).toBe(shown + 1)
+  await pane.input({ key: 'frame-color-hex', text: 'ble', kind: 'change' })
+  await pane.input({ key: 'frame-color-hex', text: 'bl', kind: 'change' })
+  expect(writes).toBe(shown + 2)
+  expect(await pane.find({ type: 'Text', text: /^⚠ couleur non appliquée/ })).toBeUndefined()
+  await pane.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)
