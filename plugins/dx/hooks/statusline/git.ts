@@ -25,9 +25,10 @@ function parentOf(dir: string): string {
 }
 
 // The HEAD of the repository holding `cwd`: its `.git/HEAD`, or for a
-// worktree or a submodule the HEAD its `.git` file points to. 'none' when no
-// directory up from `cwd` holds a `.git`; undefined when one does but its
-// HEAD could not be read now (git renaming it as it writes it, on Windows).
+// worktree or a submodule the HEAD its `.git` file points to. A `.git` folder
+// without a HEAD is passed over, as Git does. 'none' when no directory up from
+// `cwd` holds a `.git`; undefined when one does but its HEAD could not be read
+// now (git renaming it as it writes it, on Windows).
 async function headOf(read: ReadFile, exists: Exists, cwd: string): Promise<{ path: string; text: string } | 'none' | undefined> {
   let dir = cwd.replace(/[\\/]+$/, '')
   for (let depth = 0; depth < MAX_DEPTH && dir !== ''; depth += 1) {
@@ -35,14 +36,19 @@ async function headOf(read: ReadFile, exists: Exists, cwd: string): Promise<{ pa
       const path = `${dir}/.git/HEAD`
       const head = await read(path)
       if (head !== undefined) return { path, text: head }
+      if (await exists(path)) return undefined
 
+      // No `.git/HEAD`: a `.git` file pointing to the HEAD, or a folder
+      // without one, which cannot be read as a file.
       const link = await read(`${dir}/.git`)
-      const gitdir = link === undefined ? undefined : /^gitdir:\s*(.+)$/m.exec(link)?.[1]?.trim()
-      if (gitdir === undefined) return undefined
-      const absolute = /^([a-z]:)?[\\/]/i.test(gitdir) ? gitdir : `${dir}/${gitdir}`
-      const linkedPath = `${absolute}/HEAD`
-      const linked = await read(linkedPath)
-      return linked === undefined ? undefined : { path: linkedPath, text: linked }
+      if (link !== undefined) {
+        const gitdir = /^gitdir:\s*(.+)$/m.exec(link)?.[1]?.trim()
+        if (gitdir === undefined) return undefined
+        const absolute = /^([a-z]:)?[\\/]/i.test(gitdir) ? gitdir : `${dir}/${gitdir}`
+        const linkedPath = `${absolute}/HEAD`
+        const linked = await read(linkedPath)
+        return linked === undefined ? undefined : { path: linkedPath, text: linked }
+      }
     }
 
     const parent = parentOf(dir)

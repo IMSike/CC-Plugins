@@ -66,6 +66,27 @@ test('a HEAD gone is looked for again', async () => {
   expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBe('main')
 })
 
+// A `.git` folder left without a HEAD (an aborted `git init`, a broken copy)
+// is no repository: Git goes on up, and so does the band.
+test('a .git folder without a HEAD is passed over for the repository above', async () => {
+  const { read, exists } = disk({
+    'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n',
+    'C:/repo/app/.git/config': '',
+  })
+  expect(await branchFrom(read, exists, 'C:/repo/app', new Map())).toBe('dev')
+})
+
+test('a HEAD there but unreadable is not passed over for the repository above', async () => {
+  const head = 'C:/repo/app/.git/HEAD'
+  const { read, exists } = disk({
+    'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n',
+    [head]: 'ref: refs/heads/feature\n',
+  }, new Set([head]))
+  const heads: HeadPaths = new Map()
+  expect(await branchFrom(read, exists, 'C:/repo/app', heads)).toBeUndefined()
+  expect(heads.has('C:/repo/app')).toBe(false)
+})
+
 // Git renames HEAD.lock over HEAD as it writes it: on Windows a read at that
 // moment fails. The repository is not taken for none: the next refresh reads.
 test('a HEAD that cannot be read for a moment shows again at the next refresh', async () => {
