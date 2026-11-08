@@ -53,15 +53,28 @@ const CHOICE_COLUMNS = 13
 // An icon choice's cell: its mark, the glyph, the longest name.
 const ICON_COLUMNS = 26
 
-// The settings as the store holds them.
+// Whether this session has read the settings from the store, the key absent
+// included: until then, the defaults it holds are not the store's settings,
+// and a change never writes them over those.
+let settingsLoaded = false
+
+// The settings as the store holds them. A read that fails keeps the ones this
+// session holds, which a change would otherwise write over the store's.
 async function loadSettings($: EngineInterface): Promise<void> {
-  const stored = await $.store.get(STORE_KEY).catch(() => undefined)
+  let stored: unknown
+  try {
+    stored = await $.store.get(STORE_KEY)
+  } catch {
+    return
+  }
+  settingsLoaded = true
   await update($, settings, () => settingsOf(stored))
 }
 
 // Called by ../register once the session has started, before the features
 // that read the settings.
 export async function startSettings($: EngineInterface): Promise<void> {
+  settingsLoaded = false
   await loadSettings($)
 }
 
@@ -70,20 +83,37 @@ let changing: Promise<void> = Promise.resolve()
 
 // The settings a change starts from: as the store holds them, another
 // session's changes included; while a change of this session is unsaved, as
-// this session holds them, so the next save writes that change too.
+// this session holds them, so the next save writes that change too. A read
+// that fails falls back on this session's settings, once read from the store;
+// never read, it rejects: they are the defaults, not the store's.
 async function changeBase($: EngineInterface): Promise<BandSettings> {
   if ((await read($, settingsUnsaved)) !== null) return read($, settings)
-  const stored = await $.store.get(STORE_KEY).catch(() => undefined)
+  let stored: unknown
+  try {
+    stored = await $.store.get(STORE_KEY)
+  } catch (error) {
+    if (!settingsLoaded) throw error
+    return read($, settings)
+  }
+  settingsLoaded = true
   return stored === undefined ? read($, settings) : settingsOf(stored)
 }
 
 // Applies `edit` to the settings (`changeBase`) and keeps the result; two
 // changes in a row both land. A save that fails leaves the change applied to
 // this session alone, and the pane says why (`settingsUnsaved`) until one
-// saves.
+// saves. A change with no settings to start from is not applied: a toast says
+// why.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
-    const next = edit(await changeBase($))
+    let base: BandSettings
+    try {
+      base = await changeBase($)
+    } catch (error) {
+      $.ui.toast(`dx : réglage non appliqué, réglages illisibles (${errorText(error)})`)
+      return
+    }
+    const next = edit(base)
     await update($, settings, () => next)
     const reason = await $.store.set(STORE_KEY, next).then(() => null, (error: unknown) => errorText(error))
     if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)

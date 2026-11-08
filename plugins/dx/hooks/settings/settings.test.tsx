@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { On } from 'claude-code'
 
 import { BAND, click, engine, frameColors, NOTES_PANE, NOW, SETTINGS_PANE, shell, showSettings } from '../shared/testing'
 
@@ -125,4 +126,58 @@ test('the crew animation setting turns the working one on with it', async ($, on
   await click(pane, 'settings:animate-with-crew')
   expect(store.get('settings')).toMatchObject({ animateOnlyWorking: true, animateWithCrew: false })
   await pane.unmount()
+})
+
+// The store's settings read refused, as by a store not there yet, while
+// `refused` holds `store.get settings`. Registered before the engine, whose
+// `store.get` answers every read.
+function refuseSettingsRead(on: On, refused: ReadonlySet<string>): void {
+  on('store.get', { key: 'settings' }, (_, e, next) => (refused.has('store.get settings') ? { deny: 'store locked' } : next(e)))
+}
+
+// A read that fails never takes the settings for the defaults: the next
+// change would write those over the stored ones.
+test('a settings read the store refuses keeps the settings', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  refuseSettingsRead(on, refused)
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  refused.add('store.get settings')
+  const pane = await showSettings($)
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+})
+
+// Never read since the session started, the settings it holds are the
+// defaults: a change is not applied over the store's, and says why.
+test('a change with the settings never read is not saved over the stored ones', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['store.get settings'])
+  refuseSettingsRead(on, refused)
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  const toasts: string[] = []
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  await click(pane, 'settings:show-total')
+  expect(store.get('settings')).toEqual({ frameColor: '#58a6ff' })
+  expect(toasts.some(text => /^dx : réglage non appliqué, réglages illisibles \(.*store locked\)$/.test(text))).toBe(true)
+
+  refused.clear()
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
 })
