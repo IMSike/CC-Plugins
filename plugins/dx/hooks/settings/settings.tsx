@@ -491,10 +491,10 @@ export function registerSettings(on: On): void {
             label="Autre couleur"
             placeholder="#rrggbb"
             submitLabel="appliquer"
-            onInput={() => void markBadHex($, key, false)}
+            onInput={() => void markBadHex($, key, false).catch(() => undefined)}
             onSubmit={typed => {
               const hex = hexOf(typed)
-              void markBadHex($, key, hex === undefined)
+              void markBadHex($, key, hex === undefined).catch(() => undefined)
               if (hex !== undefined) void change($, current => edit(current, hex))
             }}
           />

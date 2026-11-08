@@ -274,6 +274,23 @@ test('typing in a hex field writes the warning only when it changes', async ($, 
   await pane.unmount()
 })
 
+// The warning's write refused: the typed text is left as it stands, nothing
+// rejected unhandled.
+test('a hex warning the state refuses leaves the field as it stands', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  let isRefused = false
+  on('state.set', { plugin: 'dx', key: 'settingsBadHex' }, (_, e, next) => (isRefused ? { deny: 'state refused' } : next(e)))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  isRefused = true
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  await pane.input({ key: 'frame-color-hex', text: 'ble', kind: 'change' })
+  await pane.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)
