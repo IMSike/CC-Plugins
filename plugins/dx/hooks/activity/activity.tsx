@@ -252,8 +252,10 @@ export async function paneTabs(
   $: EngineInterface,
   e: PaneRender,
   current: PanelView,
-  columns: number,
+  bodyColumns: number,
 ): Promise<{ tabs: RenderElement; rows: number; actions: Map<string, string> }> {
+  // A pane with no column still draws each tab a cell wide, not none.
+  const columns = Math.max(1, bodyColumns)
   const elements = $.ui.resolve(e)
   const { Box, Button, Text } = elements
   const { tasks } = await read($, activity)
@@ -296,7 +298,7 @@ export async function paneTabs(
       {terminals}
     </Box>
   )
-  return { tabs, rows: wrappedRows(labels, Math.max(1, columns)) + 1, actions: board?.actions ?? new Map() }
+  return { tabs, rows: wrappedRows(labels, columns) + 1, actions: board?.actions ?? new Map() }
 }
 
 // Puts a subagent's transcript in view (a click on its icon), or the main

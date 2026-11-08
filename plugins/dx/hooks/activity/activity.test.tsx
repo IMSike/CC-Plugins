@@ -173,6 +173,23 @@ test("a tab of wide characters is cut to the pane's cells", async ($, on) => {
   await pane.unmount()
 })
 
+// A pane given no column, as it opens or shrinks away: each tab keeps a cell.
+test('a pane without columns cuts its tabs to one cell, not none', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: OUTPUT })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount({ ...PANE, props: { ...PANE.props, bodyColumns: 0 } })
+  expect((await pane.find({ key: 'pane-task-b1' }))?.props.width).toBe(1)
+  expect((await pane.find({ key: 'pane-notes' }))?.props.width).toBe(1)
+  await pane.unmount()
+})
+
 test('a stopped shell leaves the border', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: OUTPUT })
