@@ -52,7 +52,7 @@ const settings = atom(
 )
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
-// or by the reset, or the pane is shown anew.
+// or by the reset, or the pane is shown anew, or dx starts again.
 const settingsBadHex = atom({ plugin: 'dx', key: 'settingsBadHex' } as const, null as string | null, { shape: 'settings-bad-hex-1' })
 
 const STORE_KEY = 'settings'
@@ -188,7 +188,9 @@ let changing: Promise<void> = Promise.resolve()
 // none, it rejects, for ../register to write it to the debug log, and the
 // pane says which settings are shown: those `takeUp` took from the state, or
 // the defaults this module holds. Neither is the store's: a change is
-// refused until a read succeeds.
+// refused until a read succeeds. A hex field's warning ends meanwhile: with
+// the module loaded anew, it would outlive the text it was about, which no
+// keystroke or color of this module then knows to clear.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
     await takeUp($)
@@ -204,7 +206,7 @@ export async function startSettings($: EngineInterface): Promise<void> {
     }
   })
   changing = started.catch(() => undefined)
-  await started
+  await Promise.all([started, clearBadHex($)])
 }
 
 // Called by ../register as a turn starts: the settings a `/clear` emptied from
@@ -298,9 +300,10 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
 // it runs: the last one decided lands, whatever the order the writes end in.
 let badHex: string | null = null
 
-// The pane shown anew, from the `⚙` icon or its tab, no hex field's warning
-// outlives the text it was about. Written whatever `badHex` says, as is a
-// submit with no color: a `/clear` may have emptied the state.
+// The pane shown anew, from the `⚙` icon or its tab, or dx started again, no
+// hex field's warning outlives the text it was about. Written whatever
+// `badHex` says, as is a submit with no color: a `/clear` may have emptied
+// the state, a fresh load forgotten what it holds.
 async function clearBadHex($: EngineInterface): Promise<void> {
   badHex = null
   await update($, settingsBadHex, () => badHex)

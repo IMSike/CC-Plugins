@@ -812,6 +812,24 @@ test('a fresh load after another that could not read the store shows the same se
   expect(store.get('settings')).toEqual({ frameColor: '#58a6ff' })
 })
 
+// dx's code loaded anew, a hex field's warning left in the state: the text it
+// was about is gone, and so is the warning, never left for no keystroke or
+// color to clear.
+test('a fresh load ends the hex color warning', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  leaveState(on, {
+    panel: { shape: 'panel-1', value: 'settings' },
+    settingsBadHex: { shape: 'settings-bad-hex-1', value: 'frame-color' },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await $.ui.mount(SETTINGS_PANE)
+  expect(await pane.find({ type: 'Text', text: /^⚠ couleur non appliquée/ })).toBeUndefined()
+  await pane.unmount()
+})
+
 // Settings the state holds with the warning that they were never read are the
 // defaults an earlier start wrote: shown and said as such.
 test('a fresh load that cannot read the store shows the defaults over settings never read', async ($, on) => {
