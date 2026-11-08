@@ -114,9 +114,11 @@ async function shownSettings($: EngineInterface): Promise<Held> {
 }
 
 // The settings as this session holds them, for the panel's tabs (../activity)
-// and the notes (../notes) as for this pane (`shownSettings`).
+// and the notes (../notes), as `shownSettings` gives them to this pane: the
+// state's settings read alone, the warnings left to this pane.
 export async function heldSettings($: EngineInterface): Promise<BandSettings> {
-  return (await shownSettings($)).value
+  await read($, settings)
+  return held.value
 }
 
 // The settings as the store holds them. A read that fails keeps the ones this
