@@ -539,3 +539,25 @@ test('an unsaved setting outlasts a /clear then a reload', async ($, on) => {
   await band.unmount()
   expect(store.get('settings')).toMatchObject({ show: { total: false } })
 })
+
+// A reload of dx whose read of the store fails keeps the settings read
+// earlier, silently, and a change still builds on them.
+test('a reload that cannot read the store keeps the settings read before', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  refuseSettingsRead(on, refused)
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  refused.add('store.get settings')
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+  const pane = await showSettings($)
+  expect(await pane.find({ type: 'Text', text: /illisibles/ })).toBeUndefined()
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
+})

@@ -64,10 +64,10 @@ const CHOICE_COLUMNS = 13
 // An icon choice's cell: its mark, the glyph, the longest name.
 const ICON_COLUMNS = 26
 
-// Whether the settings this session holds are its own: read from the store,
-// the key absent included, or carrying a change of its own the store lacks
-// (`unsaved`). Until then, the defaults it holds are not the store's
-// settings, and a change never writes them over those.
+// Whether the settings this session holds are its own: read from the store
+// by this hooks module, the key absent included, or carrying a change of its
+// own the store lacks (`unsaved`). Until then, the defaults it holds are not
+// the store's settings, and a change never writes them over those.
 let settingsLoaded = false
 
 // What this session holds of its settings, and the warnings said with them:
@@ -147,20 +147,31 @@ let changing: Promise<void> = Promise.resolve()
 // session still unsaved, which the store lacks, is kept rather than read
 // over, as the `⚙` icon does: from the hooks module's memory, which a
 // `/clear` may have left alone with it, put back into the state; with the
-// module loaded anew, from the state. A read that fails rejects, for
-// ../register to write it to the debug log.
+// module loaded anew, from the state. A read that fails keeps the settings
+// read before by this module, silently, as the `⚙` icon does; with none,
+// the defaults it holds, said by the pane, it rejects, for ../register to
+// write it to the debug log. A module loaded anew cannot tell whether the
+// settings the state holds were read from the store or are the defaults a
+// start that could not read them wrote.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
-    if (held.unsaved === null) {
-      held = {
-        value: await read($, settings),
-        unsaved: await read($, settingsUnsaved),
-        unreadable: await read($, settingsUnreadable),
+    if (!settingsLoaded) {
+      const unsaved = await read($, settingsUnsaved)
+      if (unsaved !== null) {
+        held = { value: await read($, settings), unsaved, unreadable: null }
+        settingsLoaded = true
       }
     }
-    settingsLoaded = held.unsaved !== null
-    if (settingsLoaded) await hold($, {})
-    else await loadSettings($)
+    if (held.unsaved !== null) {
+      await hold($, {})
+      return
+    }
+    try {
+      await loadSettings($)
+    } catch (error) {
+      if (!settingsLoaded) throw error
+      await hold($, {})
+    }
   })
   changing = started.catch(() => undefined)
   await started
