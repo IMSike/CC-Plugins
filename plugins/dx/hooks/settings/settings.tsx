@@ -53,7 +53,8 @@ const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as c
   shape: 'settings-unreadable-2',
 })
 // The hex field whose text is no color, by the key of its colors: said in red
-// under it until its text changes or it applies a color.
+// under it until its text changes, a color is applied for it, typed or
+// picked, or the pane is shown anew.
 const settingsBadHex = atom({ plugin: 'dx', key: 'settingsBadHex' } as const, null as string | null, { shape: 'settings-bad-hex-1' })
 
 const STORE_KEY = 'settings'
@@ -254,7 +255,14 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
     else await save($)
   }).catch(() => undefined)
   await changing
+  await clearBadHex($)
   await togglePanel($, 'settings')
+}
+
+// The pane shown anew, from the `⚙` icon or its tab, no hex field's warning
+// outlives the text it was about.
+async function clearBadHex($: EngineInterface): Promise<void> {
+  await update($, settingsBadHex, () => null)
 }
 
 // Says under the hex field of the colors `key` that its text is no color, or
@@ -285,11 +293,14 @@ function isStepper(value: unknown): value is Stepper {
   return typeof value === 'string' && Object.hasOwn(STEPPERS, value)
 }
 
+// A press's change; a color's, also the key of its colors, whose hex field's
+// warning it ends.
+type SettingsPress = { edit: (current: BandSettings) => BandSettings; colors?: string }
 // What each press drawn in the pane (../shared/press.tsx) changes, by its key:
 // set as the pane draws, applied to the settings as they stand when it lands.
 // Rebuilt as the pane draws, it holds the drawn ones alone. Every key starts
 // with `settings:`, which the press hook matches.
-let pressActions = new Map<string, (current: BandSettings) => BandSettings>()
+let pressActions = new Map<string, SettingsPress>()
 const BOLD: PressStyle = { bold: true }
 
 export function registerSettings(on: On): void {
@@ -307,15 +318,19 @@ export function registerSettings(on: On): void {
   // The settings' tab atop the panel (../activity's paneTabs): in front, it
   // does nothing.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: 'pane-settings' }, async $ => {
-    if ((await panelView($)) !== 'settings') await showPanel($, 'settings')
+    if ((await panelView($)) === 'settings') return {}
+    await clearBadHex($)
+    await showPanel($, 'settings')
 
     return {}
   })
 
   // Each press in the pane.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^settings:/ }, async ($, e) => {
-    const edit = pressActions.get(e.element)
-    if (edit !== undefined) await change($, edit)
+    const action = pressActions.get(e.element)
+    if (action === undefined) return {}
+    if (action.colors !== undefined) await markBadHex($, action.colors, false)
+    await change($, action.edit)
 
     return {}
   })
@@ -341,11 +356,11 @@ export function registerSettings(on: On): void {
     // A press that applies `edit` (../shared/presses). `width`: its cell's, the
     // label cut there.
     // Nothing is awaited from here on: the presses drawn replace the last ones.
-    const board = pressBoard<(current: BandSettings) => BandSettings>(Client, 'settings:')
+    const board = pressBoard<SettingsPress>(Client, 'settings:')
     pressActions = board.actions
     keepTaskTabs(paneActions)
     const press = (key: string, edit: (current: BandSettings) => BandSettings, parts: PressPart[], width?: number, hover = BOLD) =>
-      board.press(key, edit, parts, hover, width)
+      board.press(key, { edit }, parts, hover, width)
     const mark = (checked: boolean): PressPart => ({ text: checked ? '◉ ' : '○ ', color: checked ? 'success' : 'subtle' })
     const toggle = (key: string, checked: boolean, label: string, edit: (current: BandSettings) => BandSettings, width = half) => (
       <Box key={`${key}-cell`} width={width}>
@@ -396,7 +411,13 @@ export function registerSettings(on: On): void {
         <Box key={`${key}-choices`} flexWrap="wrap">
           {choices.map(([color, label]) => (
             <Box key={`${key}-${color.replace('#', '')}-cell`} width={CHOICE_COLUMNS}>
-              {press(`${key}-${color.replace('#', '')}`, current => edit(current, color), choice(color, label, color === current), CHOICE_COLUMNS)}
+              {board.press(
+                `${key}-${color.replace('#', '')}`,
+                { edit: current => edit(current, color), colors: key },
+                choice(color, label, color === current),
+                BOLD,
+                CHOICE_COLUMNS,
+              )}
             </Box>
           ))}
           {isCustom && (

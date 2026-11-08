@@ -179,6 +179,42 @@ test('a hex color that is none says so under its field', async ($, on) => {
   await pane.unmount()
 })
 
+// Nor does it outlive its field: it goes once a color is picked for it, or
+// once the pane is shown again, by the `⚙` icon or by its tab.
+test('a hex color warning goes with a color picked or the pane shown again', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const warning = /^⚠ couleur non appliquée/
+
+  const pane = await showSettings($)
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  await click(pane, 'settings:frame-color-58a6ff')
+  expect(await pane.find({ type: 'Text', text: warning })).toBeUndefined()
+
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  await pane.unmount()
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await click(band, 'settings')
+  await band.unmount()
+  const again = await $.ui.mount(SETTINGS_PANE)
+  expect(await again.find({ type: 'Text', text: warning })).toBeUndefined()
+
+  await again.input({ key: 'frame-color-hex', text: 'bleu' })
+  await again.unmount()
+  const notesBand = await $.ui.mount(BAND)
+  await click(notesBand, 'notes')
+  await notesBand.unmount()
+  const notes = await $.ui.mount(NOTES_PANE)
+  await click(notes, 'pane-settings')
+  await notes.unmount()
+  const shown = await $.ui.mount(SETTINGS_PANE)
+  expect(await shown.find({ type: 'Text', text: warning })).toBeUndefined()
+  await shown.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)
