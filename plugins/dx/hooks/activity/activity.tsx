@@ -6,6 +6,7 @@ import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
 import { DEFAULT_SETTINGS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
+import { wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
   encodeCommand,
@@ -211,22 +212,6 @@ export async function showTask($: EngineInterface, id: string, toggle = true): P
 type PaneRender = Parameters<EngineInterface['ui']['resolve']>[0]
 // Characters of a command its tab shows.
 const TAB_COMMAND = 24
-
-// The rows a row of labels takes, wrapped in `columns` with a cell between.
-function wrappedRows(labels: readonly string[], columns: number): number {
-  let rows = 1
-  let used = 0
-  for (const label of labels) {
-    const width = Math.min(columns, Array.from(label).length)
-    if (used > 0 && used + 1 + width > columns) {
-      rows += 1
-      used = width
-    } else {
-      used += (used > 0 ? 1 : 0) + width
-    }
-  }
-  return rows
-}
 
 // What each tab atop the panel shows when pressed: a content, or a background
 // task's terminal.

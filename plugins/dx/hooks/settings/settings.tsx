@@ -1,8 +1,9 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderChildren } from 'claude-code'
 
-import type { BandSettings, BottomFact } from '../../types'
+import type { BandSettings } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
+import { errorText } from '../shared/format'
 import {
   ACCENTS,
   ANIMATE_LABELS,
@@ -29,10 +30,10 @@ import {
   SPEEDS,
   thresholdsOf,
 } from '../shared/options'
-import { errorText } from '../shared/format'
 import { PANEL, panelView, showPanel, togglePanel } from '../shared/panes'
 import type { PressPart, PressStyle } from '../shared/press'
 import { pressBoard } from '../shared/presses'
+import { moved } from './order'
 import { STEPPER_COLUMNS } from './stepper'
 import type { StepperProps } from './stepper'
 
@@ -111,17 +112,6 @@ const STEPPERS: Record<string, (current: BandSettings, picked: number) => BandSe
 // with `settings:`, which the press hook matches.
 let pressActions = new Map<string, (current: BandSettings) => BandSettings>()
 const BOLD: PressStyle = { bold: true }
-
-// `order` with `fact` moved one place up (-1) or down (+1).
-function moved(order: readonly BottomFact[], fact: BottomFact, by: -1 | 1): BottomFact[] {
-  const from = order.indexOf(fact)
-  const to = from + by
-  if (from < 0 || to < 0 || to >= order.length) return [...order]
-  const next = [...order]
-  next[from] = next[to] as BottomFact
-  next[to] = fact
-  return next
-}
 
 export function registerSettings(on: On): void {
   // Each number a stepper posts.

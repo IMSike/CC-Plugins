@@ -10,6 +10,7 @@ import { pressBoard } from '../shared/presses'
 import type { EditorProps } from './editor'
 import { encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
+import { isTab, unsavedFor } from './notes-model'
 import { firstLine, othersOf, othersStart } from './others'
 import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
 
@@ -33,10 +34,6 @@ const notesOthersAt = atom({ plugin: 'dx', key: 'notesOthersAt' } as const, 0, {
 
 // The last tab shown, taken up again by the next pane (a setting).
 const TAB_KEY = 'notesTab'
-
-function isTab(value: unknown): value is NoteTab {
-  return value === 'global' || value === 'project' || value === 'session'
-}
 
 // Every note, and the tab a pane opens on: once the session has started.
 async function loadNotes($: EngineInterface): Promise<void> {
@@ -85,11 +82,6 @@ async function unsaved($: EngineInterface, key: string | null, reason: string | 
     return
   }
   if (current?.key !== key || current.reason !== reason) await update($, notesUnsaved, () => ({ key, reason }))
-}
-
-// Why the note under `key` is not saved, from `unsaved`, or null.
-function unsavedFor(value: NotesUnsaved | null, key: string): string | null {
-  return value !== null && (value.key === key || value.key === null) ? value.reason : null
 }
 
 // Whether `text` may be kept under `key` for its length: within the limit, or
