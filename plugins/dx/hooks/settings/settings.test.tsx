@@ -76,6 +76,31 @@ test('an unsaved setting is kept until a later change saves it', async ($, on) =
   expect(store.get('settings')).toMatchObject({ show: { total: false, branch: false }, frameColor: '#58a6ff' })
 })
 
+// The `⚙` icon, a change unsaved, saves it again rather than reading the
+// store: once the store takes it, the warning goes.
+test('the settings icon saves an unsaved setting again', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const store = engine(on, { refused })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  refused.add('store.set settings')
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+
+  refused.clear()
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await click(band, 'settings')
+  await band.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false } })
+  const again = await $.ui.mount(SETTINGS_PANE)
+  expect(await again.find({ type: 'Text', text: /non enregistrés/ })).toBeUndefined()
+  await again.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)

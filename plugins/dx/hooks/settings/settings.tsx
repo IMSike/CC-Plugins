@@ -148,20 +148,27 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
     }
     const next = edit(base)
     await update($, settings, () => next)
-    const reason = await $.store.set(STORE_KEY, next).then(() => null, (error: unknown) => errorText(error))
-    unsavedCopy = reason === null ? undefined : { value: next, reason }
-    if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)
+    await save($, next)
   }).catch(() => undefined)
 
   return changing
 }
 
+// Writes `value`, the settings this session holds, to the store; one that
+// fails is said in the pane (`settingsUnsaved`) until one saves.
+async function save($: EngineInterface, value: BandSettings): Promise<void> {
+  const reason = await $.store.set(STORE_KEY, value).then(() => null, (error: unknown) => errorText(error))
+  unsavedCopy = reason === null ? undefined : { value, reason }
+  if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)
+}
+
 export async function toggleSettings($: EngineInterface): Promise<void> {
-  // Another session's changes shown, after this one's under way; not over a
-  // change of this session still unsaved, which the store lacks.
+  // Another session's changes shown, after this one's under way; a change of
+  // this session still unsaved, which the store lacks, saved again instead.
   changing = changing.then(async () => {
     await restoreUnsaved($)
     if ((await read($, settingsUnsaved)) === null) await loadSettings($)
+    else await save($, await read($, settings))
   }).catch(() => undefined)
   await changing
   await togglePanel($, 'settings')
