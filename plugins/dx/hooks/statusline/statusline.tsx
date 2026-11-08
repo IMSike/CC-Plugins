@@ -127,12 +127,13 @@ async function refresh($: EngineInterface): Promise<void> {
 }
 
 // Called by ../register once the session has started, after the settings it
-// draws with: the band's first snapshot, and its clocks.
+// draws with: the band's clocks, then its first snapshot. A first snapshot that
+// fails is left to the next refresh, the clocks already running.
 export async function startStatusline($: EngineInterface): Promise<void> {
   $.clock.every(TICK_MS, () => turnTick($))
   $.clock.every(SPIN_MS, () => spinTick($))
-  await refresh($)
   $.clock.every(REFRESH_MS, () => refresh($))
+  await refresh($).catch(() => undefined)
 }
 
 // Called by ../register as a turn starts: the main loop's turn is timed.
@@ -157,7 +158,8 @@ export function registerStatusline(on: On): void {
     if (e.agentId === undefined) {
       const now = await $.clock.now()
       await update($, turn, current => ({ startedAt: current?.startedAt ?? now - e.durationMs, durationMs: e.durationMs, endedAt: now }))
-      await refresh($)
+      // A refresh that fails keeps the last snapshot, for the next to replace.
+      await refresh($).catch(() => undefined)
     }
 
     return completed

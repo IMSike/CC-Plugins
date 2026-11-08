@@ -1,3 +1,4 @@
+import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import { SPIN_MS } from '../shared/crew'
@@ -332,5 +333,31 @@ test('stored settings hide elements, and may keep an idle 5-hour row', async ($,
   // No 5-hour window yet: its row drawn empty.
   expect(await ui.find({ type: 'Text', text: /^5h/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /^   — $/ })).toBeDefined()
+  await ui.unmount()
+})
+
+// A plugin beneath dx (the builtin tier) whose first usage read is malformed:
+// the band's first snapshot fails. It runs on its own, its count inside.
+const MALFORMED_USAGE = {
+  name: 'malformed-usage',
+  tier: 'builtin' as const,
+  register: (on: On) => {
+    let usageReads = 0
+    on('session.usage', async (_, e, next) => {
+      usageReads += 1
+      return usageReads === 1 ? { value: { rateLimits: null } as never } : next(e)
+    })
+  },
+}
+
+test('a first snapshot that fails leaves the band to the next refresh', { plugins: [MALFORMED_USAGE] }, async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const store = engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(store.get('statusline') ?? null).toBeNull()
+
+  await clock.advance(30_000)
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^Opus 5.5$/, in: 'frame-top' }))?.props.bold).toBe(true)
   await ui.unmount()
 })
