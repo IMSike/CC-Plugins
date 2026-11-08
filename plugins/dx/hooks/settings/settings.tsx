@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderChildren, TurnStartInput } from 'claude-code'
 
-import type { BandSettings } from '../../types'
+import type { BandSettings, SettingsUnreadable } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
 import { errorText } from '../shared/format'
 import {
@@ -44,10 +44,12 @@ const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTIN
 const settingsUnsaved = atom({ plugin: 'dx', key: 'settingsUnsaved' } as const, null as string | null, {
   shape: 'settings-unsaved-1',
 })
-// Why the settings could not be read, the session having never read them: a
-// change was not applied. Said in the pane until a read succeeds.
-const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as const, null as string | null, {
-  shape: 'settings-unreadable-1',
+// Why the settings could not be read, the session having never read them: the
+// defaults shown, or a change not applied. Said in the pane until a read of
+// the store succeeds: at a change, at the `⚙` icon, at a main turn's start or
+// at a reload of dx.
+const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as const, null as SettingsUnreadable | null, {
+  shape: 'settings-unreadable-2',
 })
 
 const STORE_KEY = 'settings'
@@ -69,7 +71,7 @@ let settingsLoaded = false
 // the module (the process goes on, no `session.start` fires) while it may
 // empty dx's state, the settings then read as the defaults. Never in the
 // store, which every session reads.
-type Held = { value: BandSettings; unsaved: string | null; unreadable: string | null }
+type Held = { value: BandSettings; unsaved: string | null; unreadable: SettingsUnreadable | null }
 let held: Held = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
 
 // The writes of what this session holds into the state, one after the other.
@@ -90,7 +92,7 @@ function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
 async function writeHeld($: EngineInterface): Promise<void> {
   if (JSON.stringify(await read($, settings)) !== JSON.stringify(held.value)) await update($, settings, () => held.value)
   if ((await read($, settingsUnsaved)) !== held.unsaved) await update($, settingsUnsaved, () => held.unsaved)
-  if ((await read($, settingsUnreadable)) !== held.unreadable) await update($, settingsUnreadable, () => held.unreadable)
+  if (JSON.stringify(await read($, settingsUnreadable)) !== JSON.stringify(held.unreadable)) await update($, settingsUnreadable, () => held.unreadable)
 }
 
 // The settings drawn and their warnings: as this session holds them, which the
@@ -104,14 +106,23 @@ async function shownSettings($: EngineInterface): Promise<Held> {
 }
 
 // The settings as the store holds them. A read that fails keeps the ones this
-// session holds, which a change would otherwise write over the store's.
+// session holds, which a change would otherwise write over the store's, and
+// rejects; the settings never read, the pane says the defaults are shown
+// (`settingsUnreadable`).
 async function loadSettings($: EngineInterface): Promise<void> {
   let stored: unknown
   try {
     stored = await $.store.get(STORE_KEY)
-  } catch {
-    return
+  } catch (error) {
+    if (!settingsLoaded) await hold($, { unreadable: { reason: errorText(error), isChangeRefused: false } })
+    throw error
   }
+  await takeStored($, stored)
+}
+
+// Takes the settings read from the store, the warning that they could not be
+// read gone.
+async function takeStored($: EngineInterface, stored: unknown): Promise<void> {
   settingsLoaded = true
   await hold($, { value: settingsOf(stored), unreadable: null })
 }
@@ -119,7 +130,8 @@ async function loadSettings($: EngineInterface): Promise<void> {
 // Called by ../register once the session has started, before the features
 // that read the settings: a fresh load of the plugin, from what its state
 // holds. A change of this session still unsaved, which the store lacks, is
-// kept rather than read over, as the `⚙` icon does.
+// kept rather than read over, as the `⚙` icon does. A read that fails rejects,
+// for ../register to write it to the debug log.
 export async function startSettings($: EngineInterface): Promise<void> {
   held = {
     value: await read($, settings),
@@ -137,9 +149,20 @@ let changing: Promise<void> = Promise.resolve()
 // the state are restored, for the band to draw them again; a subagent's turn
 // leaves them. A change under way is not waited for, its save included: what
 // it holds is written by its own `hold` or by this one, whichever runs last.
+// The settings never read, they are read again, at each turn until a read
+// succeeds; one that fails leaves the pane's warning as it stands.
 export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
   if (e.agentId !== undefined) return
   await hold($, {})
+  if (settingsLoaded) return
+  let stored: unknown
+  try {
+    stored = await $.store.get(STORE_KEY)
+  } catch {
+    return
+  }
+  // A change that read them meanwhile holds them already, its edit applied.
+  if (!settingsLoaded) await takeStored($, stored)
 }
 
 // The settings a change starts from: as the store holds them, another
@@ -172,7 +195,7 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
     try {
       base = await changeBase($)
     } catch (error) {
-      await hold($, { unreadable: errorText(error) })
+      await hold($, { unreadable: { reason: errorText(error), isChangeRefused: true } })
       return
     }
     await hold($, { value: edit(base), unreadable: null })
@@ -387,7 +410,9 @@ export function registerSettings(on: On): void {
       <Box flexDirection="column">
         {tabs}
         {unreadable !== null && (
-          <Text key="unreadable" color="error" wrap="wrap">{`⚠ réglages illisibles : ${unreadable} (changement non appliqué)`}</Text>
+          <Text key="unreadable" color="error" wrap="wrap">
+            {`⚠ réglages illisibles : ${unreadable.reason} (${unreadable.isChangeRefused ? 'changement non appliqué' : 'réglages par défaut affichés'})`}
+          </Text>
         )}
         {unsaved !== null && <Text key="unsaved" color="error" wrap="wrap">{`⚠ réglages non enregistrés : ${unsaved}`}</Text>}
         {section('show', 'Affichage', [

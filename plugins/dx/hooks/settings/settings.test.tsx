@@ -259,6 +259,47 @@ test('a change with the settings never read is not saved over the stored ones', 
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
 })
 
+// The settings unreadable as the session starts are never silent: the pane says
+// the defaults are shown, the debug log why, and each main turn reads them
+// again until the store answers.
+test('settings unreadable at the start say so, and are read again at each turn', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set(['store.get settings'])
+  refuseSettingsRead(on, refused)
+  engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const logged: { text: string; to?: string }[] = []
+  on('ui.log', (_, e) => {
+    logged.push(e)
+
+    return { value: undefined }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  expect(logged.some(line => line.to === 'debug' && /^dx : démarrage échoué, réglages \(.*store locked\)$/.test(line.text))).toBe(true)
+  // Shown from the notes' tab, which does not read the settings as `⚙` does.
+  const band = await $.ui.mount(BAND)
+  await click(band, 'notes')
+  await band.unmount()
+  const notes = await $.ui.mount(NOTES_PANE)
+  await click(notes, 'pane-settings')
+  await notes.unmount()
+  const pane = await $.ui.mount(SETTINGS_PANE)
+  const warning = /^⚠ réglages illisibles : .*store locked \(réglages par défaut affichés\)$/
+  expect((await pane.find({ type: 'Text', text: warning }))?.props.color).toBe('error')
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  expect(await pane.find({ type: 'Text', text: warning })).toBeDefined()
+
+  refused.clear()
+  await $.turn.start({ text: 'again', turnId: 't2' })
+  expect(await pane.find({ type: 'Text', text: /illisibles/ })).toBeUndefined()
+  await pane.unmount()
+  const after = await $.ui.mount(BAND)
+  expect(await frameColors(after)).toContain('#58a6ff')
+  await after.unmount()
+})
+
 // The `⚙` icon reads the settings again: once the store answers, the warning
 // goes, with the stored settings shown.
 test('the settings icon clears the unreadable warning once the store is read', async ($, on) => {

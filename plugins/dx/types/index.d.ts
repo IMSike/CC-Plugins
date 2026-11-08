@@ -162,6 +162,10 @@ export type NotesView = { tab: NoteTab; other?: string }
 // notes not loaded, the project's root unknown), and why.
 export type NotesUnsaved = { key: string | null; reason: string }
 
+// Why the settings could not be read, the session having never read them:
+// the defaults shown, or a change not applied (`isChangeRefused`).
+export type SettingsUnreadable = { reason: string; isChangeRefused: boolean }
+
 declare module 'claude-code' {
   interface PluginState {
     dx: {
@@ -178,9 +182,9 @@ declare module 'claude-code' {
       // pane; null once a change saves.
       settingsUnsaved: Shaped<string | null>
       // Why the settings could not be read, the session having never read
-      // them: a change was not applied. Shown in their pane; null once a read
-      // succeeds.
-      settingsUnreadable: Shaped<string | null>
+      // them, and what followed. Shown in their pane; null once a read of the
+      // store succeeds.
+      settingsUnreadable: Shaped<SettingsUnreadable | null>
       notes: Shaped<Notes | null>
       // Why the notes could not be loaded, shown in their pane; null once loaded.
       notesError: Shaped<string | null>
