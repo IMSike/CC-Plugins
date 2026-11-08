@@ -187,21 +187,33 @@ test('a .git file that never leads to a HEAD is kept as no repository', async ()
   }
 })
 
-// Git reads `gitdir:` at the start of the file only, the path ending with the
-// first line, whatever its line ending.
-test('a .git file is read for its gitdir on its first line only', async () => {
-  for (const link of ['gitdir: ../repo/.git/worktrees/wt\n', 'gitdir:../repo/.git/worktrees/wt \r\n']) {
+// Git reads the file as `gitdir: ` (one space) then the path: all the rest but
+// the line endings at its end, spaces kept.
+test('a .git file is read as Git reads it: "gitdir: " then the path', async () => {
+  for (const link of [
+    'gitdir: ../repo/.git/worktrees/wt\n',
+    'gitdir: ../repo/.git/worktrees/wt\r\n',
+    'gitdir: ../repo/.git/worktrees/wt\n\n',
+  ]) {
     const fs = disk({ 'C:/wt/.git': link, 'C:/wt/../repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n' })
     expect(await branchFrom(fs, 'C:/wt', new Map())).toBe('feature')
   }
 
-  const fs = disk({
-    'C:/wt/.git': 'garbage\ngitdir: C:/repo/.git/worktrees/wt\n',
-    'C:/repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n',
-  })
-  const heads: HeadPaths = new Map()
-  expect(await branchFrom(fs, 'C:/wt', heads)).toBeUndefined()
-  expect(heads.get('C:/wt')).toBe(null)
+  for (const link of [
+    'garbage\ngitdir: C:/repo/.git/worktrees/wt\n',
+    'gitdir:C:/repo/.git/worktrees/wt\n',
+    'gitdir:  C:/repo/.git/worktrees/wt\n',
+    'gitdir: C:/repo/.git/worktrees/wt \n',
+    'gitdir: C:/repo/.git/worktrees/wt\nC:/other\n',
+  ]) {
+    const fs = disk({
+      'C:/wt/.git': link,
+      'C:/repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n',
+    })
+    const heads: HeadPaths = new Map()
+    expect(await branchFrom(fs, 'C:/wt', heads)).toBeUndefined()
+    expect(heads.get('C:/wt')).toBe(null)
+  }
 })
 
 // Git writes the `.git` file ending with a newline: read without it, the file
@@ -220,6 +232,23 @@ test('a .git file without its final newline keeps nothing', async () => {
     fs.files['C:/wt/.git'] = 'gitdir: C:/repo/.git/worktrees/wt\n'
     expect(await branchFrom(fs, 'C:/wt', heads)).toBe('feature')
   }
+})
+
+// A path cut in the middle may still lead to a HEAD: a worktree's cut down to
+// the main repository's `.git`. Its branch shows, but the path is not kept:
+// once the file is written, the worktree's shows.
+test('a HEAD reached through a .git file without its final newline is not kept', async () => {
+  const fs = disk({
+    'C:/repo/.git/HEAD': 'ref: refs/heads/dev\n',
+    'C:/repo/.git/worktrees/wt/HEAD': 'ref: refs/heads/feature\n',
+    'C:/wt/.git': 'gitdir: C:/repo/.git',
+  })
+  const heads: HeadPaths = new Map()
+  expect(await branchFrom(fs, 'C:/wt', heads)).toBe('dev')
+  expect(heads.has('C:/wt')).toBe(false)
+  fs.files['C:/wt/.git'] = 'gitdir: C:/repo/.git/worktrees/wt\n'
+  expect(await branchFrom(fs, 'C:/wt', heads)).toBe('feature')
+  expect(heads.get('C:/wt')).toBe('C:/repo/.git/worktrees/wt/HEAD')
 })
 
 // Git creates the `.git` file, then writes it; a worktree's HEAD is renamed
