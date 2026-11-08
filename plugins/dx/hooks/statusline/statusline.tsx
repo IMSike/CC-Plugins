@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
-import type { Activity, BottomFact, StatusSnapshot, TurnTime } from '../../types'
+import type { Activity, BottomFact, HeldSettings, StatusSnapshot, TurnTime } from '../../types'
 import { openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { toggleSettings } from '../settings/settings'
@@ -33,8 +33,13 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
   shape: 'statusline-2',
 })
 
-// What the band shows, animates and is colored with, set in ../settings/settings.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
+// What the band shows, animates and is colored with, set in ../settings/settings
+// with the warnings its pane says; the band draws the settings alone.
+const settings = atom(
+  { plugin: 'dx', key: 'settings' } as const,
+  { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
+  { shape: 'settings-4' },
+)
 
 // The main loop's last turn, and a tick each second while it runs, so its
 // duration is redrawn.
@@ -198,7 +203,7 @@ export function registerStatusline(on: On): void {
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
 
     const { Box, Button, Client, Text } = $.ui.resolve(e)
-    const options = await read($, settings)
+    const options = (await read($, settings)).value
     const { show } = options
     const now = await $.clock.now()
     const resetColumns = show.countdowns ? RESET_COLUMNS : 0

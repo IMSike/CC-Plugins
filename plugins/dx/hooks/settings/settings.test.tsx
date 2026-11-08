@@ -24,27 +24,6 @@ test('a setting changed in its pane is kept and redraws the band', async ($, on)
   await ui.unmount()
 })
 
-// A change writes the settings into the state at once, then each value held
-// with its save: no more.
-test('a setting changed writes its settings, then each value held with its save', async ($, on) => {
-  mock.clock(on, { now: NOW })
-  engine(on)
-  shell(on)
-  let writes = 0
-  let isCounting = false
-  on('state.set', (_, e, next) => {
-    if (isCounting && e.plugin === 'dx' && e.key.startsWith('settings') && e.key !== 'settingsBadHex') writes += 1
-    return next(e)
-  })
-  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
-
-  const pane = await showSettings($)
-  isCounting = true
-  await click(pane, 'settings:show-total')
-  expect(writes).toBe(5)
-  await pane.unmount()
-})
-
 // A change the store refuses is never silent: the pane says so until one saves.
 test('a setting the store refuses says so in the pane, until a change saves', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -465,26 +444,24 @@ test('the settings icon clears the unreadable warning once the store is read', a
   await again.unmount()
 })
 
-const EMPTIED_KEYS = ['settings', 'settingsUnsaved', 'settingsUnreadable']
 // Every read of one dispatch answers one moment: `last`, dx's settings as
 // last read; `frozen`, set from it, what a dispatch begun then reads.
-type SettingsMoment = { last: Map<string, StateRead>; frozen?: ReadonlyMap<string, StateRead> }
+type SettingsMoment = { last?: StateRead; frozen?: StateRead }
 
 // Empties dx's settings as the engine may at a `/clear`, from the call it
-// returns on: each read as absent while it stands at the version it had,
-// until written. With `moment`, they read as its `frozen` holds them while
-// it is set.
+// returns on: read as absent while they stand at the version they had, until
+// written. With `moment`, they read as its `frozen` holds them while it is
+// set.
 function emptySettings(on: On, moment?: SettingsMoment): () => void {
   let isEmpty = false
-  const emptied = new Map<string, number>()
-  on('state.get', async (_, e, next) => {
+  let emptied: number | undefined
+  on('state.get', { plugin: 'dx', key: 'settings' }, async (_, e, next) => {
     const read = await next(e)
-    if (e.plugin !== 'dx' || !EMPTIED_KEYS.includes(e.key) || !('value' in read) || read.value === undefined) return read
-    if (isEmpty && !emptied.has(e.key)) emptied.set(e.key, read.value.version)
-    const frozen = moment?.frozen?.get(e.key)
-    if (frozen !== undefined) return { value: frozen }
-    const shown = isEmpty && read.value.version === emptied.get(e.key) ? { ...read.value, value: undefined } : read.value
-    moment?.last.set(e.key, shown)
+    if (!('value' in read) || read.value === undefined) return read
+    if (isEmpty && emptied === undefined) emptied = read.value.version
+    if (moment?.frozen !== undefined) return { value: moment.frozen }
+    const shown = isEmpty && read.value.version === emptied ? { ...read.value, value: undefined } : read.value
+    if (moment !== undefined) moment.last = shown
 
     return { value: shown }
   })
@@ -617,7 +594,7 @@ test("a change's save across a /clear that empties the state writes the settings
   const session = { id: 's1' }
   engine(on, { session })
   shell(on)
-  const moment: SettingsMoment = { last: new Map() }
+  const moment: SettingsMoment = {}
   const emptied = emptySettings(on, moment)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
@@ -628,7 +605,7 @@ test("a change's save across a /clear that empties the state writes the settings
   expect(await before.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
   await before.unmount()
   // The change's reads answer the moment before the `/clear`.
-  moment.frozen = new Map(moment.last)
+  moment.frozen = moment.last
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   session.id = 's2'
   emptied()
@@ -721,15 +698,20 @@ function leaveState(on: On, left: Record<string, unknown>): void {
   on('state.get', (_, e, next) => (e.plugin === 'dx' && unwritten.has(e.key) ? { value: { value: left[e.key], version: 0 } } : next(e)))
 }
 
+// What dx's state holds of the settings: as this session holds them.
+function leftSettings(value: Record<string, unknown>, warnings: Record<string, unknown> = {}) {
+  return { shape: 'settings-4', value: { value: { ...DEFAULT_SETTINGS, ...value }, unsaved: null, unreadable: null, ...warnings } }
+}
+
 // dx's code loaded anew, after an update that changed the settings' shape: an
-// unsaved warning left in the state never makes this session hold the
-// defaults the settings then read as, which a change would save.
-test('an unsaved warning left with settings of another shape is not taken up', async ($, on) => {
+// unsaved change left in the state, in the atoms an earlier dx wrote, is
+// neither taken up nor saved; nor the defaults over the stored settings.
+test('an unsaved setting left by settings of another shape is not taken up', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
   shell(on)
   leaveState(on, {
-    settings: { shape: 'settings-2', value: { frameColor: '#123456' } },
+    settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } },
     settingsUnsaved: { shape: 'settings-unsaved-1', value: 'disk full' },
   })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
@@ -765,10 +747,7 @@ test('a turn during a fresh load leaves the unsaved setting to the start', async
   engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
   shell(on)
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
-  leaveState(on, {
-    settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } },
-    settingsUnsaved: { shape: 'settings-unsaved-1', value: 'disk full' },
-  })
+  leaveState(on, { settings: leftSettings({ frameColor: '#123456' }, { unsaved: 'disk full' }) })
 
   const started = $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   await isReading
@@ -790,7 +769,7 @@ test('a fresh load that cannot read the store shows the settings of the state, c
   const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
   shell(on)
   on('turn.start', (_, e) => ({ turnId: e.turnId }))
-  leaveState(on, { settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } } })
+  leaveState(on, { settings: leftSettings({ frameColor: '#123456' }) })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const band = await $.ui.mount(BAND)
@@ -812,6 +791,27 @@ test('a fresh load that cannot read the store shows the settings of the state, c
   await after.unmount()
 })
 
+// Loaded anew again, the store still unreadable: the settings an earlier such
+// load showed as the session's own are shown still, changes still refused.
+test('a fresh load after another that could not read the store shows the same settings', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  refuseSettingsRead(on, new Set(['store.get settings']))
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  const unreadable = { reason: 'store locked', isChangeRefused: true, isSessionShown: true }
+  leaveState(on, { settings: leftSettings({ frameColor: '#123456' }, { unreadable }) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#123456')
+  await band.unmount()
+  const pane = await showSettings($)
+  expect(await pane.find({ type: 'Text', text: /\(changement refusé tant qu'ils ne sont pas relus\)$/ })).toBeDefined()
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  expect(store.get('settings')).toEqual({ frameColor: '#58a6ff' })
+})
+
 // Settings the state holds with the warning that they were never read are the
 // defaults an earlier start wrote: shown and said as such.
 test('a fresh load that cannot read the store shows the defaults over settings never read', async ($, on) => {
@@ -820,10 +820,7 @@ test('a fresh load that cannot read the store shows the defaults over settings n
   engine(on, { stored: { settings: { frameColor: '#58a6ff' } } })
   shell(on)
   const unreadable = { reason: 'store locked', isChangeRefused: false, isSessionShown: false }
-  leaveState(on, {
-    settings: { shape: 'settings-3', value: { ...DEFAULT_SETTINGS, frameColor: '#123456' } },
-    settingsUnreadable: { shape: 'settings-unreadable-3', value: unreadable },
-  })
+  leaveState(on, { settings: leftSettings({ frameColor: '#123456' }, { unreadable }) })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const pane = await showSettings($)

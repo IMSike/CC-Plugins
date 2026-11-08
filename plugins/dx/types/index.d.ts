@@ -165,8 +165,16 @@ export type NotesUnsaved = { key: string | null; reason: string }
 // Why the settings could not be read, the session having never read them:
 // the defaults shown, or a change not applied (`isChangeRefused`). With
 // `isSessionShown`, the settings shown are not the defaults but those the
-// state held as dx's code was loaded anew: read by this session before.
+// state held as dx's code was loaded anew: shown before as this session's
+// own, read from the store or changed by it.
 export type SettingsUnreadable = { reason: string; isChangeRefused: boolean; isSessionShown: boolean }
+
+// The settings the session holds, and the warnings their pane says with them:
+// why they were not saved (`unsaved`), null once a save succeeds (a change or
+// the `⚙` icon); why they could not be read, the session having never read
+// them, and what followed (`unreadable`), null once a read of the store
+// succeeds.
+export type HeldSettings = { value: BandSettings; unsaved: string | null; unreadable: SettingsUnreadable | null }
 
 declare module 'claude-code' {
   interface PluginState {
@@ -179,14 +187,8 @@ declare module 'claude-code' {
       turn: Shaped<TurnTime | null>
       // Counted up each second while the turn runs, so its duration is redrawn.
       tick: Shaped<number>
-      settings: Shaped<BandSettings>
-      // Why the settings the session holds were not saved, shown in their
-      // pane; null once a save succeeds (a change or the `⚙` icon).
-      settingsUnsaved: Shaped<string | null>
-      // Why the settings could not be read, the session having never read
-      // them, and what followed. Shown in their pane; null once a read of the
-      // store succeeds.
-      settingsUnreadable: Shaped<SettingsUnreadable | null>
+      // Written whole, so its warnings never disagree with its settings.
+      settings: Shaped<HeldSettings>
       // The hex field of the settings whose text is no color, by the key of
       // its colors, shown in their pane; null once its text changes, a color
       // is applied for it, or the pane is shown anew.

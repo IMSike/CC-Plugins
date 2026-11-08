@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, RenderChildren, TurnStartInput } from 'claude-code'
 
-import type { BandSettings, SettingsUnreadable } from '../../types'
+import type { BandSettings, HeldSettings, SettingsUnreadable } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
 import { errorText } from '../shared/format'
 import {
@@ -38,20 +38,18 @@ import { STEPPER_COLUMNS } from './stepper'
 import type { StepperProps } from './stepper'
 
 // The settings pane: what the band shows, animates and is colored with, kept
-// in `$.store` across sessions and read into `$.state` for the drawings.
-const settings = atom({ plugin: 'dx', key: 'settings' } as const, DEFAULT_SETTINGS, { shape: 'settings-3' })
-// Why the settings this session holds were not saved, said in the pane until a
-// save succeeds: at a later change or at the `⚙` icon.
-const settingsUnsaved = atom({ plugin: 'dx', key: 'settingsUnsaved' } as const, null as string | null, {
-  shape: 'settings-unsaved-1',
-})
-// Why the settings could not be read, the session having never read them: the
+// in `$.store` across sessions and read into `$.state` for the drawings, one
+// record with the warnings the pane says with them, written whole. Why they
+// were not saved, said until a save succeeds: at a later change or at the `⚙`
+// icon. Why they could not be read, the session having never read them: the
 // defaults shown, or those the state held as dx's code was loaded anew, or a
-// change not applied. Said in the pane until a read of the store succeeds: at
-// a change, at the `⚙` icon, at a main turn's start or at a reload of dx.
-const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as const, null as SettingsUnreadable | null, {
-  shape: 'settings-unreadable-3',
-})
+// change not applied; said until a read of the store succeeds: at a change,
+// at the `⚙` icon, at a main turn's start or at a reload of dx.
+const settings = atom(
+  { plugin: 'dx', key: 'settings' } as const,
+  { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
+  { shape: 'settings-4' },
+)
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
 // or by the reset, or the pane is shown anew.
@@ -73,9 +71,9 @@ const ICON_COLUMNS = 26
 let settingsLoaded = false
 
 // Whether the settings this session holds, never read by this hooks module,
-// are those the state held as it was loaded: written by an earlier load of
-// its code, from the store or a change, rather than the defaults. Shown, but
-// no change builds on them until the store is read.
+// are those the state held as it was loaded, rather than the defaults: shown
+// by an earlier load of its code as this session's own. Shown, but no change
+// builds on them until the store is read.
 let isStateShown = false
 
 // What this session holds of its settings, and the warnings said with them:
@@ -83,75 +81,80 @@ let isStateShown = false
 // the module (the process goes on, no `session.start` fires) while it may
 // empty dx's state, the settings then read as the defaults. Never in the
 // store, which every session reads.
-type Held = { value: BandSettings; unsaved: string | null; unreadable: SettingsUnreadable | null }
-let held: Held = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
+let held: HeldSettings = settings.initial
 
-// Whether `startSettings` has decided what this session holds, once in this
-// hooks module. Until then, the state is left as it stands: written by an
-// earlier load of this module's code, it may hold what the start takes up.
-let isHeld = false
+// Whether `takeUp` has decided what this session holds, once in this hooks
+// module. Until then, the state is left as it stands: written by an earlier
+// load of this module's code, it may hold what the take-up keeps.
+let isTakenUp = false
 
 // The writes of what this session holds into the state, one after the other.
 let holding: Promise<void> = Promise.resolve()
 
-const HELD_KEYS = ['value', 'unsaved', 'unreadable'] as const
-type HeldKey = (typeof HELD_KEYS)[number]
-
-// Takes `changes` into what this session holds, at once, and writes it into
-// the state once the writes before are done: every value, `keys` alone when
-// given, as a change does for its settings ahead of its save. With every
-// value written, a hold puts back what a `/clear` emptied, no changes or
-// some. Each write takes what this session holds as it runs, so the last one
-// writes the last changes, whoever made them. Never run as a drawing, which
-// may not write the state.
-function hold($: EngineInterface, changes: Partial<Held>, keys: readonly HeldKey[] = HELD_KEYS): Promise<void> {
+// Takes `changes` into what this session holds, at once, and writes the whole
+// record into the state once the writes before are done, which puts back
+// what a `/clear` emptied. Never skipped on a read that finds it already
+// there: every read of one dispatch answers one moment, and a write queued
+// under an older dispatch's `$` would read the state from before a `/clear`
+// emptied it. Each write takes what this session holds as it runs, so the
+// last one writes the last changes, whoever made them. Never run as a
+// drawing, which may not write the state.
+function hold($: EngineInterface, changes: Partial<HeldSettings>): Promise<void> {
   held = { ...held, ...changes }
-  const written = holding.then(() => writeHeld($, keys))
+  const written = holding.then(async () => {
+    await update($, settings, () => held)
+  })
   holding = written.catch(() => undefined)
   return written
 }
 
-// The values of `keys` written, never skipped on a read that finds them
-// already there: every read of one dispatch answers one moment, and a write
-// queued under an older dispatch's `$` would read the state from before a
-// `/clear` emptied it.
-async function writeHeld($: EngineInterface, keys: readonly HeldKey[]): Promise<void> {
-  if (keys.includes('value')) await update($, settings, () => held.value)
-  if (keys.includes('unsaved')) await update($, settingsUnsaved, () => held.unsaved)
-  if (keys.includes('unreadable')) await update($, settingsUnreadable, () => held.unreadable)
-}
-
-// The settings drawn and their warnings: as this session holds them, which the
-// state matches but after a `/clear` emptied it. The state is read all the
-// same, the pane drawn again as it changes.
-async function shownSettings($: EngineInterface): Promise<Held> {
+// The settings as this session holds them, and their warnings: what the state
+// holds but after a `/clear` emptied it. The state is read all the same, so
+// this pane, the panel's tabs (../activity) and the notes (../notes) are
+// drawn again as it changes.
+async function shownSettings($: EngineInterface): Promise<HeldSettings> {
   await read($, settings)
-  await read($, settingsUnsaved)
-  await read($, settingsUnreadable)
   return held
 }
 
-// The settings as this session holds them, for the panel's tabs (../activity)
-// and the notes (../notes), as `shownSettings` gives them to this pane: the
-// state's settings read alone, the warnings left to this pane.
 export async function heldSettings($: EngineInterface): Promise<BandSettings> {
-  await read($, settings)
-  return held.value
+  return (await shownSettings($)).value
 }
 
-// The settings the state holds, written by this shape of them; none when the
-// state holds no settings: never written, emptied by a `/clear`, or written
-// by a dx whose settings had another shape (an update), which the atom would
-// read as the defaults.
-async function stateSettings($: EngineInterface): Promise<BandSettings | undefined> {
+// What the state holds of the settings, written by this shape of them; none
+// when it holds nothing: never written, emptied by a `/clear`, or written by
+// a dx whose record had another shape (an update), which the atom would read
+// as the defaults.
+async function stateHeld($: EngineInterface): Promise<HeldSettings | undefined> {
   const { value } = await $.state.get({ plugin: 'dx', key: 'settings' })
   return value !== undefined && value.shape === settings.shape ? value.value : undefined
+}
+
+// Once in this hooks module, before what this session holds is written:
+// with the module loaded anew, a change of this session still unsaved, which
+// the store lacks, is taken up from the state (`stateHeld`), to be kept
+// rather than read over; otherwise the change is lost and the store read.
+// Settings the state holds that were shown as this session's own, read from
+// the store, changed, or taken up so by an earlier load of the module's code,
+// are taken up to be shown; not those held with the warning that the
+// defaults were shown.
+async function takeUp($: EngineInterface): Promise<void> {
+  if (isTakenUp) return
+  const left = await stateHeld($)
+  if (left !== undefined && left.unsaved !== null) {
+    held = { ...left, unreadable: null }
+    settingsLoaded = true
+  } else if (left !== undefined && (left.unreadable === null || left.unreadable.isSessionShown)) {
+    held = { ...held, value: left.value }
+    isStateShown = true
+  }
+  isTakenUp = true
 }
 
 // The settings as the store holds them. A read that fails keeps the ones this
 // session holds, which a change would otherwise write over the store's, and
 // rejects; the settings never read, the pane says which are shown, the
-// defaults or the state's (`settingsUnreadable`).
+// defaults or the state's (`unreadable`).
 async function loadSettings($: EngineInterface): Promise<void> {
   let stored: unknown
   try {
@@ -170,13 +173,6 @@ async function takeStored($: EngineInterface, stored: unknown): Promise<void> {
   await hold($, { value: settingsOf(stored), unreadable: null })
 }
 
-// Whether the settings the state holds along with `unreadable` were shown to
-// this session as its own: read from the store, or taken up by a start of
-// this module that could not read it, rather than the defaults it holds.
-function isShown(unreadable: SettingsUnreadable | null): boolean {
-  return unreadable === null || unreadable.isSessionShown
-}
-
 // The changes under way, one after the other, and the `⚙` icon's and a
 // reload's reads of the settings among them.
 let changing: Promise<void> = Promise.resolve()
@@ -187,40 +183,24 @@ let changing: Promise<void> = Promise.resolve()
 // session still unsaved, which the store lacks, is kept rather than read
 // over, as the `⚙` icon does: from the hooks module's memory, which a
 // `/clear` may have left alone with it, put back into the state; with the
-// module loaded anew, from the state, when it holds settings of this shape
-// (`stateSettings`); otherwise the change is lost and the store read. A read
-// that fails keeps the settings read before by this module, silently, as the
-// `⚙` icon does. With none, it rejects, for ../register to write it to the
-// debug log, and the pane says which settings are shown: those the state
-// holds, written by an earlier load of the module's code without a warning
-// that they were never read (`isShown`); else the defaults this module holds.
-// Neither is the store's: a change is refused until a read succeeds.
+// module loaded anew, from the state (`takeUp`). A read that fails keeps the
+// settings read before by this module, silently, as the `⚙` icon does. With
+// none, it rejects, for ../register to write it to the debug log, and the
+// pane says which settings are shown: those `takeUp` took from the state, or
+// the defaults this module holds. Neither is the store's: a change is
+// refused until a read succeeds.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
+    await takeUp($)
+    if (held.unsaved !== null) {
+      await hold($, {})
+      return
+    }
     try {
-      if (!settingsLoaded) {
-        const value = await stateSettings($)
-        const unsaved = await read($, settingsUnsaved)
-        if (value !== undefined && unsaved !== null) {
-          held = { value, unsaved, unreadable: null }
-          settingsLoaded = true
-        } else if (value !== undefined && isShown(await read($, settingsUnreadable))) {
-          held = { ...held, value }
-          isStateShown = true
-        }
-      }
-      if (held.unsaved !== null) {
-        await hold($, {})
-        return
-      }
-      try {
-        await loadSettings($)
-      } catch (error) {
-        if (!settingsLoaded) throw error
-        await hold($, {})
-      }
-    } finally {
-      isHeld = true
+      await loadSettings($)
+    } catch (error) {
+      if (!settingsLoaded) throw error
+      await hold($, {})
     }
   })
   changing = started.catch(() => undefined)
@@ -233,11 +213,11 @@ export async function startSettings($: EngineInterface): Promise<void> {
 // it holds is written by its own `hold` or by this one, whichever runs last.
 // The settings never read, they are read again, at each turn until a read
 // succeeds; one that fails leaves the pane's warning as it stands. Before
-// `startSettings` decided what this session holds, nothing: the defaults this
-// module holds then would be written over what the start takes up from the
-// state, and the start reads the store itself.
+// `takeUp` decided what this session holds, nothing: the defaults this
+// module holds then would be written over what it takes up from the state,
+// and the start reads the store itself.
 export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
-  if (e.agentId !== undefined || !isHeld) return
+  if (e.agentId !== undefined || !isTakenUp) return
   await hold($, {})
   if (settingsLoaded) return
   let stored: unknown
@@ -271,11 +251,11 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
 
 // Applies `edit` to the settings (`changeBase`) and keeps the result; two
 // changes in a row both land. A save that fails leaves the change applied to
-// this session alone, and the pane says why (`settingsUnsaved`). A change
-// with no settings to start from is not applied, and the pane says why
-// (`settingsUnreadable`); each warning goes as its atom's comment says. The
-// settings written at once, for the band to show them; every value with the
-// save, which puts back what a `/clear` emptied, before the change or since.
+// this session alone, and the pane says why (`unsaved`). A change with no
+// settings to start from is not applied, and the pane says why
+// (`unreadable`); each warning goes as the atom's comment says. The settings
+// written at once, for the band to show them, then again with the save's
+// outcome, which puts back what a `/clear` emptied meanwhile.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
     let base: BandSettings
@@ -285,7 +265,7 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
       await hold($, { unreadable: { reason: errorText(error), isChangeRefused: true, isSessionShown: isStateShown } })
       return
     }
-    await hold($, { value: edit(base), unreadable: null }, ['value', 'unreadable'])
+    await hold($, { value: edit(base), unreadable: null })
     await save($)
   }).catch(() => undefined)
 
@@ -293,7 +273,7 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
 }
 
 // Writes the settings this session holds to the store; a write that fails is
-// said in the pane (`settingsUnsaved`) until one saves.
+// said in the pane (`unsaved`) until one saves.
 async function save($: EngineInterface): Promise<void> {
   const unsaved = await $.store.set(STORE_KEY, held.value).then(() => null, (error: unknown) => errorText(error))
   await hold($, { unsaved })
