@@ -179,9 +179,10 @@ async function takeStored($: EngineInterface, stored: unknown): Promise<void> {
 // reload's reads of the settings among them.
 let changing: Promise<void> = Promise.resolve()
 
-// Called by ../register once the session has started, before the features
-// that read the settings: a fresh load of the plugin, once a change under way
-// is done, its save included, which decides what is unsaved. A change of this
+// Called by ../register once the session has started, as at a reload of the
+// plugin; the notes' start waits for it, the band's and the activity's run
+// alongside. It runs once a change under way is done, its save included,
+// which decides what is unsaved. A change of this
 // session still unsaved, which the store lacks, is kept rather than read
 // over, as the `⚙` icon does: from the hooks module's memory, which a
 // `/clear` may have left alone with it, put back into the state; with the

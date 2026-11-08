@@ -810,7 +810,7 @@ test('a change before a fresh load starts the settings keeps the unsaved setting
 })
 
 // dx's code loaded anew, the store unreadable: the settings the state holds,
-// which the session read before, are shown rather than the defaults, but no
+// shown before as the session's own, are shown rather than the defaults, but no
 // change is applied over the store's until a read succeeds.
 test('a fresh load that cannot read the store shows the settings of the state, changes refused', async ($, on) => {
   mock.clock(on, { now: NOW })
