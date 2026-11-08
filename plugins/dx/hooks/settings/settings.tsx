@@ -58,6 +58,33 @@ const ICON_COLUMNS = 26
 // and a change never writes them over those.
 let settingsLoaded = false
 
+// What this session holds of its settings, and the warning said with them:
+// kept in the hooks module's memory as in the state, since a `/clear` leaves
+// the module (the process goes on, no `session.start` fires) while it may
+// empty dx's state, the settings then read as the defaults. Never in the
+// store, which every session reads.
+type Held = { value: BandSettings; unsaved: string | null }
+let held: Held = { value: DEFAULT_SETTINGS, unsaved: null }
+
+// Takes `changes` into what this session holds, and writes into the state what
+// it lacks of it: with no changes, puts back what a `/clear` emptied. Run among
+// the changes (`changing`), never as a drawing, which may not write the state.
+async function hold($: EngineInterface, changes: Partial<Held>): Promise<void> {
+  held = { ...held, ...changes }
+  const { value, unsaved } = held
+  if (JSON.stringify(await read($, settings)) !== JSON.stringify(value)) await update($, settings, () => value)
+  if ((await read($, settingsUnsaved)) !== unsaved) await update($, settingsUnsaved, () => unsaved)
+}
+
+// The settings drawn and their warning: as this session holds them, which the
+// state matches but after a `/clear` emptied it. The state is read all the
+// same, the pane drawn again as it changes.
+async function shownSettings($: EngineInterface): Promise<Held> {
+  await read($, settings)
+  await read($, settingsUnsaved)
+  return held
+}
+
 // The settings as the store holds them. A read that fails keeps the ones this
 // session holds, which a change would otherwise write over the store's.
 async function loadSettings($: EngineInterface): Promise<void> {
@@ -68,48 +95,25 @@ async function loadSettings($: EngineInterface): Promise<void> {
     return
   }
   settingsLoaded = true
-  await update($, settings, () => settingsOf(stored))
-}
-
-// The last change not saved and why, until a change saves: kept in the hooks
-// module's memory too, which a `/clear` leaves (the process goes on, no
-// `session.start` fires) while it may empty dx's state, `settingsUnsaved`
-// then read as null. Never in the store, which every session reads.
-type Unsaved = { value: BandSettings; reason: string }
-let unsavedCopy: Unsaved | undefined
-
-// The unsaved change shown, its warning with it: from the state, or from
-// memory when a `/clear` emptied the state, which a render may not write back.
-async function shownSettings($: EngineInterface): Promise<{ value: BandSettings; unsaved: string | null }> {
-  const unsaved = await read($, settingsUnsaved)
-  if (unsaved === null && unsavedCopy !== undefined) return { value: unsavedCopy.value, unsaved: unsavedCopy.reason }
-  return { value: await read($, settings), unsaved }
-}
-
-// The unsaved change put back into the state a `/clear` emptied. Run among
-// the changes (`changing`).
-async function restoreUnsaved($: EngineInterface): Promise<void> {
-  const copy = unsavedCopy
-  if (copy === undefined || (await read($, settingsUnsaved)) !== null) return
-  await update($, settings, () => copy.value)
-  await update($, settingsUnsaved, () => copy.reason)
+  await hold($, { value: settingsOf(stored) })
 }
 
 // Called by ../register once the session has started, before the features
-// that read the settings: a fresh load of the plugin, nothing unsaved.
+// that read the settings: a fresh load of the plugin, from what its state
+// holds.
 export async function startSettings($: EngineInterface): Promise<void> {
   settingsLoaded = false
-  unsavedCopy = undefined
+  held = { value: await read($, settings), unsaved: await read($, settingsUnsaved) }
   await loadSettings($)
 }
 
 // The changes under way, one after the other.
 let changing: Promise<void> = Promise.resolve()
 
-// Called by ../register as a turn starts: an unsaved change a `/clear`
-// emptied from the state is restored, for the band to draw it again.
+// Called by ../register as a turn starts: the settings a `/clear` emptied from
+// the state are restored, for the band to draw them again.
 export async function startSettingsTurn($: EngineInterface): Promise<void> {
-  changing = changing.then(() => restoreUnsaved($)).catch(() => undefined)
+  changing = changing.then(() => hold($, {})).catch(() => undefined)
   await changing
 }
 
@@ -119,16 +123,16 @@ export async function startSettingsTurn($: EngineInterface): Promise<void> {
 // that fails falls back on this session's settings, once read from the store;
 // never read, it rejects: they are the defaults, not the store's.
 async function changeBase($: EngineInterface): Promise<BandSettings> {
-  if ((await read($, settingsUnsaved)) !== null) return read($, settings)
+  if (held.unsaved !== null) return held.value
   let stored: unknown
   try {
     stored = await $.store.get(STORE_KEY)
   } catch (error) {
     if (!settingsLoaded) throw error
-    return read($, settings)
+    return held.value
   }
   settingsLoaded = true
-  return stored === undefined ? read($, settings) : settingsOf(stored)
+  return stored === undefined ? held.value : settingsOf(stored)
 }
 
 // Applies `edit` to the settings (`changeBase`) and keeps the result; two
@@ -138,7 +142,7 @@ async function changeBase($: EngineInterface): Promise<BandSettings> {
 // why.
 function change($: EngineInterface, edit: (value: BandSettings) => BandSettings): Promise<void> {
   changing = changing.then(async () => {
-    await restoreUnsaved($)
+    await hold($, {})
     let base: BandSettings
     try {
       base = await changeBase($)
@@ -146,29 +150,27 @@ function change($: EngineInterface, edit: (value: BandSettings) => BandSettings)
       $.ui.toast(`dx : réglage non appliqué, réglages illisibles (${errorText(error)})`)
       return
     }
-    const next = edit(base)
-    await update($, settings, () => next)
-    await save($, next)
+    await hold($, { value: edit(base) })
+    await save($)
   }).catch(() => undefined)
 
   return changing
 }
 
-// Writes `value`, the settings this session holds, to the store; one that
-// fails is said in the pane (`settingsUnsaved`) until one saves.
-async function save($: EngineInterface, value: BandSettings): Promise<void> {
-  const reason = await $.store.set(STORE_KEY, value).then(() => null, (error: unknown) => errorText(error))
-  unsavedCopy = reason === null ? undefined : { value, reason }
-  if ((await read($, settingsUnsaved)) !== reason) await update($, settingsUnsaved, () => reason)
+// Writes the settings this session holds to the store; a write that fails is
+// said in the pane (`settingsUnsaved`) until one saves.
+async function save($: EngineInterface): Promise<void> {
+  const unsaved = await $.store.set(STORE_KEY, held.value).then(() => null, (error: unknown) => errorText(error))
+  await hold($, { unsaved })
 }
 
 export async function toggleSettings($: EngineInterface): Promise<void> {
   // Another session's changes shown, after this one's under way; a change of
   // this session still unsaved, which the store lacks, saved again instead.
   changing = changing.then(async () => {
-    await restoreUnsaved($)
-    if ((await read($, settingsUnsaved)) === null) await loadSettings($)
-    else await save($, await read($, settings))
+    await hold($, {})
+    if (held.unsaved === null) await loadSettings($)
+    else await save($)
   }).catch(() => undefined)
   await changing
   await togglePanel($, 'settings')

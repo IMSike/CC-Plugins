@@ -263,3 +263,48 @@ test('an unsaved setting and its warning outlast a /clear that empties the state
   await again.unmount()
   expect(store.get('settings')).toMatchObject({ show: { total: false, branch: false } })
 })
+
+// Saved settings outlast a `/clear` that empties the state too: the band draws
+// them again from the next turn, not the defaults.
+test('saved settings outlast a /clear that empties the state', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const session = { id: 's1' }
+  engine(on, { session, stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  on('turn.start', (_, e) => ({ turnId: e.turnId }))
+  const emptied = emptySettings(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  emptied()
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  const band = await $.ui.mount(BAND)
+  expect(await frameColors(band)).toContain('#58a6ff')
+  await band.unmount()
+})
+
+// After a `/clear` that empties the state, a change the store cannot be read
+// for starts from this session's settings, never from the defaults it would
+// write over the stored ones.
+test('a change after a /clear, the store unreadable, keeps the stored settings', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  refuseSettingsRead(on, refused)
+  const session = { id: 's1' }
+  const store = engine(on, { session, stored: { settings: { frameColor: '#58a6ff' } } })
+  shell(on)
+  const emptied = emptySettings(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await showSettings($)
+  await pane.unmount()
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  emptied()
+  refused.add('store.get settings')
+  const after = await $.ui.mount(SETTINGS_PANE)
+  await click(after, 'settings:show-total')
+  await after.unmount()
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
+})
