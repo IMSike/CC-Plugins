@@ -142,20 +142,25 @@ async function takeStored($: EngineInterface, stored: unknown): Promise<void> {
 let changing: Promise<void> = Promise.resolve()
 
 // Called by ../register once the session has started, before the features
-// that read the settings: a fresh load of the plugin, from what its state
-// holds, once a change under way is done, its save included, which decides
-// what is unsaved. A change of this session still unsaved, which the store
-// lacks, is kept rather than read over, as the `⚙` icon does. A read that
-// fails rejects, for ../register to write it to the debug log.
+// that read the settings: a fresh load of the plugin, once a change under way
+// is done, its save included, which decides what is unsaved. A change of this
+// session still unsaved, which the store lacks, is kept rather than read
+// over, as the `⚙` icon does: from the hooks module's memory, which a
+// `/clear` may have left alone with it, put back into the state; with the
+// module loaded anew, from the state. A read that fails rejects, for
+// ../register to write it to the debug log.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
-    held = {
-      value: await read($, settings),
-      unsaved: await read($, settingsUnsaved),
-      unreadable: await read($, settingsUnreadable),
+    if (held.unsaved === null) {
+      held = {
+        value: await read($, settings),
+        unsaved: await read($, settingsUnsaved),
+        unreadable: await read($, settingsUnreadable),
+      }
     }
     settingsLoaded = held.unsaved !== null
-    if (!settingsLoaded) await loadSettings($)
+    if (settingsLoaded) await hold($, {})
+    else await loadSettings($)
   })
   changing = started.catch(() => undefined)
   await started

@@ -511,3 +511,31 @@ test("a reload during a setting's save keeps the change", async ($, on) => {
   await band.unmount()
   expect(store.get('settings')).toMatchObject({ show: { total: false } })
 })
+
+// A reload of dx after a `/clear` emptied the state keeps an unsaved change
+// from dx's memory, the store lacking it.
+test('an unsaved setting outlasts a /clear then a reload', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  const session = { id: 's1' }
+  const store = engine(on, { refused, session })
+  shell(on)
+  const emptied = emptySettings(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  refused.add('store.set settings')
+  await click(pane, 'settings:show-total')
+  await pane.unmount()
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  emptied()
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const band = await $.ui.mount(BAND)
+  expect(await band.find({ type: 'Text', text: /total/, in: 'frame-br' })).toBeUndefined()
+  refused.clear()
+  await click(band, 'settings')
+  await band.unmount()
+  expect(store.get('settings')).toMatchObject({ show: { total: false } })
+})
