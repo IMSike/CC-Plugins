@@ -156,6 +156,29 @@ test("a turn starts while a setting's save is under way", async ($, on) => {
   expect(store.get('settings')).toMatchObject({ show: { total: false } })
 })
 
+// A typed color that is none is never silent: said in red under its field,
+// until its text changes or it applies a color.
+test('a hex color that is none says so under its field', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  const warning = /^⚠ couleur non appliquée : il faut une couleur hex à six chiffres, comme #d4a72c$/
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  expect((await pane.find({ type: 'Text', text: warning }))?.props.color).toBe('error')
+  expect(store.get('settings')).toBeUndefined()
+  await pane.input({ key: 'frame-color-hex', text: 'ble', kind: 'change' })
+  expect(await pane.find({ type: 'Text', text: warning })).toBeUndefined()
+
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  await pane.input({ key: 'frame-color-hex', text: '#58a6ff' })
+  expect(await pane.find({ type: 'Text', text: warning })).toBeUndefined()
+  expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff' })
+  await pane.unmount()
+})
+
 test('a stepper sets its number from clicks drawn on its own thread', async ($, on) => {
   mock.clock(on, { now: NOW })
   const store = engine(on)

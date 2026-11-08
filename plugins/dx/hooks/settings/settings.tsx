@@ -52,6 +52,9 @@ const settingsUnsaved = atom({ plugin: 'dx', key: 'settingsUnsaved' } as const, 
 const settingsUnreadable = atom({ plugin: 'dx', key: 'settingsUnreadable' } as const, null as SettingsUnreadable | null, {
   shape: 'settings-unreadable-2',
 })
+// The hex field whose text is no color, by the key of its colors: said in red
+// under it until its text changes or it applies a color.
+const settingsBadHex = atom({ plugin: 'dx', key: 'settingsBadHex' } as const, null as string | null, { shape: 'settings-bad-hex-1' })
 
 const STORE_KEY = 'settings'
 // The toggles go in two columns from this inner width.
@@ -232,6 +235,14 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
   await togglePanel($, 'settings')
 }
 
+// Says under the hex field of the colors `key` that its text is no color, or
+// no longer: one field's at a time, the last submitted with no color.
+async function markBadHex($: EngineInterface, key: string, isBad: boolean): Promise<void> {
+  const current = await read($, settingsBadHex)
+  if (isBad && current !== key) await update($, settingsBadHex, () => key)
+  if (!isBad && current === key) await update($, settingsBadHex, () => null)
+}
+
 // What each stepper sets, from the number it posts.
 const STEPPERS = {
   'max-agent-icons': (current, maxAgentIcons) => ({ ...current, maxAgentIcons }),
@@ -292,6 +303,7 @@ export function registerSettings(on: On): void {
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
     const { value, unsaved, unreadable } = await shownSettings($)
+    const badHex = await read($, settingsBadHex)
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
@@ -373,18 +385,22 @@ export function registerSettings(on: On): void {
             </Box>
           )}
         </Box>,
-        <Box key={`${key}-custom`} marginBottom={1}>
+        <Box key={`${key}-custom`} flexDirection="column" marginBottom={1}>
           <Input
             key={`${key}-hex`}
             label="Autre couleur"
             placeholder="#rrggbb"
             submitLabel="appliquer"
+            onInput={() => void markBadHex($, key, false)}
             onSubmit={typed => {
               const hex = hexOf(typed)
-              if (hex === undefined) $.ui.toast('dx : une couleur hex à six chiffres, comme #d4a72c.')
-              else void change($, current => edit(current, hex))
+              void markBadHex($, key, hex === undefined)
+              if (hex !== undefined) void change($, current => edit(current, hex))
             }}
           />
+          {badHex === key && (
+            <Text key={`${key}-bad-hex`} color="error" wrap="wrap">⚠ couleur non appliquée : il faut une couleur hex à six chiffres, comme #d4a72c</Text>
+          )}
         </Box>,
       ]
     }

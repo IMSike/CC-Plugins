@@ -185,6 +185,10 @@ declare module 'claude-code' {
       // them, and what followed. Shown in their pane; null once a read of the
       // store succeeds.
       settingsUnreadable: Shaped<SettingsUnreadable | null>
+      // The hex field of the settings whose text is no color, by the key of
+      // its colors, shown in their pane; null once its text changes or it
+      // applies a color.
+      settingsBadHex: Shaped<string | null>
       notes: Shaped<Notes | null>
       // Why the notes could not be loaded, shown in their pane; null once loaded.
       notesError: Shaped<string | null>
