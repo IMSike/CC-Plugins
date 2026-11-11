@@ -20,7 +20,7 @@ Options étudiées :
 
 ## Décision
 
-Une tâche est suivie par les signaux du moteur : ajoutée à son démarrage, retirée sur `TaskStop` ou sa ligne de notification. La liste des processus du système n'est lue que lorsqu'une tâche est due pour une vérification : 2 s après son démarrage (pour reconnaître un agent en ligne de commande), puis après 10 s, 1 min, 5 min, et toutes les 15 min. Une lecture sert toutes les tâches dues.
+Une tâche est suivie par les signaux du moteur : ajoutée à son démarrage, retirée sur `TaskStop` ou sa notification (à son arrivée dans la session, ou sa ligne une fois dessinée). La liste des processus du système n'est lue que lorsqu'une tâche est due pour une vérification : 2 s après son démarrage (pour reconnaître un agent en ligne de commande), puis après 10 s, 1 min, 5 min, et toutes les 15 min. Une lecture sert toutes les tâches dues.
 
 - **Windows** : `powershell -NoProfile -NonInteractive -EncodedCommand <script>`, le script lisible dans `tasks.ts` et encodé à l'exécution. Il liste les processus une fois (`Get-CimInstance Win32_Process`) et renvoie, en JSON, le processus de Claude Code (le parent de PowerShell) et tous les processus sous lui.
 - **Ailleurs** : `sh -c 'echo $PPID; ps -A -o pid=,ppid=,args='`.

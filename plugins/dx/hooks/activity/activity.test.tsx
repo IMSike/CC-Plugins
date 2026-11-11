@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import type { PromptSubmitInput } from 'claude-code'
 
 import { TERMINAL } from '../shared/crew'
 import { BAND, click, engine, NOTES_PANE, NOW, OUTPUT, PANE, SETTINGS_PANE, shell, TASKS } from '../shared/testing'
@@ -457,6 +458,33 @@ test('a stopped shell leaves the border', async ($, on) => {
   await $.tool.call({ tool: 'TaskStop', task_id: 'b1' })
   await ui.unmount()
 
+  const after = await $.ui.mount(BAND)
+  expect(await after.find({ key: 'crew-b1' })).toBeUndefined()
+  await after.unmount()
+})
+
+// Claude Code's focus view draws no notification row: the notification, as
+// it enters the session, says the task ended all the same.
+test("a shell leaves the border when its notification enters, its row drawn or not", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: OUTPUT })
+  shell(on)
+  on('prompt.submit', (_, e) => ({ text: e.text }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+  const submit = ($.prompt as unknown as { submit: (e: PromptSubmitInput) => Promise<unknown> }).submit
+  const notified = (id: string, status: string) =>
+    `<task-notification>\n<task-id>${id}</task-id>\n<status>${status}</status>\n<summary>Background command ${status}</summary>\n</task-notification>`
+
+  // Still running, or typed by the person: the icon stays.
+  await submit({ text: notified('b1', 'running'), origin: { kind: 'task-notification' }, wait: false })
+  await submit({ text: notified('b1', 'completed'), origin: { kind: 'composer' }, wait: false })
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'crew-b1' })).toBeDefined()
+  await ui.unmount()
+
+  // Ended: gone.
+  await submit({ text: notified('b1', 'completed'), origin: { kind: 'task-notification' }, wait: false })
   const after = await $.ui.mount(BAND)
   expect(await after.find({ key: 'crew-b1' })).toBeUndefined()
   await after.unmount()

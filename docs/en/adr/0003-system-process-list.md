@@ -20,7 +20,7 @@ Options studied:
 
 ## Decision
 
-A task is followed from the engine's signals: added on its start, removed on `TaskStop` or its notification row. The system's process list is read only when a task is due for a check: 2 s after it starts (to tell an agent CLI in it), then after 10 s, 1 min, 5 min, and every 15 min. One read serves every task due.
+A task is followed from the engine's signals: added on its start, removed on `TaskStop` or its notification (as it enters the session, or its row as drawn). The system's process list is read only when a task is due for a check: 2 s after it starts (to tell an agent CLI in it), then after 10 s, 1 min, 5 min, and every 15 min. One read serves every task due.
 
 - **Windows**: `powershell -NoProfile -NonInteractive -EncodedCommand <script>`, the script readable in `tasks.ts` and encoded at run time. It lists the processes once (`Get-CimInstance Win32_Process`) and returns, as JSON, Claude Code's process (PowerShell's parent) and every process under it.
 - **Elsewhere**: `sh -c 'echo $PPID; ps -A -o pid=,ppid=,args='`.

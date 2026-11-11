@@ -11,6 +11,8 @@ import { cellWidth, wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
   encodeCommand,
+  ENDED,
+  endedTasks,
   outputOf,
   parsePosixTree,
   parseWindowsTree,
@@ -45,7 +47,6 @@ const LOOK_SLOW_MS = 10_000
 
 const TICK_MS = 3000
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
-const ENDED = /^(completed|failed|killed|stopped|cancelled|canceled|error)$/i
 // When a task's process is looked for, from its start: then every last step.
 const CHECKS_MS = [2_000, 10_000, 60_000, 300_000, 900_000]
 
@@ -438,6 +439,16 @@ export function registerActivity(on: On): void {
   on('ui.render', { component: 'UserMessage' }, async ($, e, next) => {
     const task = e.props.task
     if (task?.id !== undefined && task.status !== undefined && ENDED.test(task.status)) ended.add(task.id)
+
+    return next(e)
+  })
+
+  // A task notification as it enters the session: its end is known even when
+  // no row draws it, as in Claude Code's focus view. The prompt goes on as
+  // received, whatever the removal does.
+  on('prompt.submit', { origin: { kind: 'task-notification' } }, async ($, e, next) => {
+    const ids = endedTasks(e.text)
+    if (ids.length > 0) await removeTasks($, new Set(ids)).catch(() => undefined)
 
     return next(e)
   })

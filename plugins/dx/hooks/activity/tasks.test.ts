@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cliAgentUnder, encodeCommand, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
+import { cliAgentUnder, encodeCommand, endedTasks, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
 import type { Proc } from './tasks'
 
 const proc = (pid: number, ppid: number, name: string, cmd = name): Proc => ({ pid, ppid, name, cmd })
@@ -61,4 +61,16 @@ test("a known tasks folder moves to another session's, whatever the project's na
   // Not that session's folder, or one whose name merely ends with its id.
   expect(tasksDirFor('/tmp/claude/9f3a/s1/other', 's1', 's2')).toBeUndefined()
   expect(tasksDirFor('/tmp/claude/9f3a/xs1/tasks', 's1', 's2')).toBeUndefined()
+})
+
+// As Claude Code words them, one block per task, several in one delivery.
+const NOTIFIED = (id: string, status: string) =>
+  `<task-notification>\n<task-id>${id}</task-id>\n<tool-use-id>toolu_1</tool-use-id>\n<output-file>/tmp/claude/p/s1/tasks/${id}.output</output-file>\n<status>${status}</status>\n<summary>Background command "x" ${status}</summary>\n</task-notification>`
+
+test('a notification names the tasks it reports ended, not those still running', () => {
+  expect(endedTasks(NOTIFIED('b1', 'completed'))).toEqual(['b1'])
+  expect(endedTasks(`${NOTIFIED('b1', 'failed')}\n${NOTIFIED('b2', 'killed')}\n${NOTIFIED('b3', 'running')}`)).toEqual(['b1', 'b2'])
+  expect(endedTasks('<task-notification><status>completed</status></task-notification>')).toEqual([])
+  expect(endedTasks('<task-id>b1</task-id><status>completed</status>')).toEqual([])
+  expect(endedTasks('plain text')).toEqual([])
 })

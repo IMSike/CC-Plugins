@@ -141,3 +141,17 @@ export function tasksDirFor(dir: string, from: string, to: string): string | und
   if (!isSession || !/^[\\/]tasks$/.test(dir.slice(start + from.length))) return undefined
   return `${dir.slice(0, start)}${to}${dir.slice(start + from.length)}`
 }
+
+// The statuses a task ends with, as a notification states them.
+export const ENDED = /^(completed|failed|killed|stopped|cancelled|canceled|error)$/i
+
+// The tasks a notification's text reports ended: one `<task-notification>`
+// block per task, its `<task-id>` and `<status>`.
+export function endedTasks(text: string): string[] {
+  const blocks = text.match(/<task-notification>[\s\S]*?<\/task-notification>/g) ?? []
+  return blocks.flatMap(block => {
+    const id = /<task-id>\s*([^<\s]+)\s*<\/task-id>/.exec(block)?.[1]
+    const status = /<status>\s*([^<]*?)\s*<\/status>/.exec(block)?.[1]
+    return id !== undefined && status !== undefined && ENDED.test(status) ? [id] : []
+  })
+}
