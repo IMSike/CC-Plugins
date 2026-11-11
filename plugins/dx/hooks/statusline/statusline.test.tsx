@@ -590,6 +590,28 @@ test('a refresh that read the setting before a change never undoes a later confi
   await ui.unmount()
 })
 
+// A request reads the setting, then a refresh starts and ends before it:
+// newer, the refresh is taken up, and the request, reading the same setting
+// and model, still confirms the effort.
+test('a request overtaken by a refresh reading the same choice still confirms the effort', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const settingHold = hold()
+  engine(on, { beforeSettings: settingHold.pass })
+  answer(on)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  settingHold.arm()
+  const requested = request($, 'xhigh')
+  await settingHold.reached
+  await $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+  settingHold.release()
+  await requested
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^ xhigh$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
 // A subagent's request, or one the engine sent to a fallback model, says
 // nothing of the effort the main loop's model is sent with.
 test("a subagent's or a fallback model's request confirms no effort", async ($, on) => {

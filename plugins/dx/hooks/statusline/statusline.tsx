@@ -98,13 +98,17 @@ let choiceReads = 0
 function followChoice(read: number, model: string, setting: unknown): boolean {
   if (read < effort.taken) return false
   effort.taken = read
-  const configured = typeof setting === 'string' ? setting : undefined
-  if (configured !== effort.setting || model !== effort.model) {
+  if (!isTakenChoice(model, setting)) {
     effort.turn = undefined
-    effort.setting = configured
+    effort.setting = typeof setting === 'string' ? setting : undefined
     effort.model = model
   }
   return true
+}
+
+// Whether the setting and the model are the ones last taken up.
+function isTakenChoice(model: string, setting: unknown): boolean {
+  return (typeof setting === 'string' ? setting : undefined) === effort.setting && model === effort.model
 }
 
 // The model and the effort the band shows, from memory: taken as the snapshot
@@ -220,7 +224,11 @@ export async function startStatuslineTurn($: EngineInterface, e: TurnStartInput)
 async function confirmEffort($: EngineInterface, requested: string, sent: TurnStepInput['effort']): Promise<void> {
   const read = ++choiceReads
   const chosen = await Promise.all([$.session.model(), $.settings.read({ key: 'effortLevel' })]).catch(() => undefined)
-  if (chosen === undefined || !followChoice(read, ...chosen) || !isSessionModel(requested, chosen[0])) return
+  if (chosen === undefined) return
+  // Overtaken by a newer read, the request still confirms what that read
+  // found the same.
+  const isCurrent = followChoice(read, ...chosen) || isTakenChoice(...chosen)
+  if (!isCurrent || !isSessionModel(requested, chosen[0])) return
   const confirmed = sent === undefined ? null : String(sent)
   if (confirmed === effort.turn) return
   effort.turn = confirmed
