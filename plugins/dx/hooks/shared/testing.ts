@@ -44,6 +44,9 @@ type EngineOptions = {
   session?: { id: string; startedAt?: number }
   // Awaited before the engine answers the session's start.
   beforeStart?: () => Promise<void>
+  // The session's model and effort setting, which a test changes as `/model`
+  // or `/effort` does.
+  chosen?: { model: string; effortLevel: string }
 }
 
 export function engine(on: On, options: EngineOptions = {}) {
@@ -56,6 +59,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     refused = new Set<string>(),
     session = { id: 's1' },
     beforeStart = async () => {},
+    chosen = { model: 'claude-opus-5-5', effortLevel: 'xhigh' },
   } = options
   // dx's store, read back by the tests.
   const store = new Map(Object.entries(stored))
@@ -78,9 +82,9 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('session.root', () => (refused.has('session.root') ? { deny: 'session not ready' } : { value: String.raw`C:\Users\dev\repo\app` }))
   mock.env(on, { USERPROFILE: String.raw`C:\Users\dev`, TEMP: String.raw`C:\Users\dev\AppData\Local\Temp` })
   on('session.id', () => (refused.has('session.id') ? { deny: 'session not ready' } : { value: session.id }))
-  on('session.model', () => ({ value: 'claude-opus-5-5' }))
+  on('session.model', () => ({ value: chosen.model }))
   on('session.cwd', () => ({ value: String.raw`C:\Users\dev\repo\app` }))
-  on('settings.read', () => ({ value: { effortLevel: 'xhigh' } }))
+  on('settings.read', () => ({ value: { effortLevel: chosen.effortLevel } }))
   // Off Windows, the engine resolves the path against its own directory first.
   on('fs.read', (_, e) => {
     const path = e.path.replace(/\\/g, '/')

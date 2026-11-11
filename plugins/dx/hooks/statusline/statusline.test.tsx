@@ -1,5 +1,6 @@
-import type { On } from 'claude-code'
+import type { On, TurnStepInput } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { Engine } from 'claude-code/testing'
 
 import { SPIN_MS } from '../shared/crew'
 import { clockTime } from '../shared/format'
@@ -17,9 +18,8 @@ test('the band frames the model, the effort, the directory and the branch', asyn
 
   // The borders are drawn by the frame's surface modules.
   expect((await ui.find({ type: 'Text', text: /^Opus 5.5$/, in: 'frame-top' }))?.props.bold).toBe(true)
-  expect(await ui.find({ type: 'Text', text: /^▰▰▰▰$/, in: 'frame-top' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^▱$/, in: 'frame-top' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^ xhigh$/, in: 'frame-top' })).toBeDefined()
+  // The effort set, no request made yet: the meter and its name gray, asked.
+  expect(await ui.find({ type: 'Text', text: /^▰▰▰▰▱ xhigh\?$/, in: 'frame-top' })).toBeDefined()
   expect((await ui.find({ type: 'Text', text: /repo/, in: 'frame-top' }))?.text).toBe(String.raw` ~\repo\app`)
   expect((await ui.find({ type: 'Text', text: /⎇/, in: 'frame-top' }))?.text).toBe(' ⎇ dev')
   expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toBe(' total 1h00 · 24k/200k')
@@ -425,5 +425,101 @@ test('a first snapshot that fails leaves the band to the next refresh', { plugin
   await clock.advance(30_000)
   const ui = await $.ui.mount(BAND)
   expect((await ui.find({ type: 'Text', text: /^Opus 5.5$/, in: 'frame-top' }))?.props.bold).toBe(true)
+  await ui.unmount()
+})
+
+// The engine beneath the plugin answering each request.
+function answer(on: On) {
+  on('turn.step', async function* (_, e) {
+    return { turnId: e.turnId, index: e.index, answer: 'ok', toolUses: [], stopReason: 'end_turn' as const, usage: null }
+  })
+}
+
+// A main-loop request sent with `effort`, absent for a model that takes none.
+async function request($: Engine, effort?: TurnStepInput['effort']) {
+  const stream = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, ...(effort === undefined ? {} : { effort }) })
+  for await (const _ of stream);
+}
+
+test('the effort set is shown gray and asked until a request confirms the real one', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  answer(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const asked = await $.ui.mount(BAND)
+  // The meter and the name in one gray run, the name asked.
+  expect((await asked.find({ type: 'Text', text: /^▰▰▰▰▱ xhigh\?$/, in: 'frame-top' }))?.props.color).toBe('subtle')
+  await asked.unmount()
+
+  // Launched with `--effort high`: the request says so, the setting does not.
+  await request($, 'high')
+  const confirmed = await $.ui.mount(BAND)
+  const shown = await confirmed.find({ type: 'Text', text: /^ high$/, in: 'frame-top' })
+  expect(shown?.props.color).toBe('text')
+  expect(shown?.props.dimColor).toBe(true)
+  expect((await confirmed.find({ type: 'Text', text: /^▰▰▰$/, in: 'frame-top' }))?.props.color).toBe('claude')
+  await confirmed.unmount()
+
+  // A budget in tokens: its number, no meter.
+  await request($, 32000)
+  const budget = await $.ui.mount(BAND)
+  expect(await budget.find({ type: 'Text', text: /^32000$/, in: 'frame-top' })).toBeDefined()
+  expect(await budget.find({ type: 'Text', text: /▰/, in: 'frame-top' })).toBeUndefined()
+  await budget.unmount()
+})
+
+test('a change of the effort setting or of the model asks the effort again', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const chosen = { model: 'claude-opus-5-5', effortLevel: 'xhigh' }
+  engine(on, { chosen })
+  answer(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await request($, 'xhigh')
+
+  chosen.effortLevel = 'max'
+  await clock.advance(30_000)
+  const setting = await $.ui.mount(BAND)
+  expect((await setting.find({ type: 'Text', text: /^▰▰▰▰▰ max\?$/, in: 'frame-top' }))?.props.color).toBe('subtle')
+  await setting.unmount()
+
+  await request($, 'max')
+  chosen.model = 'claude-sonnet-4-6'
+  await clock.advance(30_000)
+  const model = await $.ui.mount(BAND)
+  expect((await model.find({ type: 'Text', text: /^▰▰▰▰▰ max\?$/, in: 'frame-top' }))?.props.color).toBe('subtle')
+  await model.unmount()
+})
+
+test('a request made just after a change keeps the effort it confirms past the turn', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const chosen = { model: 'claude-opus-5-5', effortLevel: 'xhigh' }
+  engine(on, { chosen })
+  answer(on)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  // `/effort low`, then a prompt at once: no refresh between them.
+  chosen.effortLevel = 'low'
+  await request($, 'low')
+  await $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^ low$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
+test('a model that takes no effort shows none', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  answer(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await request($)
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /xhigh/, in: 'frame-top' })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /▰/, in: 'frame-top' })).toBeUndefined()
+  // No separator after the model: the border runs on.
+  const top = (await ui.findAll({ type: 'Text', in: 'frame-top' })).map(text => text.text).join('')
+  expect(top).toMatch(/^╭─ ✻ Opus 5\.5 ──/)
   await ui.unmount()
 })

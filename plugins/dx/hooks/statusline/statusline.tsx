@@ -30,7 +30,7 @@ import type { HeadPaths } from './git'
 // Change the tag when StatusSnapshot's fields change: it declines what an
 // earlier version stored, which outlives a reload.
 const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
-  shape: 'statusline-2',
+  shape: 'statusline-3',
 })
 
 // What the band shows, animates and is colored with, set in ../settings/settings
@@ -80,8 +80,23 @@ const MIN_BAR_COLUMNS = 10
 const SHUTTLE_STAGGER_MS = 1400
 
 // The effort a main-loop request was really sent with (after a downgrade for
-// the model), kept until the setting or the model changes again.
-const effort: { turn?: string; setting?: string; model?: string } = {}
+// the model; null when the model takes none), kept until the setting or the
+// model changes again. Undefined until then: the band shows the setting,
+// unconfirmed, since Claude Code tells a plugin the real effort only with a
+// request.
+const effort: { turn?: string | null; setting?: string; model?: string } = {}
+
+// The effort setting as read, the effort a request confirmed forgotten when it
+// or the model changed.
+function followChoice(model: string, setting: unknown): string | undefined {
+  const configured = typeof setting === 'string' ? setting : undefined
+  if (configured !== effort.setting || model !== effort.model) {
+    effort.turn = undefined
+    effort.setting = configured
+    effort.model = model
+  }
+  return configured
+}
 
 // Where the HEAD of the repository holding each directory is, kept from one
 // refresh to the next (./git).
@@ -113,17 +128,12 @@ async function refresh($: EngineInterface): Promise<void> {
     $.env.get('USERPROFILE').then(profile => profile ?? $.env.get('HOME')),
     $.clock.now(),
   ])
-  const configured = typeof setting === 'string' ? setting : undefined
-
-  if (configured !== effort.setting || model !== effort.model) {
-    effort.turn = undefined
-    effort.setting = configured
-    effort.model = model
-  }
+  const configured = followChoice(model, setting)
 
   const status: StatusSnapshot = {
     model: modelLabel(model),
-    effort: effort.turn ?? configured,
+    effort: effort.turn === undefined ? configured : (effort.turn ?? undefined),
+    effortConfirmed: effort.turn !== undefined,
     cwd: shortenPath(cwd, home),
     branch: await branchFrom({
       read: path => readFile($, path),
@@ -178,8 +188,20 @@ export async function startStatuslineTurn($: EngineInterface, e: TurnStartInput)
 export function registerStatusline(on: On): void {
   // turn.step streams: the hook is an async generator forwarding the chunks.
   on('turn.step', async function* ($, e, next) {
-    if (e.agentId === undefined && e.effort !== undefined) {
-      effort.turn = String(e.effort)
+    // Shown confirmed from the main loop's request on, not from the turn's end,
+    // for the setting and the model it goes with: a change made just before
+    // it, which the turn's end refreshes, keeps the effort it confirms. Not
+    // confirmed when they cannot be read: the request is sent all the same.
+    const chosen = e.agentId === undefined
+      ? await Promise.all([$.session.model(), $.settings.read({ key: 'effortLevel' })]).catch(() => undefined)
+      : undefined
+    if (chosen !== undefined) {
+      followChoice(...chosen)
+      const sent = e.effort === undefined ? null : String(e.effort)
+      if (sent !== effort.turn) {
+        effort.turn = sent
+        await update($, snapshot, status => status && { ...status, effort: sent ?? undefined, effortConfirmed: true })
+      }
     }
 
     return yield* next(e)
@@ -224,12 +246,15 @@ export function registerStatusline(on: On): void {
     // The days of its durations, written as the 7-day gauge's label.
     const day = dayUnitOf(options.sevenDayLabel)
 
-    // Top border: `╭─ ✻ Opus 5.5 ─ ▰▰▰▰▱ xhigh ───── ~\repo ⎇ dev ─ ✎ ⚙ ─╮`.
+    // Top border: `╭─ ✻ Opus 5.5 ─ ▰▰▰▰▱ xhigh ───── ~\repo ⎇ dev ─ ✎ ⚙ ─╮`;
+    // the effort set, until a request confirms it, gray and asked: `xhigh?`.
     const model = show.model ? status.model : ''
     const shownEffort = show.effort ? status.effort : undefined
     const rank = shownEffort === undefined ? undefined : effortRank(shownEffort)
     const meter = rank === undefined ? '' : '▰'.repeat(rank) + '▱'.repeat(5 - rank)
-    const effortText = shownEffort === undefined ? '' : `${meter === '' ? '' : ' '}${shownEffort}`
+    const effortText = shownEffort === undefined
+      ? ''
+      : `${meter === '' ? '' : ' '}${shownEffort}${status.effortConfirmed ? '' : '?'}`
     const separator = model !== '' && shownEffort !== undefined
     const left = `╭─ ✻ ${model}${separator ? ' ─ ' : ''}${meter}${effortText} `
     const branch = !show.branch || status.branch === undefined ? '' : ` ⎇ ${status.branch}`
@@ -364,8 +389,12 @@ export function registerStatusline(on: On): void {
       { text: '✻ ', color: e.props.isWorking ? 'claude' : 'subtle' },
       ...(model !== '' ? [{ text: model, color: 'text', bold: true as const }] : []),
       ...(separator ? [{ text: ' ─ ', color: frame, frame: true as const }] : []),
-      ...(rank !== undefined ? [{ text: '▰'.repeat(rank), color: options.effortColor }, { text: '▱'.repeat(5 - rank), color: 'subtle' }] : []),
-      ...(effortText !== '' ? [{ text: effortText, color: 'text', dim: true as const }] : []),
+      ...(rank !== undefined
+        ? [{ text: '▰'.repeat(rank), color: status.effortConfirmed ? options.effortColor : 'subtle' }, { text: '▱'.repeat(5 - rank), color: 'subtle' }]
+        : []),
+      ...(effortText !== ''
+        ? [status.effortConfirmed ? { text: effortText, color: 'text', dim: true as const } : { text: effortText, color: 'subtle' }]
+        : []),
       { text: ` ${topFill}`, color: frame, frame: true },
       ...(path !== '' ? [{ text: ` ${path}`, color: 'text', dim: true as const }] : []),
       ...(branch !== '' ? [{ text: branch, color: options.branchColor }] : []),

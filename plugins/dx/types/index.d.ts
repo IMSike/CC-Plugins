@@ -11,8 +11,12 @@ export type Gauge = {
 export type StatusSnapshot = {
   // As the band writes it: `Opus 5.5`.
   model: string
-  // The effort the last main-loop request was sent with, else the one set.
+  // The effort the last main-loop request was sent with, else the one set;
+  // absent when the model takes none.
   effort?: string
+  // Whether a main-loop request confirmed the effort since dx started or the
+  // setting or the model changed: until then, it is the one set.
+  effortConfirmed: boolean
   // The working directory, the home directory written `~`.
   cwd: string
   // Git branch of the directory, or a short commit when detached.
