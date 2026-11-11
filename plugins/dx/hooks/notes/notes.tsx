@@ -161,8 +161,8 @@ function refuse($: EngineInterface, tab: NoteTab, session: string, reason: strin
 // The note a paste goes into: the one shown as the paste button was drawn.
 type PasteTarget = { key: string; tab: NoteTab; session: string }
 
-// The `seq` of the last paste taken, from the clock: never back, a reload
-// of dx's code included.
+// The `seq` of the last paste given to an editor, from the clock: never
+// back, a reload of dx's code included.
 let lastPaste = 0
 
 // Whether the clipboard is being read: a press meanwhile does nothing, never

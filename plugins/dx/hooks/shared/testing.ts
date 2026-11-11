@@ -165,7 +165,8 @@ export function engine(on: On, options: EngineOptions = {}) {
   })
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('agent.list', () => ({ value: agents as never }))
-  // No process list: tasks are followed from the engine's signals alone.
+  // The system's programs, as `run` answers: none start by default, so
+  // tasks are followed from the engine's signals alone.
   on('process.run', async (_, e) => {
     const ran = await run(e.argv)
 

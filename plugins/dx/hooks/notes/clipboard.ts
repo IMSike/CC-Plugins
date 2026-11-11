@@ -47,11 +47,12 @@ export function clipboardText(isWindows: boolean, stdout: string): string {
 }
 
 // Why the clipboard was not read, as the pane says it.
+const UNREADABLE = 'presse-papiers illisible'
 export const CLIPBOARD_REMOTE = 'session SSH : le presse-papiers lu serait celui de la machine distante'
-export const CLIPBOARD_NO_TOOL = 'presse-papiers illisible : installez wl-clipboard, xclip ou xsel'
+export const CLIPBOARD_NO_TOOL = `${UNREADABLE} : installez wl-clipboard, xclip ou xsel`
 export const CLIPBOARD_TIMED_OUT = `délai dépassé (${CLIPBOARD_TIMEOUT_MS / 1000} s)`
 export function clipboardUnreadable(reason: string): string {
-  return `presse-papiers illisible : ${reason}`
+  return `${UNREADABLE} : ${reason}`
 }
 
 // The first line a failed command wrote, or its exit code. An error
@@ -80,7 +81,7 @@ export function isTimedOut(elapsedMs: number, message: string): boolean {
 // Whether the pane's warning is about the clipboard, which leaves the note
 // as it was, rather than a note not saved.
 export function isClipboardError(reason: string): boolean {
-  return reason === CLIPBOARD_REMOTE || reason.startsWith('presse-papiers illisible')
+  return reason === CLIPBOARD_REMOTE || reason.startsWith(UNREADABLE)
 }
 
 // Whether a failed read only says the clipboard holds no text: `wl-paste`
