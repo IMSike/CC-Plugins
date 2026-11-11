@@ -37,7 +37,8 @@ type EngineOptions = {
   // false: the 5-hour window has not started.
   fiveHour?: boolean
   // Calls refused, as by a session not there yet; `store.set <key>`, the
-  // store's writes under that key.
+  // store's writes under that key; `fs.read`, the reads of the files above,
+  // as of one over 4 MiB.
   refused?: ReadonlySet<string>
   // `session.id` and its start, which a test changes as a `/clear` does.
   session?: { id: string; startedAt?: number }
@@ -85,6 +86,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     const path = e.path.replace(/\\/g, '/')
     if (path.endsWith('C:/Users/dev/repo/app/.git/HEAD')) return { value: 'ref: refs/heads/dev\n' }
     const file = Object.keys(files).find(end => path.endsWith(end))
+    if (file !== undefined && refused.has('fs.read')) return { deny: 'file over 4 MiB' }
 
     return file === undefined ? { deny: 'ENOENT' } : { value: files[file] ?? '' }
   })
@@ -92,6 +94,24 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('fs.exists', (_, e) => {
     const path = e.path.replace(/\\/g, '/')
     return { value: path.endsWith('C:/Users/dev/repo/app/.git') || Object.keys(files).some(end => path.endsWith(end)) }
+  })
+  // The folders the files above are in: each of their ends' folders, as found
+  // at the end of a path.
+  const folders = (path: string) =>
+    Object.keys(files).flatMap(end =>
+      [...end.matchAll(/\//g)].flatMap(slash => {
+        const folder = end.slice(0, slash.index)
+        return folder !== '' && path.replace(/\\/g, '/').endsWith(folder) ? [end.slice(slash.index + 1)] : []
+      }),
+    )
+  on('fs.list', (_, e) => {
+    const names = new Map(folders(e.path).map(rest => [rest.split('/')[0] ?? '', rest.includes('/')]))
+    return { value: [...names].map(([name, isDir]) => ({ name, kind: isDir ? 'dir' : 'file', size: 0, mtimeMs: 0, isLink: false }) as const) }
+  })
+  on('fs.stat', (_, e) => {
+    const path = e.path.replace(/\\/g, '/')
+    const kind = folders(path).length > 0 ? 'dir' : Object.keys(files).some(end => path.endsWith(end)) ? 'file' : undefined
+    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size: 0, mtimeMs: 0, isLink: false } }
   })
   on('session.usage', () => ({
     value: {
@@ -148,9 +168,12 @@ export function views(on: On) {
   return views
 }
 
-// Where the engine writes the background shell `b1`'s output, in the session's
-// tasks folder.
-export const OUTPUT = { '/claude/C--Users-dev-repo-app/s1/tasks/b1.output': 'ready\nlistening on 3000\n' }
+// The folder the engine writes the session `s1`'s background output to, under
+// `<temp>/claude`: a folder named by an id of the engine's own.
+export const TASKS = '/claude/5f3a9c21d84e07b6/s1/tasks'
+
+// Where the engine writes the background shell `b1`'s output.
+export const OUTPUT = { [`${TASKS}/b1.output`]: 'ready\nlistening on 3000\n' }
 
 // A background shell `b1`, and the panes the band opens: dx's one panel.
 export function shell(on: On) {

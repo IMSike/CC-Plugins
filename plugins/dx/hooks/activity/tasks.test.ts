@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cliAgentUnder, encodeCommand, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor, tasksDirOf } from './tasks'
+import { cliAgentUnder, encodeCommand, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
 import type { Proc } from './tasks'
 
 const proc = (pid: number, ppid: number, name: string, cmd = name): Proc => ({ pid, ppid, name, cmd })
@@ -50,12 +50,9 @@ test('an agent CLI is told from the processes under a shell', () => {
   expect(cliAgentUnder(procs, 31)).toBeUndefined()
 })
 
-test('the output file is the one a result names, else the session tasks folder', () => {
+test('the output file is the one a result names', () => {
   expect(outputOf({ text: String.raw`Output is being written to: C:\Temp\claude\p\s\tasks\b1.output.` }, 'b1')).toBe(String.raw`C:\Temp\claude\p\s\tasks\b1.output`)
   expect(outputOf({ stdout: '' }, 'b1')).toBeUndefined()
-  expect(tasksDirOf('C:\\Users\\dev\\AppData\\Local\\Temp\\', String.raw`C:\Users\dev\repo\CC-Plugins`, 's1'))
-    .toBe(String.raw`C:\Users\dev\AppData\Local\Temp/claude/C--Users-dev-repo-CC-Plugins/s1/tasks`)
-  expect(tasksDirOf('/tmp/', '/home/dev/app', 's1')).toBe('/tmp/claude/-home-dev-app/s1/tasks')
 })
 
 test("a known tasks folder moves to another session's, whatever the project's name", () => {

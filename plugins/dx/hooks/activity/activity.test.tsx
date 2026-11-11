@@ -1,8 +1,11 @@
 import { expect, mock, test } from 'claude-code/testing'
 
 import { TERMINAL } from '../shared/crew'
-import { BAND, click, engine, NOTES_PANE, NOW, OUTPUT, PANE, SETTINGS_PANE, shell } from '../shared/testing'
+import { BAND, click, engine, NOTES_PANE, NOW, OUTPUT, PANE, SETTINGS_PANE, shell, TASKS } from '../shared/testing'
 
+// The engine names the folder above the session's as it likes (an id of its
+// own, once the project's directory): dx finds it on disk, no agent having
+// named it.
 test("a background shell's icon opens its command and output, and closes them", async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: OUTPUT })
@@ -29,7 +32,7 @@ test("a background shell's icon opens its command and output, and closes them", 
 test("a task started after a /clear shows its output, from the new session's folder", async ($, on) => {
   mock.clock(on, { now: NOW })
   const session = { id: 's1' }
-  const files = { ...OUTPUT, '/claude/C--Users-dev-repo-app/s2/tasks/m1.output': 'tail started\n' }
+  const files = { ...OUTPUT, '/claude/5f3a9c21d84e07b6/s2/tasks/m1.output': 'tail started\n' }
   engine(on, { files, session })
   shell(on)
   on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
@@ -47,8 +50,8 @@ test("a task started after a /clear shows its output, from the new session's fol
   await pane.unmount()
 })
 
-// The folder an Agent result named is the engine's own, whose project part
-// dx cannot work out: after a `/clear`, the new session's is beside it.
+// The folder an Agent result named is the engine's own: after a `/clear`, the
+// new session's is beside it, found with no look on disk.
 test('after a /clear, a tasks folder learned from an agent moves to the new session', async ($, on) => {
   mock.clock(on, { now: NOW })
   const session = { id: 's1' }
@@ -76,7 +79,7 @@ test('after a /clear, a tasks folder learned from an agent moves to the new sess
 test('a task started while the session id cannot be read is still followed', async ($, on) => {
   mock.clock(on, { now: NOW })
   const refused = new Set<string>()
-  const files = { ...OUTPUT, '/claude/C--Users-dev-repo-app/s1/tasks/m1.output': 'tail started\n' }
+  const files = { ...OUTPUT, [`${TASKS}/m1.output`]: 'tail started\n' }
   engine(on, { files, refused })
   shell(on)
   on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
@@ -103,6 +106,59 @@ test('a first task started while the session id cannot be read is followed, its 
   const ui = await $.ui.mount(BAND)
   expect(await ui.find({ key: 'crew-b1' })).toBeDefined()
   await ui.unmount()
+})
+
+// The engine creates the tasks folder with the session's first background
+// task, maybe after its result: not there then, it is looked for again.
+test('a tasks folder created after the task started is found on a later refresh', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const files: Record<string, string> = {}
+  engine(on, { files })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  Object.assign(files, OUTPUT)
+  await clock.advance(1000)
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// The folder there, the shell has not written its file yet.
+test('an output file not there yet is no output so far', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: { [`${TASKS}/b0.output`]: 'done\n' } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: 'Pas encore de sortie.' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /illisible/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// An output over 4 MiB, which the engine will not read: the reason shown.
+test('an output file that cannot be read shows why', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: OUTPUT, refused: new Set(['fs.read']) })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^\(sortie illisible : .*file over 4 MiB\)$/ })).toBeDefined()
+  await pane.unmount()
 })
 
 test("the panel's tabs lead from the notes to a terminal and the settings", async ($, on) => {
