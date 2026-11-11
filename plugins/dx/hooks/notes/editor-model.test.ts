@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, refusalOf, rowOf, rowsOf, thousands } from './editor-model'
+import { cleanPaste, clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, pasted, refusalOf, rowOf, rowsOf, thousands } from './editor-model'
 import type { Editor } from './editor-model'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
@@ -196,9 +196,47 @@ test('the editor takes a note up to what a Client takes, once serialized', () =>
   expect(fitsEditor({ text: '\u0001'.repeat(16_667) })).toBe(false)
 })
 
+test('the editor takes a paste with the note while both stay within the longest note', () => {
+  // What the hooks module lets through: the note and the paste, encoded, at
+  // the limit together, the other props at their longest.
+  expect(fitsEditor({
+    text: '\n'.repeat(NOTE_MAX_CHARS / 4),
+    max: NOTE_MAX_CHARS,
+    rows: 9999,
+    placeholder: 'Cliquer pour écrire. Ces notes restent hors du contexte de Claude.',
+    tab: 'session',
+    session: 'x'.repeat(200),
+    paste: { seq: Number.MAX_SAFE_INTEGER, text: '\n'.repeat(NOTE_MAX_CHARS / 4) },
+  })).toBe(true)
+  // Each short alone, too long together: the paste is counted.
+  expect(fitsEditor({ text: '\u0001'.repeat(10_000), paste: { text: '\u0001'.repeat(10_000) } })).toBe(false)
+  expect(fitsEditor({ text: 'x', paste: null })).toBe(true)
+})
+
+test('a paste keeps its text, its line ends made plain, a tab as two spaces', () => {
+  expect(cleanPaste('un\r\ndeux\rtrois\nquatre')).toBe('un\ndeux\ntrois\nquatre')
+  expect(cleanPaste('a\tb')).toBe('a  b')
+  expect(cleanPaste('été 🎉 « ok »')).toBe('été 🎉 « ok »')
+})
+
+test('a paste drops the control characters a row would not show', () => {
+  expect(cleanPaste('a\u0000b\u0007c\u001b[31md\u007fe\u0085f')).toBe('abc[31mdef')
+  expect(cleanPaste('\u0001\u0002')).toBe('')
+})
+
+test('pasted inserts at the cursor, the cursor after it, kept in view', () => {
+  expect(pasted(at('ab', 1), 'xy', 10, 5)).toEqual(at('axyb', 3))
+  expect(pasted(at('ab', 1), 'un\r\ndeux', 10, 5)).toEqual(at('aun\ndeuxb', 8))
+  // Many lines: the view follows the cursor down to the last.
+  expect(pasted(at(''), '1\n2\n3\n4\n5', 10, 2)).toEqual(at('1\n2\n3\n4\n5', 9, 3))
+  // Nothing left once cleaned: the same editor.
+  const editor = at('ab')
+  expect(pasted(editor, '\u0007', 10, 5)).toBe(editor)
+})
+
 // An editor showing `text`, having posted `sent` since the hooks drew `given`.
 function editor(text: string, given: string, sent: string[] = []) {
-  return { text, cursor: text.length, top: 0, active: true, given, sent }
+  return { text, cursor: text.length, top: 0, active: true, given, sent, pasted: 0 }
 }
 
 test('a redraw of the text drawn already changes nothing', () => {

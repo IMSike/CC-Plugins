@@ -171,6 +171,10 @@ export type NotesView = { tab: NoteTab; other?: string }
 // notes not loaded, the project's root unknown), and why.
 export type NotesUnsaved = { key: string | null; reason: string }
 
+// A paste read from the system clipboard for the note under `key`, given to
+// its editor: `seq` tells it from the one before, `text` is what goes in.
+export type NotesPaste = { key: string; seq: number; text: string }
+
 // Why the settings could not be read, the session having never read them:
 // the defaults shown, or a change not applied (`isChangeRefused`). With
 // `isSessionShown`, the settings shown are not the defaults but those the
@@ -213,6 +217,9 @@ declare module 'claude-code' {
       // among the reasons), or an edit was refused, and which note; null once
       // that note saves.
       notesUnsaved: Shaped<NotesUnsaved | null>
+      // The last paste taken for a note, given to its editor; null once the
+      // editor took it.
+      notesPaste: Shaped<NotesPaste | null>
       // The first of the other sessions' notes listed, the list scrolled.
       notesOthersAt: Shaped<number>
       panel: Shaped<PanelView>

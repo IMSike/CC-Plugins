@@ -1,6 +1,6 @@
 import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, ProcessRunResult } from 'claude-code'
 
 import { BAND, click, engine, NOTES_PANE, NOW, shell, showSettings } from '../shared/testing'
 import { entryBytes, STORE_MAX_BYTES } from './store-size'
@@ -136,10 +136,12 @@ test('notes that cannot load say so in the panel, with a retry', async ($, on) =
   expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /session not ready/ })).toBeDefined()
   expect(await pane.find({ key: 'sheet' })).toBeUndefined()
+  expect(await pane.find({ key: 'notes:paste' })).toBeUndefined()
   refused.clear()
   await click(pane, 'notes:retry')
   expect(await pane.find({ type: 'Text', text: /Notes indisponibles/ })).toBeUndefined()
   expect(await pane.find({ key: 'sheet' })).toBeDefined()
+  expect(await pane.find({ key: 'notes:paste' })).toBeDefined()
   await pane.unmount()
 })
 
@@ -677,7 +679,159 @@ test('a note too long for the editor keeps the pane drawn, and is kept as stored
 
   await click(pane, 'notes:tab-global')
   expect(await pane.find({ key: 'note-global-s1' })).toBeUndefined()
+  expect(await pane.find({ key: 'notes:paste' })).toBeUndefined()
   expect(await pane.find({ type: 'Text', text: /Note trop longue/ })).toBeDefined()
   expect(store.get('notes.global')).toEqual(long)
+  await pane.unmount()
+})
+
+// The system clipboard holding `text`, as the tools each system ships print
+// it; `ran` filled with every command run. Off Windows, `tools` the ones
+// installed.
+function clipboard(text: string, ran: string[][] = [], tools: readonly string[] = ['pbpaste']) {
+  return (argv: readonly string[]): ProcessRunResult | undefined => {
+    ran.push([...argv])
+    const [program = ''] = argv
+    if (program === 'powershell') return { exitCode: 0, stdout: base64(text), stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+    if (!tools.includes(program)) return undefined
+    return { exitCode: 0, stdout: text, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+  }
+}
+
+// The UTF-8 bytes of `text` in base64, as the Windows script prints them.
+function base64(text: string): string {
+  return btoa(Array.from(new TextEncoder().encode(text), byte => String.fromCharCode(byte)).join(''))
+}
+
+test('the paste button puts the clipboard into the note at its cursor, the cursor left there', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  const text = { value: ' beurre\r\nœufs' }
+  const store = engine(on, { run: argv => clipboard(text.value, ran)(argv) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'pain lait', in: 'note-global-s1' })
+  for (let step = 0; step < 5; step++) await pane.key({ key: 'left', in: 'note-global-s1' })
+
+  // At the cursor, its line ends made plain, read with macOS's own tool.
+  await click(pane, 'notes:paste')
+  expect(ran).toEqual([['pbpaste']])
+  expect(await pane.find({ type: 'Text', text: /œufs/, in: 'note-global-s1' })).toBeDefined()
+  expect(store.get('notes.global')).toEqual({ text: 'pain beurre\nœufs lait', updatedAt: NOW })
+
+  // Taken once: a redraw leaves it; the cursor after it, where a key goes.
+  await pane.redraw()
+  await pane.key({ key: '!', in: 'note-global-s1' })
+  expect(store.get('notes.global')).toEqual({ text: 'pain beurre\nœufs! lait', updatedAt: NOW })
+
+  // An empty clipboard pastes nothing, and says nothing.
+  text.value = ''
+  await click(pane, 'notes:paste')
+  expect(store.get('notes.global')).toEqual({ text: 'pain beurre\nœufs! lait', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('on Windows the clipboard is read with PowerShell, its accents kept', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  const store = engine(on, { env: { OS: 'Windows_NT' }, run: clipboard('café\r\nété\tà 2 €', ran) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(ran.map(argv => argv.slice(0, 4))).toEqual([['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand']])
+  expect(store.get('notes.global')).toEqual({ text: 'café\nété  à 2 €', updatedAt: NOW })
+  await pane.unmount()
+})
+
+test('off macOS the clipboard is read with the first Linux tool installed', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  const store = engine(on, { run: clipboard('pain', ran, ['xclip', 'xsel']) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(ran).toEqual([['pbpaste'], ['wl-paste', '--no-newline'], ['xclip', '-selection', 'clipboard', '-o']])
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  await pane.unmount()
+})
+
+test('with no tool to read the clipboard, the pane says what to install', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, { run: clipboard('pain', [], []) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(await pane.find({ type: 'Text', text: 'presse-papiers illisible : installez wl-clipboard, xclip ou xsel' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: '⚠ collage impossible' })).toBeDefined()
+  expect(store.get('notes.global')).toBeUndefined()
+  await pane.unmount()
+})
+
+test('a clipboard tool that fails says why, in the pane', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const failed: ProcessRunResult = { exitCode: 1, stdout: '', stderr: "Error: Can't open display\n", isStdoutTruncated: false, isStderrTruncated: false }
+  engine(on, { run: argv => (argv[0] === 'xclip' ? failed : undefined) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(await pane.find({ type: 'Text', text: "presse-papiers illisible : Error: Can't open display" })).toBeDefined()
+  await pane.unmount()
+})
+
+test("under SSH the clipboard is not read: it would be the remote host's", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  const store = engine(on, { env: { SSH_CONNECTION: '192.0.2.1 50000 192.0.2.2 22' }, run: clipboard('pain', ran) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(ran).toEqual([])
+  expect(await pane.find({ type: 'Text', text: 'session SSH : le presse-papiers lu serait celui de la machine distante' })).toBeDefined()
+  expect(store.get('notes.global')).toBeUndefined()
+  await pane.unmount()
+})
+
+test('a paste past the longest note is refused whole, with the warning', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const text = { value: '\r\n'.repeat(47_499) }
+  const store = engine(on, { run: argv => clipboard(text.value)(argv) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'pain', in: 'note-global-s1' })
+
+  // Line breaks count two: 47,499 of them, with `pain`, pass the limit.
+  await click(pane, 'notes:paste')
+  expect(await pane.find({ type: 'Text', text: /note trop longue \(95 000 caractères au plus\)/ })).toBeDefined()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
+
+  // At the limit: taken, the warning gone.
+  text.value = '\r\n'.repeat(47_498)
+  await click(pane, 'notes:paste')
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  expect(store.get('notes.global')).toEqual({ text: `pain${'\n'.repeat(47_498)}`, updatedAt: NOW })
+  await pane.unmount()
+})
+
+test("a paste past the store's room is refused by the editor, and the pane says why", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, { stored: nearlyFull(), run: clipboard('y'.repeat(100)) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', in: 'note-global-s1' })
+  await pane.key({ key: 'pain', in: 'note-global-s1' })
+
+  await click(pane, 'notes:paste')
+  expect(await pane.find({ type: 'Text', text: "store presque plein : supprimez d'anciennes notes" })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /yyy/, in: 'note-global-s1' })).toBeUndefined()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
   await pane.unmount()
 })

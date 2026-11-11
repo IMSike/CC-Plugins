@@ -1,6 +1,6 @@
 import { mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On } from 'claude-code'
+import type { On, ProcessRunResult } from 'claude-code'
 
 // What dx's integration tests share: the engine beneath the plugin, the
 // drawings they mount and the acts they repeat. Imported by the *.test.tsx
@@ -53,6 +53,11 @@ type EngineOptions = {
   // The session's model and effort setting, which a test changes as `/model`
   // or `/effort` does.
   chosen?: { model: string; effortLevel: string }
+  // More environment variables, as `OS` on Windows.
+  env?: Record<string, string>
+  // The system's programs: what one run exits with, or undefined for one that
+  // cannot start. None start by default.
+  run?: (argv: readonly string[]) => ProcessRunResult | undefined
 }
 
 export function engine(on: On, options: EngineOptions = {}) {
@@ -68,6 +73,8 @@ export function engine(on: On, options: EngineOptions = {}) {
     session = { id: 's1' },
     beforeStart = async () => {},
     chosen = { model: 'claude-opus-5-5', effortLevel: 'xhigh' },
+    env = {},
+    run = () => undefined,
   } = options
   // dx's store, read back by the tests.
   const store = new Map(Object.entries(stored))
@@ -88,7 +95,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   })
   on('store.keys', () => ({ value: [...store.keys()] }))
   on('session.root', () => (refused.has('session.root') ? { deny: 'session not ready' } : { value: String.raw`C:\Users\dev\repo\app` }))
-  mock.env(on, { USERPROFILE: String.raw`C:\Users\dev`, TEMP: String.raw`C:\Users\dev\AppData\Local\Temp` })
+  mock.env(on, { USERPROFILE: String.raw`C:\Users\dev`, TEMP: String.raw`C:\Users\dev\AppData\Local\Temp`, ...env })
   on('session.id', () => (refused.has('session.id') ? { deny: 'session not ready' } : { value: session.id }))
   on('session.model', () => ({ value: chosen.model }))
   on('session.cwd', () => ({ value: String.raw`C:\Users\dev\repo\app` }))
@@ -151,7 +158,11 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('agent.list', () => ({ value: agents as never }))
   // No process list: tasks are followed from the engine's signals alone.
-  on('process.run', () => ({ deny: 'no process in tests' }))
+  on('process.run', (_, e) => {
+    const ran = run(e.argv)
+
+    return ran === undefined ? { deny: 'no process in tests' } : { value: ran }
+  })
 
   return store
 }

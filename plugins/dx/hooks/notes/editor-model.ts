@@ -37,9 +37,11 @@ const SURELY_SHORT = Math.floor(NOTE_MAX_CHARS / 6)
 // Whether the editor can take `props`. A note within NOTE_MAX_CHARS always
 // fits; one a little past it too, to be shortened there; one far longer
 // (stored before notes had a limit, or by another copy of dx) does not. A
-// note surely short fits, its props not serialized at each render.
-export function fitsEditor(props: { text: string; [prop: string]: unknown }): boolean {
-  return props.text.length <= SURELY_SHORT || JSON.stringify(props).length <= CLIENT_PROPS_MAX
+// note surely short, with the paste it is given, fits, its props not
+// serialized at each render.
+export function fitsEditor(props: { text: string; paste?: { text: string; [field: string]: unknown } | null; [prop: string]: unknown }): boolean {
+  const length = props.text.length + (props.paste?.text.length ?? 0)
+  return length <= SURELY_SHORT || JSON.stringify(props).length <= CLIENT_PROPS_MAX
 }
 
 // Why an edit is not applied: the note past NOTE_MAX_CHARS, or past what the
@@ -245,6 +247,23 @@ export function keyed(
   return scrolled(next, width, height)
 }
 
+// What a paste puts in a note: its line ends as the editor writes them
+// (`\n`), a tab as the Tab key types it, two spaces, and no other control
+// character, which a row would not show.
+export function cleanPaste(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, '')
+}
+
+// The editor after a paste at its cursor, the cursor after it; the same
+// object when nothing is left of it.
+export function pasted(editor: Editor, text: string, width: number, height: number): Editor {
+  const clean = cleanPaste(text)
+  return clean === '' ? editor : scrolled(insert(editor, clean), width, height)
+}
+
 // The cursor where the person clicked, in the editor's cells.
 export function clicked(editor: Editor, x: number, y: number, width: number): Editor {
   const rows = rowsOf(editor.text, width)
@@ -255,8 +274,8 @@ export function clicked(editor: Editor, x: number, y: number, width: number): Ed
 
 // The editor as its surface keeps it: whether it has the keyboard; `given`,
 // the text the hooks last drew; `sent`, the texts posted since, not drawn
-// back yet.
-export type EditorState = Editor & { active: boolean; given: string; sent: string[] }
+// back yet; `pasted`, the `seq` of the last paste it took (see ./editor).
+export type EditorState = Editor & { active: boolean; given: string; sent: string[]; pasted: number }
 
 // The text the hooks drew, taken in: the one shown, every post landed; one
 // this editor posted, drawn back late, the keys since standing; any other,

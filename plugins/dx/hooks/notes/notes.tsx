@@ -1,15 +1,26 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
-import type { Note, Notes, NoteTab, NotesUnsaved, NotesView } from '../../types'
+import type { Note, Notes, NotesPaste, NoteTab, NotesUnsaved, NotesView } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
 import { heldSettings } from '../settings/settings'
 import { dayTime, errorText } from '../shared/format'
 import { NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
-import type { EditorProps } from './editor'
-import { encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
+import type { EditorPaste, EditorProps } from './editor'
+import {
+  CLIPBOARD_NO_TOOL,
+  CLIPBOARD_REMOTE,
+  CLIPBOARD_TIMEOUT_MS,
+  clipboardCommands,
+  clipboardText,
+  clipboardUnreadable,
+  failureOf,
+  isClipboardError,
+  isEmptyClipboard,
+} from './clipboard'
+import { cleanPaste, encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { isTab, unsavedFor } from './notes-model'
 import { firstLine, othersOf, othersStart } from './others'
@@ -28,6 +39,8 @@ const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as stri
 // Why the last save failed, or the last edit was refused, and which note:
 // shown with that note alone, null once it saves (see `unsaved`).
 const notesUnsaved = atom({ plugin: 'dx', key: 'notesUnsaved' } as const, null as NotesUnsaved | null, { shape: 'notes-unsaved-2' })
+// The last paste read from the clipboard for a note, given to its editor.
+const notesPaste = atom({ plugin: 'dx', key: 'notesPaste' } as const, null as NotesPaste | null, { shape: 'notes-paste-1' })
 // The first of the other sessions' notes listed, the list scrolled.
 const notesOthersAt = atom({ plugin: 'dx', key: 'notesOthersAt' } as const, 0, { shape: 'notes-others-at-1' })
 
@@ -132,6 +145,91 @@ async function write($: EngineInterface, tab: NoteTab, session: string, text: st
   })
 }
 
+// An edit of a note not applied, the note too long or the store's room
+// short: said with that note, in its turn among the saves, which a later one
+// of the note clears.
+function refuse($: EngineInterface, tab: NoteTab, session: string, reason: string): Promise<void> {
+  return queued(async () => {
+    const value = await read($, notes)
+    await unsaved($, value === null ? knownKey(tab, session) : keyOf(value, tab, session), reason)
+  })
+}
+
+// The note a paste goes into: the one shown as the paste button was drawn.
+type PasteTarget = { key: string; tab: NoteTab; session: string }
+
+// The `seq` of the last paste taken, from the clock: never back, a reload
+// of dx's code included.
+let lastPaste = 0
+
+// Whether the clipboard is being read: a press meanwhile does nothing, never
+// pasting twice.
+let isReading = false
+
+// The system clipboard's text, read with the tools the system ships (ADR
+// 0006), or why it was not. Under SSH, which sets one of these variables,
+// the clipboard there is the remote host's: not read.
+async function readClipboard($: EngineInterface): Promise<{ text: string } | { error: string }> {
+  const unset = () => undefined
+  const remote = await Promise.all([
+    $.env.get('SSH_CONNECTION').catch(unset),
+    $.env.get('SSH_CLIENT').catch(unset),
+    $.env.get('SSH_TTY').catch(unset),
+  ])
+  if (remote.some(value => value !== undefined && value !== '')) return { error: CLIPBOARD_REMOTE }
+  const isWindows = (await $.env.get('OS').catch(() => undefined)) === 'Windows_NT'
+  // Why the first tool that ran failed: a tool that cannot start is tried
+  // past, as one that is not installed.
+  let failure: string | undefined
+  for (const argv of clipboardCommands(isWindows)) {
+    try {
+      const ran = await $.process.run(argv, { timeoutMs: CLIPBOARD_TIMEOUT_MS })
+      if (ran.exitCode === 0) return { text: clipboardText(isWindows, ran.stdout) }
+      if (isEmptyClipboard(argv, ran.stderr)) return { text: '' }
+      failure ??= failureOf(ran.exitCode, ran.stderr)
+    } catch (error) {
+      if (isWindows) failure ??= errorText(error)
+    }
+  }
+  return { error: failure === undefined ? CLIPBOARD_NO_TOOL : clipboardUnreadable(failure) }
+}
+
+// The paste button pressed: the clipboard's text into the note it was drawn
+// with, at its editor's cursor. Why it could not be read is said with that
+// note, as a refused edit is; an empty clipboard pastes nothing.
+async function pasteClipboard($: EngineInterface, target: PasteTarget): Promise<void> {
+  if (isReading) return
+  isReading = true
+  try {
+    const clipboard = await readClipboard($)
+    if ('error' in clipboard) return refuse($, target.tab, target.session, clipboard.error)
+    await pasteNote($, target, clipboard.text)
+  } finally {
+    isReading = false
+  }
+}
+
+// A paste into the note under `key`, given to its editor, which inserts it
+// at its cursor as it does a key, within the same limits. One that would
+// make the note too long whatever its editor holds is refused here: never
+// sent, past what an editor's props may take.
+async function pasteNote($: EngineInterface, target: PasteTarget, raw: string): Promise<void> {
+  const text = cleanPaste(raw)
+  if (text === '') return
+  const stored = noteOf(await $.store.get(target.key).catch(() => undefined))
+  if (encodedLength(stored?.text ?? '') + encodedLength(text) > NOTE_MAX_CHARS) return refuse($, target.tab, target.session, TOO_LONG)
+  lastPaste = Math.max(await $.clock.now(), lastPaste + 1)
+  const seq = lastPaste
+  await update($, notesPaste, () => ({ key: target.key, seq, text }))
+}
+
+// The paste `seq` and those before it taken by their editor: let go, their
+// text no longer given.
+async function pasteTaken($: EngineInterface, seq: number): Promise<void> {
+  const paste = await read($, notesPaste)
+  if (paste !== null && paste.seq <= seq) await update($, notesPaste, current => (current !== null && current.seq <= seq ? null : current))
+}
+
 // How often the note shown is read again from the store while its pane is
 // open: another session writing it shows here within that time.
 const NOTES_POLL_MS = 1000
@@ -192,11 +290,11 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
 }
 
 // What each press drawn in the pane (../shared/press.tsx) does, by its key: a
-// view to show, a retry of the load, another session's note to delete, or
-// the list of other sessions to move by a number of rows. Rebuilt as the pane
-// draws, it holds the drawn ones alone. Every key starts with `notes:`, which
-// the press hook matches.
-type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number }
+// view to show, a retry of the load, another session's note to delete, the
+// list of other sessions to move by a number of rows, or the clipboard to
+// paste into the note shown. Rebuilt as the pane draws, it holds the drawn
+// ones alone. Every key starts with `notes:`, which the press hook matches.
+type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number } | { paste: PasteTarget }
 let pressActions = new Map<string, NotesPress>()
 
 // Where the list of other sessions stands in the pane's tree, as last drawn:
@@ -220,6 +318,7 @@ async function scrollOthers($: EngineInterface, by: number): Promise<boolean> {
 
 async function pressed($: EngineInterface, action: NotesPress): Promise<void> {
   if ('retry' in action) return tryNotes($)
+  if ('paste' in action) return pasteClipboard($, action.paste)
   if ('scroll' in action) {
     await scrollOthers($, action.scroll)
     return
@@ -252,21 +351,13 @@ export function registerNotes(on: On): void {
     return next(e)
   })
 
-  // Each change the editor posts.
+  // Each change the editor posts, with the last paste it took.
   on('ui.message', { module: /editor\.tsx$/, requestId: PANEL }, async ($, e, next) => {
-    const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown }
+    const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown; pasted?: unknown }
     if (!isTab(data.tab) || typeof data.session !== 'string') return next(e)
-    // An edit the editor did not apply, the note too long or the store's room
-    // short: said with that note, in its turn among the saves, which a later
-    // one of the note clears.
+    if (typeof data.pasted === 'number') await pasteTaken($, data.pasted)
     if (data.refused === 'too-long' || data.refused === 'store-full') {
-      const reason = data.refused === 'too-long' ? TOO_LONG : STORE_FULL
-      const tab = data.tab
-      const session = data.session
-      await queued(async () => {
-        const value = await read($, notes)
-        await unsaved($, value === null ? knownKey(tab, session) : keyOf(value, tab, session), reason)
-      })
+      await refuse($, data.tab, data.session, data.refused === 'too-long' ? TOO_LONG : STORE_FULL)
       return {}
     }
     if (typeof data.text !== 'string') return next(e)
@@ -384,6 +475,10 @@ export function registerNotes(on: On): void {
         : other !== undefined
           ? `Session du ${note === null ? '?' : dayTime(note.updatedAt)}`
           : 'Cette session'
+    // The row under the sheet: this hint, and at its right the button that
+    // pastes the system clipboard into the note at its editor's cursor, a
+    // paste in the terminal going to the prompt box (drawn with an editor
+    // alone).
     const hint = `${subtitle} · Échap rend le clavier au prompt`
     // The panel's tabs and their margin, the notes' tabs, why a save failed,
     // the way back from another session's note, the sheet's border and
@@ -394,18 +489,26 @@ export function registerNotes(on: On): void {
     // The list's title and rows, last in the tree.
     const end = rows + extra
     const othersRows = listed ? { first: end - others.length - 1, end, offset: e.props.scroll.offset } : undefined
-    const editor: EditorProps = {
+    // A paste for this note, given while the editor can take it with the
+    // note: measured against the store's text as it was taken, which another
+    // session may have lengthened since.
+    const pending = await read($, notesPaste)
+    const paste: EditorPaste | null = pending?.key === key ? { seq: pending.seq, text: pending.text } : null
+    const shownEditor: EditorProps = {
       text: note?.text ?? '',
       max,
       rows,
       placeholder: 'Cliquer pour écrire. Ces notes restent hors du contexte de Claude.',
       tab: view.tab,
       session,
+      paste,
     }
+    const editor = paste === null || fitsEditor(shownEditor) ? shownEditor : { ...shownEditor, paste: null }
     // A note the editor cannot take is said so in its place, kept as stored,
     // its length counted as NOTE_MAX_CHARS is: drawn, the Client would fail
     // the whole pane.
-    const sheet = fitsEditor(editor)
+    const isEditable = fitsEditor(editor)
+    const sheet = isEditable
       ? <Client key={`note-${view.tab}-${session}`} module="./editor.tsx" props={editor} height={rows} />
       : (
         <Box key="too-long" height={rows}>
@@ -428,7 +531,7 @@ export function registerNotes(on: On): void {
         <Box key="tabs" flexShrink={0} justifyContent="space-between">
           <Box gap={1}>{tabs}</Box>
           {failed !== null
-            ? <Text color="error" bold>⚠ non enregistré</Text>
+            ? <Text color="error" bold>{isClipboardError(failed) ? '⚠ collage impossible' : '⚠ non enregistré'}</Text>
             : <Text dimColor>{note === null ? 'vide' : `✓ ${dayTime(note.updatedAt)}`}</Text>}
         </Box>
         {failed !== null && <Text key="unsaved" color="error" wrap="truncate-end">{failed}</Text>}
@@ -441,7 +544,12 @@ export function registerNotes(on: On): void {
         <Box key="sheet" flexDirection="column" borderStyle="round" borderColor="claude" paddingX={1} marginTop={1}>
           {sheet}
         </Box>
-        <Text dimColor wrap="truncate-end">{hint}</Text>
+        <Box key="hint" flexShrink={0} justifyContent="space-between" gap={1}>
+          <Box flexShrink={1}>
+            <Text dimColor wrap="truncate-end">{hint}</Text>
+          </Box>
+          {isEditable && press('paste', { paste: { key, tab: view.tab, session } }, [{ text: 'Coller', color: 'claude' }], { underline: true })}
+        </Box>
         {listed && (
           <Box key="others" flexDirection="column" marginTop={1}>
             <Box key="others-title" flexShrink={0} justifyContent="space-between">
