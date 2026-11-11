@@ -69,8 +69,16 @@ export type Activity = {
 
 // The task shown in dx's terminal pane: its command, its session and output
 // file as the task has them, the last lines of its output; `lines` null while
-// its file is not found.
-export type TaskView = { id: string; command: string; session?: string; output?: string; lines: string[] | null }
+// its file is not found, `isFolderMissing` true when the temporary folder
+// Claude Code writes it under is not found, or cannot be read, either.
+export type TaskView = {
+  id: string
+  command: string
+  session?: string
+  output?: string
+  lines: string[] | null
+  isFolderMissing?: boolean
+}
 
 // The main loop's last turn: running while it has no end.
 export type TurnTime = {

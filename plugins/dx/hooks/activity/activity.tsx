@@ -37,7 +37,7 @@ const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], 
 })
 
 // The task shown in the terminal pane, its output read every PANE_MS.
-const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-2' })
+const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-3' })
 const PANE_MS = 1000
 const PANE_LINES = 200
 // Its output file not found, it is looked for on disk at every refresh for
@@ -98,20 +98,37 @@ function knownOutput(id: string, session: string): string | undefined {
   return dir === undefined ? undefined : `${dir}/${id}.output`
 }
 
+// Windows' own temporary folder, `temp` in the system folder, as Node.js
+// falls back to it; undefined when neither variable naming it is set.
+async function windowsTemp($: EngineInterface): Promise<string | undefined> {
+  const [systemRoot, windir] = await envValues([$.env.get('SystemRoot'), $.env.get('windir')])
+  const system = systemRoot ?? windir
+  return system === undefined ? undefined : `${system}\\temp`
+}
+
 // A task's output file found on disk: `<id>.output` in its session's
 // `<session>/tasks` under whichever folder of `<temp>/claude` holds it,
 // whatever that one's name (the project's directory encoded, for older
 // sessions; an id of the engine's own since). Should two hold it, the newest.
 // The file alone tells the folder: a session resumed across that change has
 // both, the older never written again. Found, the folder is kept as known,
-// in place of one known before. `<temp>`, the first of the variables set:
-// one that cannot be read is passed over, not the others.
-async function findOutput($: EngineInterface, id: string, session: string): Promise<string | undefined> {
-  const temps = await envValues([$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TEMP'), $.env.get('TMPDIR')])
-  const root = temps.find(value => value !== undefined)
-  if (root === undefined) return undefined
+// in place of one known before. `<temp>` as Claude Code takes it:
+// `CLAUDE_CODE_TMPDIR`, else the system's temporary folder as Node.js finds
+// it (`TEMP`, `TMP`, then `temp` in the system folder on Windows; `TMPDIR`,
+// `TMP`, `TEMP`, then `/tmp` elsewhere), a variable that cannot be read
+// passed over. Whether `<temp>/claude` could be listed.
+async function findOutput($: EngineInterface, id: string, session: string): Promise<{ path?: string; hasFolder: boolean }> {
+  const windows = await isWindows($).catch(() => false)
+  const temps = await envValues(
+    windows
+      ? [$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TEMP'), $.env.get('TMP')]
+      : [$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TMPDIR'), $.env.get('TMP'), $.env.get('TEMP')],
+  )
+  const root = temps.find(value => value !== undefined) ?? (windows ? await windowsTemp($) : '/tmp')
+  if (root === undefined) return { hasFolder: false }
   const claude = `${root.replace(/[\\/]+$/, '')}/claude`
-  const entries = await $.fs.list(claude).catch(() => [])
+  const entries = await $.fs.list(claude).catch(() => undefined)
+  if (entries === undefined) return { hasFolder: false }
   const found = await Promise.all(
     entries
       .filter(entry => entry.kind !== 'file')
@@ -123,9 +140,9 @@ async function findOutput($: EngineInterface, id: string, session: string): Prom
   )
   let newest: { dir: string; mtimeMs: number } | undefined
   for (const one of found) if (one !== undefined && (newest === undefined || one.mtimeMs > newest.mtimeMs)) newest = one
-  if (newest === undefined) return undefined
+  if (newest === undefined) return { hasFolder: true }
   tasksDir = { session, dir: newest.dir }
-  return `${newest.dir}/${id}.output`
+  return { path: `${newest.dir}/${id}.output`, hasFolder: true }
 }
 
 // Whether the shown task's output is due to be looked for on disk: at every
@@ -151,15 +168,18 @@ async function outputLines($: EngineInterface, path: string): Promise<string[] |
 // known. None there, looked for on disk when due (isLookDue): the engine may
 // create its folder after the task started, a folder known may be the wrong
 // one, and the task's own session's is looked into, should a `/clear` have
-// come since. `lines` null while no file is found.
-async function paneOutput($: EngineInterface, view: TaskView): Promise<Pick<TaskView, 'output' | 'lines'>> {
+// come since. `lines` null while no file is found; `isFolderMissing` once a
+// look could not list `<temp>/claude`, kept until a look can.
+async function paneOutput($: EngineInterface, view: TaskView): Promise<Pick<TaskView, 'output' | 'lines' | 'isFolderMissing'>> {
   const session = view.session ?? (await sessionId($))
   const known = view.output ?? (session === undefined ? undefined : knownOutput(view.id, session))
   const lines = known === undefined ? null : await outputLines($, known)
-  if (lines !== null || session === undefined || !(await isLookDue($))) return { output: known, lines }
+  if (lines !== null) return { output: known, lines, isFolderMissing: false }
+  if (session === undefined || !(await isLookDue($))) return { output: known, lines, isFolderMissing: view.isFolderMissing }
   const found = await findOutput($, view.id, session)
-  if (found === undefined || found === known) return { output: known, lines }
-  return { output: found, lines: await outputLines($, found) }
+  const isFolderMissing = !found.hasFolder
+  if (found.path === undefined || found.path === known) return { output: known, lines, isFolderMissing }
+  return { output: found.path, lines: await outputLines($, found.path), isFolderMissing }
 }
 
 // Reads the shown task's output, while the panel shows it.
@@ -170,9 +190,13 @@ async function refreshPane($: EngineInterface): Promise<void> {
     await update($, taskView, () => null)
     return
   }
-  const { output, lines } = await paneOutput($, view)
-  if (output !== view.output || JSON.stringify(lines) !== JSON.stringify(view.lines)) {
-    await update($, taskView, value => (value?.id !== view.id ? value : { ...value, output, lines }))
+  const shown = await paneOutput($, view)
+  if (
+    shown.output !== view.output ||
+    shown.isFolderMissing !== view.isFolderMissing ||
+    JSON.stringify(shown.lines) !== JSON.stringify(view.lines)
+  ) {
+    await update($, taskView, value => (value?.id !== view.id ? value : { ...value, ...shown }))
   }
 }
 
@@ -182,7 +206,7 @@ async function refreshPane($: EngineInterface): Promise<void> {
 async function followTask($: EngineInterface, id: string, kind: Task['kind'], command: string, result: unknown): Promise<void> {
   const session = await sessionId($)
   const output =
-    outputOf(result, id) ?? (session === undefined ? undefined : (knownOutput(id, session) ?? (await findOutput($, id, session))))
+    outputOf(result, id) ?? (session === undefined ? undefined : (knownOutput(id, session) ?? (await findOutput($, id, session)).path))
   const now = await $.clock.now()
   const due = now + (CHECKS_MS[0] ?? 2000)
   await update($, activity, value =>
@@ -470,7 +494,13 @@ export function registerActivity(on: On): void {
         {tabs}
         <Text wrap="wrap"><Text color="claude" bold>$ </Text><Text bold>{view.command}</Text></Text>
         <Text dimColor>{'─'.repeat(columns)}</Text>
-        {view.lines === null && <Text dimColor>Fichier de sortie pas encore trouvé, dx le cherche encore.</Text>}
+        {view.lines === null && (
+          <Text dimColor>
+            {view.isFolderMissing === true
+              ? 'Dossier temporaire de Claude Code introuvable ou illisible, dx le cherche encore.'
+              : 'Fichier de sortie pas encore trouvé, dx le cherche encore.'}
+          </Text>
+        )}
         {view.lines?.length === 0 && <Text dimColor>Pas encore de sortie.</Text>}
         {lines.map(line => <Text wrap="truncate-end">{line === '' ? ' ' : line}</Text>)}
       </Box>

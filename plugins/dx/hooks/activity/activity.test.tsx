@@ -176,6 +176,69 @@ test('a temporary directory variable refused is passed over', async ($, on) => {
   await pane.unmount()
 })
 
+// The temporary folder as Claude Code takes it: TMPDIR before TEMP off
+// Windows; on Windows TEMP before TMP, then `temp` in the system folder.
+// Listed as the engine resolves it.
+for (const [env, folder] of [
+  [{ TMPDIR: '/var/tmp' }, '/var/tmp/claude'],
+  [{ OS: 'Windows_NT', TMPDIR: '/var/tmp', TMP: 'C:\\Tmp', TEMP: 'C:\\Temp' }, 'C:/Temp/claude'],
+  [{ OS: 'Windows_NT', TEMP: '', SystemRoot: 'C:\\Windows' }, 'C:/Windows/temp/claude'],
+] as const) {
+  test(`the temporary folder is ${folder} with ${Object.keys(env).join(', ')}`, async ($, on) => {
+    mock.clock(on, { now: NOW })
+    const listed: string[] = []
+    engine(on, { files: OUTPUT, listed, env })
+    shell(on)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+    expect(listed[0]?.replace(/\\/g, '/')).toEndWith(folder)
+  })
+}
+
+// No variable set off Windows: `/tmp`, Node's own temporary folder.
+test('without a temporary directory variable, /tmp is looked into off Windows', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  on('env.get', { name: 'TEMP' }, () => ({ value: undefined }))
+  const listed: string[] = []
+  engine(on, { files: OUTPUT, listed })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  expect(listed.some(path => path.replace(/\\/g, '/').endsWith('/tmp/claude'))).toBe(true)
+  await pane.unmount()
+})
+
+// No `<temp>/claude` folder: the pane says so, and dx keeps looking.
+test('a temporary folder not found is said, and looked for until found', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const files: Record<string, string> = {}
+  engine(on, { files })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const missing = await $.ui.mount(PANE)
+  expect(await missing.find({ type: 'Text', text: /^Dossier temporaire de Claude Code introuvable ou illisible/ })).toBeDefined()
+  expect(await missing.find({ type: 'Text', text: /^Fichier de sortie/ })).toBeUndefined()
+  await missing.unmount()
+
+  Object.assign(files, OUTPUT)
+  await clock.advance(1000)
+  const found = await $.ui.mount(PANE)
+  expect(await found.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  expect(await found.find({ type: 'Text', text: /introuvable/ })).toBeUndefined()
+  await found.unmount()
+})
+
 // Its file known, the task is shown with its output read: never said not
 // found, not even before the first read.
 test('a task whose output file is known is never shown as not found', async ($, on) => {
