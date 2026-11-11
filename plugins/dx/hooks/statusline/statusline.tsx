@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, On, TurnStartInput } from 'claude-code'
+import type { EngineInterface, On, TurnStartInput, TurnStepInput } from 'claude-code'
 
 import type { Activity, BottomFact, HeldSettings, StatusSnapshot, TurnTime } from '../../types'
 import { openAgent, showTask } from '../activity/activity'
@@ -83,19 +83,49 @@ const SHUTTLE_STAGGER_MS = 1400
 // the model; null when the model takes none), kept until the setting or the
 // model changes again. Undefined until then: the band shows the setting,
 // unconfirmed, since Claude Code tells a plugin the real effort only with a
-// request.
-const effort: { turn?: string | null; setting?: string; model?: string } = {}
+// request. Kept in dx's memory alone: a `/clear` keeps it, a reload of dx
+// forgets it. `taken`: the number of the last read of the setting and the
+// model taken up (followChoice).
+const effort: { turn?: string | null; setting?: string; model?: string; taken: number } = { taken: 0 }
+// Reads of the setting and the model started, numbered in order.
+let choiceReads = 0
 
-// The effort setting as read, the effort a request confirmed forgotten when it
-// or the model changed.
-function followChoice(model: string, setting: unknown): string | undefined {
+// The setting and the model as the read numbered `read` found them, the
+// effort a request confirmed forgotten when they changed. A read older than
+// one already taken up is passed over: a refresh that read the setting before
+// an `/effort` never undoes what a later request confirmed. Whether it was
+// taken up.
+function followChoice(read: number, model: string, setting: unknown): boolean {
+  if (read < effort.taken) return false
+  effort.taken = read
   const configured = typeof setting === 'string' ? setting : undefined
   if (configured !== effort.setting || model !== effort.model) {
     effort.turn = undefined
     effort.setting = configured
     effort.model = model
   }
-  return configured
+  return true
+}
+
+// The model and the effort the band shows, from memory: taken as the snapshot
+// is written, after every await, so a refresh started before a request
+// confirmed the effort never writes back what came before.
+function choiceShown(): Pick<StatusSnapshot, 'model' | 'effort' | 'effortConfirmed'> {
+  return {
+    model: modelLabel(effort.model ?? ''),
+    effort: effort.turn === undefined ? effort.setting : (effort.turn ?? undefined),
+    effortConfirmed: effort.turn !== undefined,
+  }
+}
+
+// Whether a request's model is the session's, the one the band names and
+// confirms the effort for: a fallback model's request is sent with the effort
+// that model takes, which says nothing of the session's. Compared as the band
+// names them (a dated id is its model), the session's `[1m]` aside: it asks
+// for the context window, the request names the model alone.
+function isSessionModel(requested: string, session: string): boolean {
+  const name = (model: string) => modelLabel(model.replace(/\[1m\]$/i, ''))
+  return name(requested) === name(session)
 }
 
 // Where the HEAD of the repository holding each directory is, kept from one
@@ -120,6 +150,7 @@ function pathKind($: EngineInterface, path: string): Promise<'file' | 'dir' | 'o
 }
 
 async function refresh($: EngineInterface): Promise<void> {
+  const read = ++choiceReads
   const [model, cwd, usage, setting, home, now] = await Promise.all([
     $.session.model(),
     $.session.cwd(),
@@ -128,12 +159,9 @@ async function refresh($: EngineInterface): Promise<void> {
     $.env.get('USERPROFILE').then(profile => profile ?? $.env.get('HOME')),
     $.clock.now(),
   ])
-  const configured = followChoice(model, setting)
+  followChoice(read, model, setting)
 
-  const status: StatusSnapshot = {
-    model: modelLabel(model),
-    effort: effort.turn === undefined ? configured : (effort.turn ?? undefined),
-    effortConfirmed: effort.turn !== undefined,
+  const status: Omit<StatusSnapshot, 'model' | 'effort' | 'effortConfirmed'> = {
     cwd: shortenPath(cwd, home),
     branch: await branchFrom({
       read: path => readFile($, path),
@@ -148,7 +176,7 @@ async function refresh($: EngineInterface): Promise<void> {
     startedAt: usage.startedAt,
     refreshedAt: now,
   }
-  await update($, snapshot, () => status)
+  await update($, snapshot, () => ({ ...status, ...choiceShown() }))
 }
 
 // Whether the last refresh failed: refreshes that keep failing are said once
@@ -185,24 +213,31 @@ export async function startStatuslineTurn($: EngineInterface, e: TurnStartInput)
   await update($, turn, () => ({ startedAt: now }))
 }
 
+// A main-loop request about to be sent to `requested` with `sent`: that effort
+// confirmed and shown. A snapshot that cannot be written leaves it
+// unconfirmed, for the next request to write again; never thrown, so the
+// request is sent.
+async function confirmEffort($: EngineInterface, requested: string, sent: TurnStepInput['effort']): Promise<void> {
+  const read = ++choiceReads
+  const chosen = await Promise.all([$.session.model(), $.settings.read({ key: 'effortLevel' })]).catch(() => undefined)
+  if (chosen === undefined || !followChoice(read, ...chosen) || !isSessionModel(requested, chosen[0])) return
+  const confirmed = sent === undefined ? null : String(sent)
+  if (confirmed === effort.turn) return
+  effort.turn = confirmed
+  await update($, snapshot, status => status && { ...status, ...choiceShown() }).catch(() => {
+    if (effort.turn === confirmed) effort.turn = undefined
+  })
+}
+
 export function registerStatusline(on: On): void {
   // turn.step streams: the hook is an async generator forwarding the chunks.
   on('turn.step', async function* ($, e, next) {
     // Shown confirmed from the main loop's request on, not from the turn's end,
     // for the setting and the model it goes with: a change made just before
     // it, which the turn's end refreshes, keeps the effort it confirms. Not
-    // confirmed when they cannot be read: the request is sent all the same.
-    const chosen = e.agentId === undefined
-      ? await Promise.all([$.session.model(), $.settings.read({ key: 'effortLevel' })]).catch(() => undefined)
-      : undefined
-    if (chosen !== undefined) {
-      followChoice(...chosen)
-      const sent = e.effort === undefined ? null : String(e.effort)
-      if (sent !== effort.turn) {
-        effort.turn = sent
-        await update($, snapshot, status => status && { ...status, effort: sent ?? undefined, effortConfirmed: true })
-      }
-    }
+    // confirmed when they cannot be read, nor by a fallback model's request:
+    // the request is sent all the same.
+    if (e.agentId === undefined) await confirmEffort($, e.model, e.effort)
 
     return yield* next(e)
   })

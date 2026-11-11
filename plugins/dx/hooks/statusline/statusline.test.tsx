@@ -435,10 +435,39 @@ function answer(on: On) {
   })
 }
 
-// A main-loop request sent with `effort`, absent for a model that takes none.
-async function request($: Engine, effort?: TurnStepInput['effort']) {
-  const stream = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, ...(effort === undefined ? {} : { effort }) })
+// A main-loop request sent with `effort`, absent for a model that takes none;
+// `step`, what differs (a subagent's, a fallback model's).
+async function request($: Engine, effort?: TurnStepInput['effort'], step: Partial<TurnStepInput> = {}) {
+  const stream = $.turn.step({ turnId: 't1', index: 0, model: 'claude-opus-5-5', messageCount: 1, ...(effort === undefined ? {} : { effort }), ...step })
   for await (const _ of stream);
+}
+
+// A read the engine holds once armed: `reached` as it waits, let go by
+// `release`.
+function hold() {
+  let reach = () => {}
+  let release = () => {}
+  let isArmed = false
+  const reached = new Promise<void>(resolve => {
+    reach = resolve
+  })
+  const released = new Promise<void>(resolve => {
+    release = resolve
+  })
+  return {
+    reached,
+    release,
+    arm: () => {
+      isArmed = true
+    },
+    // Waits, the one time it is armed.
+    pass: async () => {
+      if (!isArmed) return
+      isArmed = false
+      reach()
+      await released
+    },
+  }
 }
 
 test('the effort set is shown gray and asked until a request confirms the real one', async ($, on) => {
@@ -505,6 +534,99 @@ test('a request made just after a change keeps the effort it confirms past the t
   await $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
   const ui = await $.ui.mount(BAND)
   expect((await ui.find({ type: 'Text', text: /^ low$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
+// A refresh reads the effort, then waits on the repository's HEAD: a request
+// confirming the effort meanwhile is not written over by what it read.
+test('a refresh under way as a request confirms the effort keeps the confirmation', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const headHold = hold()
+  on('fs.read', { path: /\.git[\\/]HEAD$/ }, async (_, e, next) => {
+    await headHold.pass()
+    return next(e)
+  })
+  engine(on)
+  answer(on)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  headHold.arm()
+  const completed = $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+  await headHold.reached
+  await request($, 'xhigh')
+  headHold.release()
+  await completed
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^ xhigh$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
+// A refresh reads the setting before `/effort low`, a request confirms `low`,
+// then the refresh takes up what it read: older, it is passed over.
+test('a refresh that read the setting before a change never undoes a later confirmation', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  // Held on the home folder it reads beside the setting.
+  const settingHold = hold()
+  on('env.get', { name: 'USERPROFILE' }, async (_, e, next) => {
+    await settingHold.pass()
+    return next(e)
+  })
+  const chosen = { model: 'claude-opus-5-5', effortLevel: 'xhigh' }
+  engine(on, { chosen })
+  answer(on)
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  settingHold.arm()
+  const completed = $.turn.complete({ answer: 'ok', durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' })
+  await settingHold.reached
+  chosen.effortLevel = 'low'
+  await request($, 'low')
+  settingHold.release()
+  await completed
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^ low$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
+// A subagent's request, or one the engine sent to a fallback model, says
+// nothing of the effort the main loop's model is sent with.
+test("a subagent's or a fallback model's request confirms no effort", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  answer(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await request($, 'low', { agentId: 'a1' })
+  await request($, 'high', { model: 'claude-sonnet-4-6' })
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^▰▰▰▰▱ xhigh\?$/, in: 'frame-top' }))?.props.color).toBe('subtle')
+  await ui.unmount()
+
+  // The session's model, dated: its own.
+  await request($, 'xhigh', { model: 'claude-opus-5-5-20261001' })
+  const confirmed = await $.ui.mount(BAND)
+  expect((await confirmed.find({ type: 'Text', text: /^ xhigh$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
+  await confirmed.unmount()
+})
+
+// The confirmation's write refused: the request is sent all the same, and the
+// next one writes it again.
+test('a confirmation the state refuses is written by the next request', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  let isRefused = false
+  on('state.set', { plugin: 'dx', key: 'statusline' }, (_, e, next) => (isRefused ? { deny: 'state refused' } : next(e)))
+  engine(on)
+  answer(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  isRefused = true
+  await request($, 'xhigh')
+  isRefused = false
+  await request($, 'xhigh')
+  const ui = await $.ui.mount(BAND)
+  expect((await ui.find({ type: 'Text', text: /^ xhigh$/, in: 'frame-top' }))?.props.dimColor).toBe(true)
   await ui.unmount()
 })
 
