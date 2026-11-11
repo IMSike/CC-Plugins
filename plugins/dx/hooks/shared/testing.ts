@@ -30,15 +30,21 @@ type EngineOptions = {
   rateLimits?: boolean
   // The session's agents.
   agents?: unknown[]
-  // More files to read, by the end of their path.
+  // More files to read, by the end of their path; an end with a final `/`, an
+  // empty folder.
   files?: Record<string, string>
+  // The last modification of the files and folders above, by the end of their
+  // path; 0 for the others.
+  mtimes?: Record<string, number>
+  // Filled with the path of each folder listed.
+  listed?: string[]
   // What dx's store holds.
   stored?: Record<string, unknown>
   // false: the 5-hour window has not started.
   fiveHour?: boolean
   // Calls refused, as by a session not there yet; `store.set <key>`, the
   // store's writes under that key; `fs.read`, the reads of the files above,
-  // as of one over 4 MiB.
+  // as of one over 4 MiB; `fs.list`, every listing.
   refused?: ReadonlySet<string>
   // `session.id` and its start, which a test changes as a `/clear` does.
   session?: { id: string; startedAt?: number }
@@ -54,6 +60,8 @@ export function engine(on: On, options: EngineOptions = {}) {
     rateLimits = true,
     agents = [],
     files = {},
+    mtimes = {},
+    listed = [],
     stored = {},
     fiveHour = true,
     refused = new Set<string>(),
@@ -108,14 +116,20 @@ export function engine(on: On, options: EngineOptions = {}) {
         return folder !== '' && path.replace(/\\/g, '/').endsWith(folder) ? [end.slice(slash.index + 1)] : []
       }),
     )
+  // A missing folder refused, as by the engine.
   on('fs.list', (_, e) => {
-    const names = new Map(folders(e.path).map(rest => [rest.split('/')[0] ?? '', rest.includes('/')]))
+    listed.push(e.path)
+    if (refused.has('fs.list')) return { deny: 'listing refused' }
+    const inside = folders(e.path)
+    if (inside.length === 0) return { deny: 'ENOENT' }
+    const names = new Map(inside.filter(rest => rest !== '').map(rest => [rest.split('/')[0] ?? '', rest.includes('/')]))
     return { value: [...names].map(([name, isDir]) => ({ name, kind: isDir ? 'dir' : 'file', size: 0, mtimeMs: 0, isLink: false }) as const) }
   })
   on('fs.stat', (_, e) => {
     const path = e.path.replace(/\\/g, '/')
     const kind = folders(path).length > 0 ? 'dir' : Object.keys(files).some(end => path.endsWith(end)) ? 'file' : undefined
-    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size: 0, mtimeMs: 0, isLink: false } }
+    const mtimeMs = Object.entries(mtimes).find(([end]) => path.endsWith(end))?.[1] ?? 0
+    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size: 0, mtimeMs, isLink: false } }
   })
   on('session.usage', () => ({
     value: {

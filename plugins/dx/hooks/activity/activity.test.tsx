@@ -51,12 +51,13 @@ test("a task started after a /clear shows its output, from the new session's fol
 })
 
 // The folder an Agent result named is the engine's own: after a `/clear`, the
-// new session's is beside it, found with no look on disk.
+// new session's is beside it, found with no look on disk (every listing
+// refused).
 test('after a /clear, a tasks folder learned from an agent moves to the new session', async ($, on) => {
   mock.clock(on, { now: NOW })
   const session = { id: 's1' }
   const files = { '/claude/9f3a/s2/tasks/m1.output': 'tail started\n' }
-  engine(on, { files, session })
+  engine(on, { files, session, refused: new Set(['fs.list']) })
   shell(on)
   on('tool.call', { tool: 'Agent' }, () => ({ result: { outputFile: String.raw`C:\Temp\claude\9f3a\s1\tasks\a1.output` } as never }))
   on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
@@ -128,8 +129,8 @@ test('a tasks folder created after the task started is found on a later refresh'
   await pane.unmount()
 })
 
-// The folder there, the shell has not written its file yet.
-test('an output file not there yet is no output so far', async ($, on) => {
+// Not found, the pane says it is still looked for.
+test('an output file not found yet is said to be looked for', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: { [`${TASKS}/b0.output`]: 'done\n' } })
   shell(on)
@@ -140,9 +141,109 @@ test('an output file not there yet is no output so far', async ($, on) => {
   await click(ui, 'crew-b1')
   await ui.unmount()
   const pane = await $.ui.mount(PANE)
-  expect(await pane.find({ type: 'Text', text: 'Pas encore de sortie.' })).toBeDefined()
-  expect(await pane.find({ type: 'Text', text: /illisible/ })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: 'Fichier de sortie pas encore trouvé, dx le cherche encore.' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /illisible|Pas encore de sortie/ })).toBeUndefined()
   await pane.unmount()
+})
+
+// The file there, the shell has written nothing in it yet.
+test('an empty output file is no output so far', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: { [`${TASKS}/b1.output`]: '' } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: 'Pas encore de sortie.' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /trouvé|illisible/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// A session resumed across the engine's change of folder names has both: the
+// project's directory, encoded, holds no file of it, however recent.
+test("the folder holding the task's own output file is the one read", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const old = '/claude/C--Users-dev-repo-app/s1/tasks'
+  engine(on, { files: { [`${old}/`]: '', ...OUTPUT }, mtimes: { [old]: NOW, [TASKS]: NOW - 60_000 } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+test('of several folders holding the output file, the newest is read', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const files = {
+    '/claude/0a1b/s1/tasks/b1.output': 'old run\n',
+    [`${TASKS}/b1.output`]: 'listening on 3000\n',
+    '/claude/C--Users-dev-repo-app/s1/tasks/b1.output': 'older run\n',
+  }
+  const mtimes = { '/claude/0a1b/s1/tasks/b1.output': NOW - 60_000, [`${TASKS}/b1.output`]: NOW, 'C--Users-dev-repo-app/s1/tasks/b1.output': NOW - 120_000 }
+  engine(on, { files, mtimes })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// A task started before a `/clear` writes on in its own session's folder.
+test('a task shown across a /clear is looked for in its own session', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const session = { id: 's1' }
+  const files: Record<string, string> = {}
+  engine(on, { files, session })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  Object.assign(files, OUTPUT)
+  await clock.advance(1000)
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// Each look lists `<temp>/claude`: every second for 30 s, then every 10 s.
+test('an output file not found is looked for less often after 30 s', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const listed: string[] = []
+  engine(on, { listed })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const looks = async (ms: number) => {
+    const before = listed.length
+    for (let elapsed = 0; elapsed < ms; elapsed += 1000) await clock.advance(1000)
+    return listed.length - before
+  }
+  expect(await looks(29_000)).toBe(29)
+  expect(await looks(10_000)).toBe(1)
+  expect(await looks(10_000)).toBe(1)
 })
 
 // An output over 4 MiB, which the engine will not read: the reason shown.

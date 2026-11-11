@@ -50,8 +50,11 @@ export type Task = {
   pid?: number
   // The agent CLI found running under it.
   agent?: CliAgent
-  // The file its output is written to.
+  // The file its output is written to, once known.
   output?: string
+  // The session it started in, when read: its output stays in that session's
+  // folder after a `/clear`.
+  session?: string
   // Index of the next check in the schedule, and when it is due
   // (`$.clock.now()` milliseconds).
   step: number
@@ -64,8 +67,10 @@ export type Activity = {
   tasks: Task[]
 }
 
-// The task shown in dx's terminal pane: its command, the last lines of its output.
-export type TaskView = { id: string; command: string; output?: string; lines: string[] }
+// The task shown in dx's terminal pane: its command, its session and output
+// file as the task has them, the last lines of its output; `lines` null while
+// its file is not found.
+export type TaskView = { id: string; command: string; session?: string; output?: string; lines: string[] | null }
 
 // The main loop's last turn: running while it has no end.
 export type TurnTime = {

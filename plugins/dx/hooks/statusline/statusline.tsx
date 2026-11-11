@@ -54,7 +54,7 @@ async function turnTick($: EngineInterface): Promise<void> {
 
 // What runs beside the main loop, followed by ../activity/activity.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
-  shape: 'activity-1',
+  shape: 'activity-2',
 })
 
 // The spinner's frame, advanced while a subagent works.

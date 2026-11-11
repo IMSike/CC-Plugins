@@ -31,13 +31,17 @@ import type { ProcessTree } from './tasks'
 
 // The agents and the tasks followed, drawn on the band's bottom border.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
-  shape: 'activity-1',
+  shape: 'activity-2',
 })
 
 // The task shown in the terminal pane, its output read every PANE_MS.
-const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-1' })
+const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-2' })
 const PANE_MS = 1000
 const PANE_LINES = 200
+// Its output file not found, it is looked for on disk at every refresh for
+// LOOK_FAST_MS after the task is shown, then every LOOK_SLOW_MS.
+const LOOK_FAST_MS = 30_000
+const LOOK_SLOW_MS = 10_000
 
 const TICK_MS = 3000
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
@@ -50,10 +54,15 @@ const CHECKS_MS = [2_000, 10_000, 60_000, 300_000, 900_000]
 const ended = new Set<string>()
 
 // The folder the engine writes background output to, once known: named by an
-// Agent result, else found on disk (findTasksDir). Kept with the
-// session id it was known for: a `/clear` goes on under a new id, whose tasks
-// write to a folder of their own: the known one with the new id (tasksDirFor).
+// Agent result, else found on disk holding a task's output file (findOutput).
+// Kept with the session id it was known for: a `/clear` goes on under a new
+// id, whose tasks write to a folder of their own: the known one with the new
+// id (tasksDirFor).
 let tasksDir: { session: string; dir: string } | undefined
+
+// When the shown task's output was first and last looked for on disk; reset
+// as a task is shown.
+let looked: { since: number; last: number } | undefined
 
 async function processTree($: EngineInterface): Promise<ProcessTree> {
   if ((await $.env.get('OS')) === 'Windows_NT') {
@@ -75,14 +84,28 @@ async function refreshAgents($: EngineInterface): Promise<void> {
   }
 }
 
-// The session's tasks folder: its `<session>/tasks` under whichever folder of
-// `<temp>/claude` holds it, whatever that one's name (the project's directory
-// encoded, for older sessions; an id of the engine's own since). Should two
-// hold it, as a session resumed across that change, the newest. Undefined
-// until the engine creates it, with the session's first background task.
-async function findTasksDir($: EngineInterface, session: string): Promise<string | undefined> {
-  const [override, temp, tmpdir] = await Promise.all([$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TEMP'), $.env.get('TMPDIR')])
-  const root = override ?? temp ?? tmpdir
+// The session id, or the last one known when it cannot be read.
+async function sessionId($: EngineInterface): Promise<string | undefined> {
+  return $.session.id().catch(() => tasksDir?.session)
+}
+
+// A task's output file in the folder known, moved to its session's after a
+// `/clear`; undefined while none is known.
+function knownOutput(id: string, session: string): string | undefined {
+  if (tasksDir === undefined) return undefined
+  const dir = tasksDir.session === session ? tasksDir.dir : tasksDirFor(tasksDir.dir, tasksDir.session, session)
+  return dir === undefined ? undefined : `${dir}/${id}.output`
+}
+
+// A task's output file found on disk: `<id>.output` in its session's
+// `<session>/tasks` under whichever folder of `<temp>/claude` holds it,
+// whatever that one's name (the project's directory encoded, for older
+// sessions; an id of the engine's own since). Should two hold it, the newest.
+// The file alone tells the folder: a session resumed across that change has
+// both, the older never written again. Found, the folder is kept as known.
+async function findOutput($: EngineInterface, id: string, session: string): Promise<string | undefined> {
+  const roots = await Promise.all([$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TEMP'), $.env.get('TMPDIR')]).catch(() => [])
+  const root = roots.find(value => value !== undefined)
   if (root === undefined) return undefined
   const claude = `${root.replace(/[\\/]+$/, '')}/claude`
   const entries = await $.fs.list(claude).catch(() => [])
@@ -91,38 +114,31 @@ async function findTasksDir($: EngineInterface, session: string): Promise<string
       .filter(entry => entry.kind !== 'file')
       .map(async entry => {
         const dir = `${claude}/${entry.name}/${session}/tasks`
-        const stat = await $.fs.stat(dir).catch(() => undefined)
-        return stat?.kind === 'dir' ? { dir, mtimeMs: stat.mtimeMs } : undefined
+        const stat = await $.fs.stat(`${dir}/${id}.output`).catch(() => undefined)
+        return stat?.kind === 'file' ? { dir, mtimeMs: stat.mtimeMs } : undefined
       }),
   )
   let newest: { dir: string; mtimeMs: number } | undefined
   for (const one of found) if (one !== undefined && (newest === undefined || one.mtimeMs > newest.mtimeMs)) newest = one
-  return newest?.dir
+  if (newest === undefined) return undefined
+  tasksDir = { session, dir: newest.dir }
+  return `${newest.dir}/${id}.output`
 }
 
-// Where a task's output is written: the Bash and Monitor results do not say.
-// The session id unread, the last one known stands; none known, or its folder
-// not there yet, no file.
-async function outputPath($: EngineInterface, id: string, result: unknown): Promise<string | undefined> {
-  const named = outputOf(result, id)
-  if (named !== undefined) return named
-  const session = await $.session.id().catch(() => tasksDir?.session)
-  if (session === undefined) return undefined
-  // After a `/clear`, the folder known moved to the new session's, else
-  // looked for.
-  const moved = tasksDir === undefined ? undefined : tasksDirFor(tasksDir.dir, tasksDir.session, session)
-  if (tasksDir?.session !== session && moved !== undefined) tasksDir = { session, dir: moved }
-  if (tasksDir?.session !== session) {
-    const dir = await findTasksDir($, session)
-    if (dir === undefined) return undefined
-    tasksDir = { session, dir }
-  }
-  return `${tasksDir.dir}/${id}.output`
+// Whether the shown task's output is due to be looked for on disk: at every
+// refresh for LOOK_FAST_MS after it is shown, then every LOOK_SLOW_MS.
+async function isLookDue($: EngineInterface): Promise<boolean> {
+  const now = await $.clock.now()
+  looked ??= { since: now, last: now }
+  if (now - looked.since >= LOOK_FAST_MS && now - looked.last < LOOK_SLOW_MS) return false
+  looked.last = now
+  return true
 }
 
 // Reads the shown task's output, while the panel shows it. Its file unknown,
-// looked for again: the engine may create its folder after the task started.
-// A file not there yet is no output so far; any other failure, its reason.
+// looked for again: the engine may create its folder after the task started,
+// and in the task's own session's, should a `/clear` have come since. A file
+// not there yet is not found; any other failure, its reason.
 async function refreshPane($: EngineInterface): Promise<void> {
   const view = await read($, taskView)
   if (view === null) return
@@ -130,26 +146,35 @@ async function refreshPane($: EngineInterface): Promise<void> {
     await update($, taskView, () => null)
     return
   }
-  const output = view.output ?? (await outputPath($, view.id, undefined))
-  if (output === undefined) return
-  const lines = await $.fs.read(output).then(
-    text => text.replace(/\r/g, '').split('\n').slice(-PANE_LINES),
-    async (error: unknown) => ((await $.fs.exists(output).catch(() => true)) ? [`(sortie illisible : ${errorText(error)})`] : []),
-  )
+  const session = view.session ?? (await sessionId($))
+  let output = view.output ?? (session === undefined ? undefined : knownOutput(view.id, session))
+  if (output === undefined && session !== undefined && (await isLookDue($))) output = await findOutput($, view.id, session)
+  const path = output
+  const lines =
+    path === undefined
+      ? null
+      : await $.fs.read(path).then(
+          text => (text === '' ? [] : text.replace(/\r/g, '').split('\n').slice(-PANE_LINES)),
+          async (error: unknown) => ((await $.fs.exists(path).catch(() => true)) ? [`(sortie illisible : ${errorText(error)})`] : null),
+        )
   if (output !== view.output || JSON.stringify(lines) !== JSON.stringify(view.lines)) {
     await update($, taskView, value => (value?.id !== view.id ? value : { ...value, output, lines }))
   }
 }
 
-// A task the session started: followed from now on, its output file found.
+// A task the session started: followed from now on, its output file named by
+// its result, else in the folder known, else found on disk; none found yet,
+// the pane looks for it while it shows the task.
 async function followTask($: EngineInterface, id: string, kind: Task['kind'], command: string, result: unknown): Promise<void> {
-  const output = await outputPath($, id, result)
+  const session = await sessionId($)
+  const output =
+    outputOf(result, id) ?? (session === undefined ? undefined : (knownOutput(id, session) ?? (await findOutput($, id, session))))
   const now = await $.clock.now()
   const due = now + (CHECKS_MS[0] ?? 2000)
   await update($, activity, value =>
     value.tasks.some(task => task.id === id)
       ? value
-      : { ...value, tasks: [...value.tasks, { id, kind, command, output, step: 0, dueAt: due }] },
+      : { ...value, tasks: [...value.tasks, { id, kind, command, output, session, step: 0, dueAt: due }] },
   )
 }
 
@@ -232,7 +257,8 @@ export async function showTask($: EngineInterface, id: string, toggle = true): P
   }
   const task = (await read($, activity)).tasks.find(one => one.id === id)
   if (task === undefined) return
-  await update($, taskView, () => ({ id, command: task.command, output: task.output, lines: [] }))
+  looked = undefined
+  await update($, taskView, () => ({ id, command: task.command, session: task.session, output: task.output, lines: null }))
   await showPanel($, 'task')
   await refreshPane($)
 }
@@ -404,7 +430,7 @@ export function registerActivity(on: On): void {
       .reduce((rows, line) => rows + Math.max(1, Math.ceil(Array.from(line).length / columns)), 0)
     // Under the tabs, their margin and the rule.
     const room = Math.max(1, e.props.scroll.bodyRows - commandRows - rows - 1)
-    const lines = view.lines.slice(-room)
+    const lines = (view.lines ?? []).slice(-room)
 
     // Nothing is awaited from here on: the tabs drawn replace the last ones.
     keepTaskTabs(actions)
@@ -413,8 +439,8 @@ export function registerActivity(on: On): void {
         {tabs}
         <Text wrap="wrap"><Text color="claude" bold>$ </Text><Text bold>{view.command}</Text></Text>
         <Text dimColor>{'─'.repeat(columns)}</Text>
-        {view.output === undefined && <Text dimColor>Fichier de sortie introuvable.</Text>}
-        {view.output !== undefined && lines.length === 0 && <Text dimColor>Pas encore de sortie.</Text>}
+        {view.lines === null && <Text dimColor>Fichier de sortie pas encore trouvé, dx le cherche encore.</Text>}
+        {view.lines?.length === 0 && <Text dimColor>Pas encore de sortie.</Text>}
         {lines.map(line => <Text wrap="truncate-end">{line === '' ? ' ' : line}</Text>)}
       </Box>
     )
