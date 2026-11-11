@@ -169,6 +169,11 @@ let lastPaste = 0
 // pasting twice.
 let isReading = false
 
+// The `seq` of the last paste an editor posted taken: never given again,
+// even should its clearing from the state have failed. Kept in memory alone:
+// a reload of dx forgets it, a paste whose clearing failed then given again.
+let takenPaste = 0
+
 // The system clipboard's text, read with the tools the system ships (ADR
 // 0006), or why it was not. Under SSH, which sets one of these variables,
 // the clipboard there is the remote host's: not read.
@@ -360,7 +365,12 @@ export function registerNotes(on: On): void {
   on('ui.message', { module: /editor\.tsx$/, requestId: PANEL }, async ($, e, next) => {
     const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown; pasted?: unknown }
     if (!isTab(data.tab) || typeof data.session !== 'string') return next(e)
-    if (typeof data.pasted === 'number') await pasteTaken($, data.pasted)
+    // Taken, the paste is never given again (takenPaste): its clearing may
+    // fail, and the text the editor posts is saved all the same.
+    if (typeof data.pasted === 'number') {
+      takenPaste = Math.max(takenPaste, data.pasted)
+      await pasteTaken($, data.pasted).catch(() => undefined)
+    }
     if (data.refused === 'too-long' || data.refused === 'store-full') {
       await refuse($, data.tab, data.session, data.refused === 'too-long' ? TOO_LONG : STORE_FULL)
       return {}
@@ -497,9 +507,11 @@ export function registerNotes(on: On): void {
     // A paste for this note its editor has not posted taken, given to the
     // editor shown, a new one too (a tab shown again, the pane reopened).
     // Read after the note: the post that takes a paste lets it go before its
-    // text is saved, so a paste read here is never in the note read above.
+    // text is saved, so a paste read here is never in the note read above;
+    // one taken whose clearing failed is passed over (takenPaste).
     const pending = await read($, notesPaste)
-    const paste: EditorPaste | null = pending?.key === key ? { seq: pending.seq, text: pending.text, isTooLong: false } : null
+    const isGiven = pending !== null && pending.key === key && pending.seq > takenPaste
+    const paste: EditorPaste | null = isGiven ? { seq: pending.seq, text: pending.text, isTooLong: false } : null
     const shownEditor: EditorProps = {
       text: note?.text ?? '',
       max,

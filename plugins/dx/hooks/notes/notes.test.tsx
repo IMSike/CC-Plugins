@@ -734,6 +734,29 @@ test('the paste button puts the clipboard into the note at its cursor, the curso
   await pane.unmount()
 })
 
+// The paste's clearing refused: the note is saved all the same.
+test('a paste whose clearing cannot be written is saved all the same', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  // The atom's value is written wrapped: `{ shape, value }`.
+  const isCleared = (value: unknown) => (value as { value?: unknown } | null)?.value === null
+  on('state.set', { plugin: 'dx', key: 'notesPaste' }, (_, e, next) => (isCleared(e.value) ? { deny: 'state refused' } : next(e)))
+  const store = engine(on, { run: clipboard('pain') })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  expect(await pane.find({ type: 'Text', text: /non enregistré/ })).toBeUndefined()
+  await pane.unmount()
+
+  // Left pending, it is never given again: the pane reopened, the note once.
+  const again = await $.ui.mount(NOTES_PANE)
+  expect(await given(again, 'note-global-s1')).toBeNull()
+  await again.redraw()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  await again.unmount()
+})
+
 test('on Windows the clipboard is read with PowerShell, its accents kept', async ($, on) => {
   mock.clock(on, { now: NOW })
   const ran: string[][] = []
