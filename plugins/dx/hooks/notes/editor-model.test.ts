@@ -25,8 +25,6 @@ test('keyed types, breaks lines and erases', () => {
   expect(keyed(at('ab'), { key: 'return' }, 10, 5)).toEqual(at('ab\n'))
   expect(keyed(at('ab'), { key: 'backspace' }, 10, 5)).toEqual(at('a'))
   expect(keyed(at('ab', 0), { key: 'delete' }, 10, 5)).toEqual(at('b', 0))
-  // A pasted text, its line ends made plain.
-  expect(keyed(at(''), { key: 'un\r\ndeux' }, 10, 5)).toEqual(at('un\ndeux'))
 })
 
 test('keyed types the characters named keys stand for, and nothing for the others', () => {

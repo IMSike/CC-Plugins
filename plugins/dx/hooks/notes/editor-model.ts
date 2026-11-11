@@ -95,7 +95,7 @@ function typed(event: Key): string | undefined {
   if ((event.ctrl || event.meta) && SHORTCUT.test(key)) return undefined
   // Some terminals report a shifted letter in lower case, with shift.
   if (event.shift && /^[a-z]$/.test(key)) return key.toUpperCase()
-  return key.replace(/\r\n?/g, '\n')
+  return key
 }
 
 // What a character is to a move by words: a word's letter, digit or `_`, a
@@ -237,7 +237,7 @@ export function keyed(
       next = { ...editor, cursor: row.end }
       break
     default: {
-      // A character, or a pasted text; a shortcut or another named key does nothing.
+      // A character; a shortcut or another named key does nothing.
       const text = typed(event)
       if (text === undefined) return editor
       next = insert(editor, text)
