@@ -129,6 +129,104 @@ test('a tasks folder created after the task started is found on a later refresh'
   await pane.unmount()
 })
 
+// A folder named by an agent's result may not be the one the shells write
+// to: the task's file missing from it, it is looked for on disk, and the
+// folder holding it is the one known from then on (every listing refused).
+test("a known folder without the task's output file is looked past, and replaced", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const refused = new Set<string>()
+  engine(on, { files: { ...OUTPUT, [`${TASKS}/m1.output`]: 'tail started\n' }, refused })
+  shell(on)
+  on('tool.call', { tool: 'Agent' }, () => ({ result: { outputFile: String.raw`C:\Temp\claude\9f3a\s1\tasks\a1.output` } as never }))
+  on('tool.call', { tool: 'Monitor' }, () => ({ result: { taskId: 'm1' } as never }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Agent', prompt: 'look', description: 'look', run_in_background: true } as never)
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  await pane.unmount()
+
+  refused.add('fs.list')
+  await $.tool.call({ tool: 'Monitor', command: 'tail -f app.log' } as never)
+  await click(ui, 'crew-m1')
+  await ui.unmount()
+  const monitor = await $.ui.mount(PANE)
+  expect(await monitor.find({ type: 'Text', text: /^tail started$/ })).toBeDefined()
+  await monitor.unmount()
+})
+
+// A temporary directory variable that cannot be read leaves the next one.
+test('a temporary directory variable refused is passed over', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  on('env.get', { name: 'CLAUDE_CODE_TMPDIR' }, () => ({ deny: 'variable refused' }))
+  engine(on, { files: OUTPUT })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3000$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+// Its file known, the task is shown with its output read: never said not
+// found, not even before the first read.
+test('a task whose output file is known is never shown as not found', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const written: unknown[] = []
+  on('state.set', { plugin: 'dx', key: 'taskView' }, (_, e, next) => {
+    written.push(e.value)
+    return next(e)
+  })
+  engine(on, { files: OUTPUT })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  expect(written.length).toBeGreaterThan(0)
+  expect(JSON.stringify(written)).not.toContain('"lines":null')
+})
+
+// The shown task's view unreadable for a moment: that refresh fails, the
+// pane's clock goes on.
+test("a pane refresh that fails leaves the pane's clock running", async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  let isRefused = false
+  let denied = 0
+  on('state.get', { plugin: 'dx', key: 'taskView' }, (_, e, next) => {
+    if (!isRefused) return next(e)
+    denied += 1
+    return { deny: 'state refused' }
+  })
+  const files = { ...OUTPUT }
+  engine(on, { files })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  isRefused = true
+  await clock.advance(1000)
+  expect(denied).toBe(1)
+  isRefused = false
+  Object.assign(files, { [`${TASKS}/b1.output`]: 'ready\nlistening on 3001\n' })
+  await clock.advance(1000)
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^listening on 3001$/ })).toBeDefined()
+  await pane.unmount()
+})
+
 // Not found, the pane says it is still looked for.
 test('an output file not found yet is said to be looked for', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -188,7 +286,7 @@ test('of several folders holding the output file, the newest is read', async ($,
     [`${TASKS}/b1.output`]: 'listening on 3000\n',
     '/claude/C--Users-dev-repo-app/s1/tasks/b1.output': 'older run\n',
   }
-  const mtimes = { '/claude/0a1b/s1/tasks/b1.output': NOW - 60_000, [`${TASKS}/b1.output`]: NOW, 'C--Users-dev-repo-app/s1/tasks/b1.output': NOW - 120_000 }
+  const mtimes = { '/claude/0a1b/s1/tasks/b1.output': NOW - 60_000, [`${TASKS}/b1.output`]: NOW, '/claude/C--Users-dev-repo-app/s1/tasks/b1.output': NOW - 120_000 }
   engine(on, { files, mtimes })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })

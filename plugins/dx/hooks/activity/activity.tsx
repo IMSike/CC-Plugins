@@ -102,10 +102,17 @@ function knownOutput(id: string, session: string): string | undefined {
 // whatever that one's name (the project's directory encoded, for older
 // sessions; an id of the engine's own since). Should two hold it, the newest.
 // The file alone tells the folder: a session resumed across that change has
-// both, the older never written again. Found, the folder is kept as known.
+// both, the older never written again. Found, the folder is kept as known,
+// in place of one known before. `<temp>`, the first of the variables set:
+// one that cannot be read is passed over, not the others.
 async function findOutput($: EngineInterface, id: string, session: string): Promise<string | undefined> {
-  const roots = await Promise.all([$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TEMP'), $.env.get('TMPDIR')]).catch(() => [])
-  const root = roots.find(value => value !== undefined)
+  const unread = () => undefined
+  const roots = await Promise.all([
+    $.env.get('CLAUDE_CODE_TMPDIR').catch(unread),
+    $.env.get('TEMP').catch(unread),
+    $.env.get('TMPDIR').catch(unread),
+  ])
+  const root = roots.find(value => value !== undefined && value !== '')
   if (root === undefined) return undefined
   const claude = `${root.replace(/[\\/]+$/, '')}/claude`
   const entries = await $.fs.list(claude).catch(() => [])
@@ -135,10 +142,31 @@ async function isLookDue($: EngineInterface): Promise<boolean> {
   return true
 }
 
-// Reads the shown task's output, while the panel shows it. Its file unknown,
-// looked for again: the engine may create its folder after the task started,
-// and in the task's own session's, should a `/clear` have come since. A file
-// not there yet is not found; any other failure, its reason.
+// The last lines of the file at `path`; null when it is not there (yet); any
+// other failure, its reason.
+async function outputLines($: EngineInterface, path: string): Promise<string[] | null> {
+  return $.fs.read(path).then(
+    text => (text === '' ? [] : text.replace(/\r/g, '').split('\n').slice(-PANE_LINES)),
+    async (error: unknown) => ((await $.fs.exists(path).catch(() => true)) ? [`(sortie illisible : ${errorText(error)})`] : null),
+  )
+}
+
+// A task's output file and its last lines: the file named, else in the folder
+// known. None there, looked for on disk when due (isLookDue): the engine may
+// create its folder after the task started, a folder known may be the wrong
+// one, and the task's own session's is looked into, should a `/clear` have
+// come since. `lines` null while no file is found.
+async function paneOutput($: EngineInterface, view: TaskView): Promise<Pick<TaskView, 'output' | 'lines'>> {
+  const session = view.session ?? (await sessionId($))
+  const known = view.output ?? (session === undefined ? undefined : knownOutput(view.id, session))
+  const lines = known === undefined ? null : await outputLines($, known)
+  if (lines !== null || session === undefined || !(await isLookDue($))) return { output: known, lines }
+  const found = await findOutput($, view.id, session)
+  if (found === undefined || found === known) return { output: known, lines }
+  return { output: found, lines: await outputLines($, found) }
+}
+
+// Reads the shown task's output, while the panel shows it.
 async function refreshPane($: EngineInterface): Promise<void> {
   const view = await read($, taskView)
   if (view === null) return
@@ -146,17 +174,7 @@ async function refreshPane($: EngineInterface): Promise<void> {
     await update($, taskView, () => null)
     return
   }
-  const session = view.session ?? (await sessionId($))
-  let output = view.output ?? (session === undefined ? undefined : knownOutput(view.id, session))
-  if (output === undefined && session !== undefined && (await isLookDue($))) output = await findOutput($, view.id, session)
-  const path = output
-  const lines =
-    path === undefined
-      ? null
-      : await $.fs.read(path).then(
-          text => (text === '' ? [] : text.replace(/\r/g, '').split('\n').slice(-PANE_LINES)),
-          async (error: unknown) => ((await $.fs.exists(path).catch(() => true)) ? [`(sortie illisible : ${errorText(error)})`] : null),
-        )
+  const { output, lines } = await paneOutput($, view)
   if (output !== view.output || JSON.stringify(lines) !== JSON.stringify(view.lines)) {
     await update($, taskView, value => (value?.id !== view.id ? value : { ...value, output, lines }))
   }
@@ -237,17 +255,23 @@ async function tick($: EngineInterface): Promise<void> {
 }
 
 // Called by ../register once the session has started: nothing followed yet,
-// then its clocks.
+// then its clocks. A tick that fails (the state refused a moment) is left to
+// the next one, never thrown at the clock.
 export async function startActivity($: EngineInterface): Promise<void> {
   ended.clear()
   await update($, activity, () => ({ agents: [], tasks: [] }))
   await refreshAgents($)
-  $.clock.every(TICK_MS, () => tick($))
-  $.clock.every(PANE_MS, () => refreshPane($))
+  $.clock.every(TICK_MS, () => {
+    tick($).catch(() => undefined)
+  })
+  $.clock.every(PANE_MS, () => {
+    refreshPane($).catch(() => undefined)
+  })
 }
 
-// Shows a task's terminal in the panel. A click on the task's icon (`toggle`)
-// closes the panel instead when it already shows that task.
+// Shows a task's terminal in the panel, its output read first: the pane never
+// says its file is not found while it is. A click on the task's icon
+// (`toggle`) closes the panel instead when it already shows that task.
 export async function showTask($: EngineInterface, id: string, toggle = true): Promise<void> {
   const shown = await read($, taskView)
   if (toggle && shown?.id === id && (await isShowing($, 'task'))) {
@@ -258,9 +282,10 @@ export async function showTask($: EngineInterface, id: string, toggle = true): P
   const task = (await read($, activity)).tasks.find(one => one.id === id)
   if (task === undefined) return
   looked = undefined
-  await update($, taskView, () => ({ id, command: task.command, session: task.session, output: task.output, lines: null }))
+  const view: TaskView = { id, command: task.command, session: task.session, output: task.output, lines: null }
+  const withOutput = { ...view, ...(await paneOutput($, view)) }
+  await update($, taskView, () => withOutput)
   await showPanel($, 'task')
-  await refreshPane($)
 }
 
 // What `$.ui.resolve` takes: a pane's render event.
