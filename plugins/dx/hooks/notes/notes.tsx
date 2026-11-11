@@ -8,7 +8,7 @@ import { dayTime, errorText } from '../shared/format'
 import { NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
-import type { EditorPaste, EditorProps } from './editor'
+import { envValues, isWindows } from '../shared/system'
 import {
   CLIPBOARD_NO_TOOL,
   CLIPBOARD_REMOTE,
@@ -22,6 +22,7 @@ import {
   isEmptyClipboard,
   isTimedOut,
 } from './clipboard'
+import type { EditorPaste, EditorProps } from './editor'
 import { cleanPaste, encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
 import { isTab, unsavedFor } from './notes-model'
@@ -172,24 +173,20 @@ let isReading = false
 // 0006), or why it was not. Under SSH, which sets one of these variables,
 // the clipboard there is the remote host's: not read.
 async function readClipboard($: EngineInterface): Promise<{ text: string } | { error: string }> {
-  const unset = () => undefined
-  const remote = await Promise.all([
-    $.env.get('SSH_CONNECTION').catch(unset),
-    $.env.get('SSH_CLIENT').catch(unset),
-    $.env.get('SSH_TTY').catch(unset),
-  ])
-  if (remote.some(value => value !== undefined && value !== '')) return { error: CLIPBOARD_REMOTE }
-  const isWindows = (await $.env.get('OS').catch(() => undefined)) === 'Windows_NT'
+  const remote = await envValues([$.env.get('SSH_CONNECTION'), $.env.get('SSH_CLIENT'), $.env.get('SSH_TTY')])
+  if (remote.some(value => value !== undefined)) return { error: CLIPBOARD_REMOTE }
+  // The system unread: taken for another than Windows.
+  const windows = await isWindows($).catch(() => false)
   // Why the first tool that started failed, timed out or exited in error: it
   // says more than the tools tried past it, as not installed, for they
   // could not start. Windows has one tool: why it could not start is said.
   let failure: string | undefined
   let unstarted: string | undefined
-  for (const argv of clipboardCommands(isWindows)) {
+  for (const argv of clipboardCommands(windows)) {
     const startedAt = await $.clock.now()
     try {
       const ran = await $.process.run(argv, { timeoutMs: CLIPBOARD_TIMEOUT_MS })
-      if (ran.exitCode === 0) return { text: clipboardText(isWindows, ran.stdout) }
+      if (ran.exitCode === 0) return { text: clipboardText(windows, ran.stdout) }
       if (isEmptyClipboard(argv, ran.stderr)) return { text: '' }
       failure ??= failureOf(ran.exitCode, ran.stderr)
     } catch (error) {
@@ -199,7 +196,7 @@ async function readClipboard($: EngineInterface): Promise<{ text: string } | { e
     }
   }
   if (failure !== undefined) return { error: clipboardUnreadable(failure) }
-  return { error: isWindows && unstarted !== undefined ? clipboardUnreadable(unstarted) : CLIPBOARD_NO_TOOL }
+  return { error: windows && unstarted !== undefined ? clipboardUnreadable(unstarted) : CLIPBOARD_NO_TOOL }
 }
 
 // The paste button pressed: the clipboard's text into the note it was drawn

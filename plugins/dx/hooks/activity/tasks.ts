@@ -35,29 +35,6 @@ ConvertTo-Json -Compress -Depth 3 @{ self = $me; procs = @($out) }`
 // Prints the session's process id (the parent of `sh`), then every process.
 export const POSIX_TREE = 'echo $PPID; ps -A -o pid=,ppid=,args='
 
-const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
-
-// A script as PowerShell's `-EncodedCommand` takes it: UTF-16LE, in base64.
-// No quoting to get right, since `$.process.run` hands arguments to no shell.
-export function encodeCommand(script: string): string {
-  const bytes: number[] = []
-  for (let index = 0; index < script.length; index += 1) {
-    const code = script.charCodeAt(index)
-    bytes.push(code & 0xff, code >> 8)
-  }
-  let out = ''
-  for (let index = 0; index < bytes.length; index += 3) {
-    const b = bytes[index + 1]
-    const c = bytes[index + 2]
-    const n = ((bytes[index] ?? 0) << 16) | ((b ?? 0) << 8) | (c ?? 0)
-    out += BASE64[(n >> 18) & 63] ?? ''
-    out += BASE64[(n >> 12) & 63] ?? ''
-    out += b === undefined ? '=' : (BASE64[(n >> 6) & 63] ?? '')
-    out += c === undefined ? '=' : (BASE64[n & 63] ?? '')
-  }
-  return out
-}
-
 export function parseWindowsTree(stdout: string): ProcessTree {
   const parsed = JSON.parse(stdout) as { self: number; procs: { p: number; pp: number; n: string; c: string | null }[] }
   return {

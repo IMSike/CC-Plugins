@@ -1,4 +1,4 @@
-import { encodeCommand } from '../activity/tasks'
+import { powershell } from '../shared/system'
 
 // The system clipboard, read for the notes' paste button through the tools
 // the system ships (ADR 0006): the API writes the clipboard but cannot read
@@ -28,7 +28,7 @@ try {
 // Windows, PowerShell; elsewhere macOS's own, then Wayland's and X11's.
 // `wl-paste` is asked for text alone, never an image's bytes.
 export function clipboardCommands(isWindows: boolean): string[][] {
-  if (isWindows) return [['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(WINDOWS_CLIPBOARD)]]
+  if (isWindows) return [powershell(WINDOWS_CLIPBOARD)]
   return [
     ['pbpaste'],
     ['wl-paste', '--no-newline', '--type', 'text'],

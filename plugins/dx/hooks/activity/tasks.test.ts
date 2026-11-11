@@ -1,16 +1,9 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cliAgentUnder, encodeCommand, endedTasks, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
+import { cliAgentUnder, endedTasks, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
 import type { Proc } from './tasks'
 
 const proc = (pid: number, ppid: number, name: string, cmd = name): Proc => ({ pid, ppid, name, cmd })
-
-test('a script is encoded as PowerShell takes it: UTF-16LE in base64', () => {
-  expect(encodeCommand('a')).toBe('YQA=')
-  expect(encodeCommand('ab')).toBe('YQBiAA==')
-  expect(encodeCommand('abc')).toBe('YQBiAGMA')
-  expect(encodeCommand('é')).toBe('6QA=')
-})
 
 test('the Windows listing is read as processes, names in lower case', () => {
   const tree = parseWindowsTree('{"self":10,"procs":[{"p":11,"pp":10,"n":"Bash.exe","c":"bash -c x"},{"p":12,"pp":11,"n":"node.exe","c":null}]}')

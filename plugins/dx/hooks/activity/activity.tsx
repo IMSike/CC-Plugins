@@ -7,10 +7,10 @@ import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
 import { errorText } from '../shared/format'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
+import { envValues, isWindows, powershell } from '../shared/system'
 import { cellWidth, wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
-  encodeCommand,
   ENDED,
   endedTasks,
   outputOf,
@@ -66,8 +66,8 @@ let tasksDir: { session: string; dir: string } | undefined
 let looked: { since: number; last: number } | undefined
 
 async function processTree($: EngineInterface): Promise<ProcessTree> {
-  if ((await $.env.get('OS')) === 'Windows_NT') {
-    const ran = await $.process.run(['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(WINDOWS_TREE)])
+  if (await isWindows($)) {
+    const ran = await $.process.run(powershell(WINDOWS_TREE))
     return parseWindowsTree(ran.stdout)
   }
   const ran = await $.process.run(['sh', '-c', POSIX_TREE])
@@ -107,13 +107,8 @@ function knownOutput(id: string, session: string): string | undefined {
 // in place of one known before. `<temp>`, the first of the variables set:
 // one that cannot be read is passed over, not the others.
 async function findOutput($: EngineInterface, id: string, session: string): Promise<string | undefined> {
-  const unread = () => undefined
-  const roots = await Promise.all([
-    $.env.get('CLAUDE_CODE_TMPDIR').catch(unread),
-    $.env.get('TEMP').catch(unread),
-    $.env.get('TMPDIR').catch(unread),
-  ])
-  const root = roots.find(value => value !== undefined && value !== '')
+  const temps = await envValues([$.env.get('CLAUDE_CODE_TMPDIR'), $.env.get('TEMP'), $.env.get('TMPDIR')])
+  const root = temps.find(value => value !== undefined)
   if (root === undefined) return undefined
   const claude = `${root.replace(/[\\/]+$/, '')}/claude`
   const entries = await $.fs.list(claude).catch(() => [])
