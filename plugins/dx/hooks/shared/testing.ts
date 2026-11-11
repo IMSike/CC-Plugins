@@ -56,8 +56,9 @@ type EngineOptions = {
   // More environment variables, as `OS` on Windows.
   env?: Record<string, string>
   // The system's programs: what one run exits with, or undefined for one that
-  // cannot start. None start by default.
-  run?: (argv: readonly string[]) => ProcessRunResult | undefined
+  // cannot start; a promise for one that answers late, as on `mock.clock`'s
+  // `sleep`. None start by default.
+  run?: (argv: readonly string[]) => ProcessRunResult | undefined | Promise<ProcessRunResult | undefined>
 }
 
 export function engine(on: On, options: EngineOptions = {}) {
@@ -158,8 +159,8 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
   on('agent.list', () => ({ value: agents as never }))
   // No process list: tasks are followed from the engine's signals alone.
-  on('process.run', (_, e) => {
-    const ran = run(e.argv)
+  on('process.run', async (_, e) => {
+    const ran = await run(e.argv)
 
     return ran === undefined ? { deny: 'no process in tests' } : { value: ran }
   })

@@ -10,8 +10,10 @@ import type { EditorState } from './editor-model'
 // clipboard, whose text reaches the editor through the hooks module (`paste`).
 
 // A paste the hooks module read from the clipboard for this note: taken
-// once, its `seq` past the last one the editor took.
-export type EditorPaste = { seq: number; text: string }
+// once, its `seq` past the last one the editor took. `isTooLong`, it no
+// longer fits with the note as stored now: given without its text, it is
+// refused, and taken all the same.
+export type EditorPaste = { seq: number; text: string; isTooLong: boolean }
 
 export type EditorProps = {
   // The note's text as the store holds it: taken when the editor opens, and
@@ -25,8 +27,11 @@ export type EditorProps = {
   // Which note: echoed in every post.
   tab: string
   session: string
-  // The latest paste for this note, or null. One given as the editor opens
-  // was meant for an editor before it: never taken.
+  // The paste for this note the hooks module has not seen taken, or null.
+  // The hooks module is the authority: it lets a paste go as soon as an
+  // editor posts it taken, before any later draw, so an editor opened while
+  // one is given (the tab changed, the pane shown again during the read)
+  // takes it, and no other editor ever does after.
   paste: EditorPaste | null
 }
 // Posts kept to tell an echo from another session's text: redraws fold, so
@@ -34,14 +39,14 @@ export type EditorProps = {
 const SENT_KEPT = 200
 
 // An editor opened on `text`: the cursor at its end, the keyboard elsewhere,
-// the paste given already taken.
-function opened(text: string, paste: EditorPaste | null): EditorState {
-  return { text, cursor: text.length, top: 0, active: false, given: text, sent: [], pasted: paste?.seq ?? 0 }
+// no paste taken yet.
+function opened(text: string): EditorState {
+  return { text, cursor: text.length, top: 0, active: false, given: text, sent: [], pasted: 0 }
 }
 
-// Each instance's latest props, and how an edit is applied there, for its
+// Each instance's latest props, and how a paste is taken there, for its
 // listeners and its redraws.
-const instances = new WeakMap<object, { props: EditorProps; apply: (next: EditorState) => void }>()
+const instances = new WeakMap<object, { props: EditorProps; take: (state: EditorState, paste: EditorPaste | null) => void }>()
 
 const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   const { Box, Text } = surface.elements
@@ -50,13 +55,15 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   if (surface.state === undefined) {
     // Every post names the note and the last paste taken, which the hooks
     // module then lets go.
-    const post = (data: { text: string } | { refused: string }, pasted: number) =>
+    const post = (data: { text: string } | { refused: string } | Record<string, never>, pasted: number) =>
       surface.post({ tab: latest.props.tab, session: latest.props.session, pasted, ...data })
-    const apply = (next: EditorState) => {
-      const state = surface.state
+    // An edit from `state`, the editor's state unless it is being opened.
+    const apply = (next: EditorState, state = surface.state) => {
       if (state === undefined || next === state) return
       if (next.text === state.text) {
         surface.setState(next)
+        // A paste with nothing left once cleaned: taken all the same.
+        if (next.pasted !== state.pasted) post({}, next.pasted)
         return
       }
       // Too long, or past the store's room: not applied, the hooks module
@@ -70,9 +77,22 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
       surface.setState({ ...next, sent: [...next.sent, next.text].slice(-SENT_KEPT) })
       post({ text: next.text }, next.pasted)
     }
-    const latest = { props, apply }
+    // A paste not taken yet, at the cursor: the same limits as a key, the
+    // keyboard left where it was. One too long now is refused unseen.
+    const take = (state: EditorState, paste: EditorPaste | null) => {
+      if (paste === null || paste.seq <= state.pasted) return
+      if (paste.isTooLong) {
+        surface.setState({ ...state, pasted: paste.seq })
+        post({ refused: 'too-long' }, paste.seq)
+        return
+      }
+      apply({ ...state, ...pasted(state, paste.text, width(), latest.props.rows), pasted: paste.seq }, state)
+    }
+    const latest = { props, take }
     instances.set(surface, latest)
-    surface.setState(opened(props.text, props.paste))
+    const first = opened(props.text)
+    surface.setState(first)
+    take(first, props.paste)
     surface.onKey(event => {
       const state = surface.state
       if (state === undefined) return
@@ -90,16 +110,11 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
     if (state !== surface.state) surface.setState(state)
     if (latest !== undefined) {
       latest.props = props
-      // A new paste, at the cursor: the same limits as a key. The keyboard
-      // stays where it was.
-      const paste = props.paste
-      if (paste !== null && paste.seq > state.pasted) {
-        latest.apply({ ...state, ...pasted(state, paste.text, width(), props.rows), pasted: paste.seq })
-      }
+      latest.take(state, props.paste)
     }
   }
 
-  const state = surface.state ?? opened(props.text, props.paste)
+  const state = surface.state ?? opened(props.text)
   const rows = rowsOf(state.text, width())
   const at = rowOf(rows, state.cursor)
   const shown = rows.slice(state.top, state.top + props.rows)

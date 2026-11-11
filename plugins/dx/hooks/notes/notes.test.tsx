@@ -3,6 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 
 import { BAND, click, engine, NOTES_PANE, NOW, shell, showSettings } from '../shared/testing'
+import type { EditorPaste } from './editor'
 import { entryBytes, STORE_MAX_BYTES } from './store-size'
 
 test('the notes open on the last tab shown, or on the one set', async ($, on) => {
@@ -746,7 +747,7 @@ test('on Windows the clipboard is read with PowerShell, its accents kept', async
   await pane.unmount()
 })
 
-test('off macOS the clipboard is read with the first Linux tool installed', async ($, on) => {
+test('off macOS the clipboard is read with the first Linux tool that reads it', async ($, on) => {
   mock.clock(on, { now: NOW })
   const ran: string[][] = []
   const store = engine(on, { run: clipboard('pain', ran, ['xclip', 'xsel']) })
@@ -754,7 +755,7 @@ test('off macOS the clipboard is read with the first Linux tool installed', asyn
   const pane = await $.ui.mount(NOTES_PANE)
 
   await click(pane, 'notes:paste')
-  expect(ran).toEqual([['pbpaste'], ['wl-paste', '--no-newline'], ['xclip', '-selection', 'clipboard', '-o']])
+  expect(ran).toEqual([['pbpaste'], ['wl-paste', '--no-newline', '--type', 'text'], ['xclip', '-selection', 'clipboard', '-o']])
   expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
   await pane.unmount()
 })
@@ -833,5 +834,162 @@ test("a paste past the store's room is refused by the editor, and the pane says 
   expect(await pane.find({ type: 'Text', text: "store presque plein : supprimez d'anciennes notes" })).toBeDefined()
   expect(await pane.find({ type: 'Text', text: /yyy/, in: 'note-global-s1' })).toBeUndefined()
   expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  await pane.unmount()
+})
+
+// The paste the pane gives the note's editor drawn under `key`: null once
+// an editor posted it taken.
+async function given(pane: { find: (query: { key: string }) => Promise<{ props: unknown } | undefined> }, key: string) {
+  const editor = await pane.find({ key })
+  return (editor?.props as { props?: { paste?: EditorPaste | null } } | undefined)?.props?.paste
+}
+
+// The clipboard holding `text`, read by macOS's tool a second after it
+// starts, `ran` filled with every command run.
+function slowClipboard(clock: { sleep: (ms: number) => Promise<void> }, text: string, ran: string[][] = []) {
+  return async (argv: readonly string[]) => {
+    await clock.sleep(1000)
+    return clipboard(text, ran)(argv)
+  }
+}
+
+test('a second press while the clipboard is read does nothing', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  const store = engine(on, { run: slowClipboard(clock, 'pain', ran) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  const pressing = click(pane, 'notes:paste')
+  await clock.settle()
+  await click(pane, 'notes:paste')
+  await clock.advance(1000)
+  await pressing
+  await clock.settle()
+  expect(ran).toEqual([['pbpaste']])
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW + 1000 })
+  await pane.unmount()
+})
+
+test('a paste read while another tab is shown is taken once, as its note is shown again', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const store = engine(on, { run: slowClipboard(clock, 'pain') })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  // Pressed on the global note, read as the project's is shown: kept for the
+  // global one, the project's left alone.
+  const pressing = click(pane, 'notes:paste')
+  await clock.settle()
+  await click(pane, 'notes:tab-project')
+  await clock.advance(1000)
+  await pressing
+  expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-project-s1' })).toBeUndefined()
+  expect(store.get('notes.global')).toBeUndefined()
+
+  // Back on the global note: its new editor takes it, once, and it is let go.
+  await click(pane, 'notes:tab-global')
+  await clock.settle()
+  expect(await pane.find({ type: 'Text', text: /pain/, in: 'note-global-s1' })).toBeDefined()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW + 1000 })
+  expect(await given(pane, 'note-global-s1')).toBeNull()
+
+  // A redraw, or the tab shown again, takes it no more.
+  await pane.redraw()
+  await click(pane, 'notes:tab-project')
+  await click(pane, 'notes:tab-global')
+  await clock.settle()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW + 1000 })
+  await pane.unmount()
+})
+
+test('a paste read while the pane is closed is taken once, as it is shown again', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const store = engine(on, { run: slowClipboard(clock, 'pain') })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  const pressing = click(pane, 'notes:paste')
+  await clock.settle()
+  await pane.unmount()
+  await clock.advance(1000)
+  await pressing
+
+  const again = await $.ui.mount(NOTES_PANE)
+  await clock.settle()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW + 1000 })
+  expect(await given(again, 'note-global-s1')).toBeNull()
+  await again.redraw()
+  await again.unmount()
+
+  const last = await $.ui.mount(NOTES_PANE)
+  await clock.settle()
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW + 1000 })
+  await last.unmount()
+})
+
+test('a paste the note outgrew meanwhile is refused whole, and let go', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const store = engine(on, { run: slowClipboard(clock, 'x'.repeat(60_000)) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  const pressing = click(pane, 'notes:paste')
+  await clock.settle()
+  await click(pane, 'notes:tab-project')
+  await clock.advance(1000)
+  await pressing
+  // Another session writes the global note: with the paste, past what an
+  // editor takes.
+  const grown = { text: 'y'.repeat(50_000), updatedAt: NOW }
+  store.set('notes.global', grown)
+
+  await click(pane, 'notes:tab-global')
+  await clock.settle()
+  expect(await pane.find({ type: 'Text', text: /note trop longue \(95 000 caractères au plus\)/ })).toBeDefined()
+  expect(await given(pane, 'note-global-s1')).toBeNull()
+  expect(store.get('notes.global')).toEqual(grown)
+  expect(await pane.find({ type: 'Text', text: /xxx/, in: 'note-global-s1' })).toBeUndefined()
+  await pane.unmount()
+})
+
+test('a clipboard tool that times out says so, not what to install', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  engine(on, {
+    run: async argv => {
+      ran.push([...argv])
+      if (argv[0] === 'wl-paste') await clock.sleep(5000)
+      return undefined
+    },
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  const pressing = click(pane, 'notes:paste')
+  await clock.settle()
+  await clock.advance(5000)
+  await pressing
+  await clock.settle()
+  // The tools past it tried still, none installed.
+  expect(ran.map(argv => argv[0])).toEqual(['pbpaste', 'wl-paste', 'xclip', 'xsel'])
+  expect(await pane.find({ type: 'Text', text: 'presse-papiers illisible : délai dépassé (5 s)' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /installez/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+test("an empty clipboard's error, or one holding no text, pastes nothing and says nothing", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, {
+    run: argv => (argv[0] === 'wl-paste'
+      ? { exitCode: 1, stdout: '', stderr: 'No suitable type of content copied\n', isStdoutTruncated: false, isStderrTruncated: false }
+      : undefined),
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(store.get('notes.global')).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /collage impossible/ })).toBeUndefined()
   await pane.unmount()
 })

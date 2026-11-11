@@ -217,8 +217,9 @@ declare module 'claude-code' {
       // among the reasons), or an edit was refused, and which note; null once
       // that note saves.
       notesUnsaved: Shaped<NotesUnsaved | null>
-      // The last paste taken for a note, given to its editor; null once the
-      // editor took it.
+      // The last paste read for a note, given to each editor of that note
+      // drawn (one opened since too) until an editor posts it taken; null
+      // then.
       notesPaste: Shaped<NotesPaste | null>
       // The first of the other sessions' notes listed, the list scrolled.
       notesOthersAt: Shaped<number>

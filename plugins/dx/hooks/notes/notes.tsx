@@ -12,6 +12,7 @@ import type { EditorPaste, EditorProps } from './editor'
 import {
   CLIPBOARD_NO_TOOL,
   CLIPBOARD_REMOTE,
+  CLIPBOARD_TIMED_OUT,
   CLIPBOARD_TIMEOUT_MS,
   clipboardCommands,
   clipboardText,
@@ -19,6 +20,7 @@ import {
   failureOf,
   isClipboardError,
   isEmptyClipboard,
+  isTimedOut,
 } from './clipboard'
 import { cleanPaste, encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
 import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
@@ -178,20 +180,26 @@ async function readClipboard($: EngineInterface): Promise<{ text: string } | { e
   ])
   if (remote.some(value => value !== undefined && value !== '')) return { error: CLIPBOARD_REMOTE }
   const isWindows = (await $.env.get('OS').catch(() => undefined)) === 'Windows_NT'
-  // Why the first tool that ran failed: a tool that cannot start is tried
-  // past, as one that is not installed.
+  // Why the first tool that started failed, timed out or exited in error: it
+  // says more than the tools tried past it, as not installed, for they
+  // could not start. Windows has one tool: why it could not start is said.
   let failure: string | undefined
+  let unstarted: string | undefined
   for (const argv of clipboardCommands(isWindows)) {
+    const startedAt = await $.clock.now()
     try {
       const ran = await $.process.run(argv, { timeoutMs: CLIPBOARD_TIMEOUT_MS })
       if (ran.exitCode === 0) return { text: clipboardText(isWindows, ran.stdout) }
       if (isEmptyClipboard(argv, ran.stderr)) return { text: '' }
       failure ??= failureOf(ran.exitCode, ran.stderr)
     } catch (error) {
-      if (isWindows) failure ??= errorText(error)
+      const message = errorText(error)
+      if (isTimedOut((await $.clock.now()) - startedAt, message)) failure ??= CLIPBOARD_TIMED_OUT
+      else unstarted ??= message
     }
   }
-  return { error: failure === undefined ? CLIPBOARD_NO_TOOL : clipboardUnreadable(failure) }
+  if (failure !== undefined) return { error: clipboardUnreadable(failure) }
+  return { error: isWindows && unstarted !== undefined ? clipboardUnreadable(unstarted) : CLIPBOARD_NO_TOOL }
 }
 
 // The paste button pressed: the clipboard's text into the note it was drawn
@@ -489,11 +497,12 @@ export function registerNotes(on: On): void {
     // The list's title and rows, last in the tree.
     const end = rows + extra
     const othersRows = listed ? { first: end - others.length - 1, end, offset: e.props.scroll.offset } : undefined
-    // A paste for this note, given while the editor can take it with the
-    // note: measured against the store's text as it was taken, which another
-    // session may have lengthened since.
+    // A paste for this note its editor has not posted taken, given to the
+    // editor shown, a new one too (a tab shown again, the pane reopened).
+    // Read after the note: the post that takes a paste lets it go before its
+    // text is saved, so a paste read here is never in the note read above.
     const pending = await read($, notesPaste)
-    const paste: EditorPaste | null = pending?.key === key ? { seq: pending.seq, text: pending.text } : null
+    const paste: EditorPaste | null = pending?.key === key ? { seq: pending.seq, text: pending.text, isTooLong: false } : null
     const shownEditor: EditorProps = {
       text: note?.text ?? '',
       max,
@@ -503,7 +512,12 @@ export function registerNotes(on: On): void {
       session,
       paste,
     }
-    const editor = paste === null || fitsEditor(shownEditor) ? shownEditor : { ...shownEditor, paste: null }
+    // Measured against the note as stored now, which another session may have
+    // lengthened since the paste was read: past what the editor can take, the
+    // paste is given without its text, for the editor to refuse it and post
+    // it taken, the pane then saying the note too long (a render writes
+    // nothing).
+    const editor = paste === null || fitsEditor(shownEditor) ? shownEditor : { ...shownEditor, paste: { ...paste, text: '', isTooLong: true } }
     // A note the editor cannot take is said so in its place, kept as stored,
     // its length counted as NOTE_MAX_CHARS is: drawn, the Client would fail
     // the whole pane.
