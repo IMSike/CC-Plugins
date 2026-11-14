@@ -55,6 +55,8 @@ export type Task = {
   // The session it started in, when read: its output stays in that session's
   // folder after a `/clear`.
   session?: string
+  // That file's size when last read for the line written as the task ends.
+  size?: number
   // Index of the next check in the schedule, and when it is due
   // (`$.clock.now()` milliseconds).
   step: number

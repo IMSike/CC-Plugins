@@ -552,3 +552,26 @@ test("a shell leaves the border when its notification enters, its row drawn or n
   expect(await after.find({ key: 'crew-b1' })).toBeUndefined()
   await after.unmount()
 })
+
+// A notification handed over mid-turn, or a shell gone before its process
+// was looked for: the line Claude Code writes last in the task's output says
+// it ended, read again only as the file grows.
+test("a shell leaves the border once its output says it ended", async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const files: Record<string, string> = { ...OUTPUT }
+  engine(on, { files })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  await clock.advance(3000)
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ key: 'crew-b1' })).toBeDefined()
+  await ui.unmount()
+
+  files[`${TASKS}/b1.output`] += '\n[exited with code 0]\n'
+  await clock.advance(3000)
+  const after = await $.ui.mount(BAND)
+  expect(await after.find({ key: 'crew-b1' })).toBeUndefined()
+  await after.unmount()
+})

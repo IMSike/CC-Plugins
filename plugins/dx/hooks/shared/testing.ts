@@ -144,7 +144,8 @@ export function engine(on: On, options: EngineOptions = {}) {
     const path = e.path.replace(/\\/g, '/')
     const kind = folders(path).length > 0 ? 'dir' : Object.keys(files).some(end => path.endsWith(end)) ? 'file' : undefined
     const mtimeMs = Object.entries(mtimes).find(([end]) => path.endsWith(end))?.[1] ?? 0
-    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size: 0, mtimeMs, isLink: false } }
+    const size = kind === 'file' ? (Object.entries(files).find(([end]) => path.endsWith(end))?.[1].length ?? 0) : 0
+    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size, mtimeMs, isLink: false } }
   })
   on('session.usage', () => ({
     value: {

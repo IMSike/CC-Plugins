@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cliAgentUnder, endedTasks, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
+import { cliAgentUnder, endedTasks, hasEndedOutput, outputOf, parsePosixTree, parseWindowsTree, shellOf, tasksDirFor } from './tasks'
 import type { Proc } from './tasks'
 
 const proc = (pid: number, ppid: number, name: string, cmd = name): Proc => ({ pid, ppid, name, cmd })
@@ -66,4 +66,13 @@ test('a notification names the tasks it reports ended, not those still running',
   expect(endedTasks('<task-notification><status>completed</status></task-notification>')).toEqual([])
   expect(endedTasks('<task-id>b1</task-id><status>completed</status>')).toEqual([])
   expect(endedTasks('plain text')).toEqual([])
+})
+
+test("a task's output says it ended by the last line Claude Code writes", () => {
+  expect(hasEndedOutput('ready\n\n[exited with code 0]\n')).toBe(true)
+  expect(hasEndedOutput('oops\n[exited with code 127]')).toBe(true)
+  expect(hasEndedOutput('[killed]\n')).toBe(true)
+  expect(hasEndedOutput('listening on 3000\n')).toBe(false)
+  expect(hasEndedOutput('[exited with code 0]\nstill going\n')).toBe(false)
+  expect(hasEndedOutput('')).toBe(false)
 })

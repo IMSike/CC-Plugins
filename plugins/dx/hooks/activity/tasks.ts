@@ -122,6 +122,12 @@ export function tasksDirFor(dir: string, from: string, to: string): string | und
 // The statuses a task ends with, as a notification states them.
 export const ENDED = /^(completed|failed|killed|stopped|cancelled|canceled|error)$/i
 
+// Whether a task's output says it ended: Claude Code writes a last line of
+// its own as one does, `[exited with code N]`, or `[killed]`.
+export function hasEndedOutput(text: string): boolean {
+  return /(?:^|\n)\[(?:exited with code -?\d+|killed)\]\s*$/.test(text.slice(-200))
+}
+
 // The tasks a notification's text reports ended: one `<task-notification>`
 // block per task, its `<task-id>` and `<status>`.
 export function endedTasks(text: string): string[] {

@@ -13,6 +13,7 @@ import {
   cliAgentUnder,
   ENDED,
   endedTasks,
+  hasEndedOutput,
   outputOf,
   parsePosixTree,
   parseWindowsTree,
@@ -26,14 +27,15 @@ import type { ProcessTree } from './tasks'
 
 // What runs beside the main loop: the session's agents, as the engine lists
 // them, and the background shells and monitors. A task is followed from the
-// call that started it; its end comes from the engine (a stop, a notification)
-// or, as a safety net, from the system's process list, read only when a task
-// is due for a check: soon after it starts (to tell an agent CLI in it), then
-// further and further apart (ADR 0003).
+// call that started it; its end comes from the engine (a stop, a notification,
+// the last line it writes in the task's output) or, as a safety net, from the
+// system's process list, read only when a task is due for a check: soon after
+// it starts (to tell an agent CLI in it), then further and further apart
+// (ADR 0003).
 
 // The agents and the tasks followed, drawn on the band's bottom border.
 const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
-  shape: 'activity-2',
+  shape: 'activity-3',
 })
 
 // The task shown in the terminal pane, its output read every PANE_MS.
@@ -264,6 +266,33 @@ async function checkTasks($: EngineInterface): Promise<void> {
   })
 }
 
+// The tasks whose output ends with the line Claude Code writes as one ends:
+// their end known though no notification said it (one handed over mid-turn,
+// a row not drawn) and their process was never found (gone before the first
+// check, its command not matched). A file is read again only once its size
+// changed.
+async function checkOutputs($: EngineInterface): Promise<void> {
+  const { tasks } = await read($, activity)
+  const sizes = new Map<string, number>()
+  const done = new Set<string>()
+  await Promise.all(
+    tasks.map(async task => {
+      const path = task.output ?? (task.session === undefined ? undefined : knownOutput(task.id, task.session))
+      if (path === undefined) return
+      const stat = await $.fs.stat(path).catch(() => undefined)
+      if (stat?.kind !== 'file' || stat.size === task.size) return
+      sizes.set(task.id, stat.size)
+      const text = await $.fs.read(path).catch(() => undefined)
+      if (text !== undefined && hasEndedOutput(text)) done.add(task.id)
+    }),
+  )
+  if (sizes.size === 0) return
+  await update($, activity, value => ({
+    ...value,
+    tasks: value.tasks.flatMap(task => (done.has(task.id) ? [] : [{ ...task, size: sizes.get(task.id) ?? task.size }])),
+  }))
+}
+
 async function tick($: EngineInterface): Promise<void> {
   await refreshAgents($)
   if (ended.size > 0) {
@@ -271,6 +300,7 @@ async function tick($: EngineInterface): Promise<void> {
     ended.clear()
     await removeTasks($, ids)
   }
+  await checkOutputs($)
   await checkTasks($)
 }
 
