@@ -8,6 +8,7 @@ import { toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import { clockTime, errorText } from '../shared/format'
 import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
+import { everyRefresh } from '../shared/pace'
 import {
   compactNumber,
   countdown,
@@ -38,7 +39,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-6' },
+  { shape: 'settings-7' },
 )
 
 // The main loop's last turn, and a tick each second while it runs, so its
@@ -66,7 +67,7 @@ async function spinTick($: EngineInterface): Promise<void> {
 }
 
 // Countdowns are shown to the minute; the model, effort and branch may change
-// between two turns.
+// between two turns. Paced as set (../shared/pace).
 const REFRESH_MS = 30_000
 const FIVE_HOURS = 5 * 3600
 const SEVEN_DAYS = 7 * 86400
@@ -223,7 +224,7 @@ async function refreshOrLog($: EngineInterface): Promise<void> {
 export async function startStatusline($: EngineInterface): Promise<void> {
   $.clock.every(TICK_MS, () => turnTick($))
   $.clock.every(SPIN_MS, () => spinTick($))
-  $.clock.every(REFRESH_MS, () => refreshOrLog($))
+  await everyRefresh($, REFRESH_MS, async () => (await read($, settings)).value.refresh, () => refreshOrLog($))
   await refreshOrLog($)
 }
 

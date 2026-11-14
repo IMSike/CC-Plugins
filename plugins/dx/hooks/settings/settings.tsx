@@ -27,6 +27,7 @@ import {
   settingsOf,
   SEVEN_DAY_LABELS,
   SHOW_LABELS,
+  REFRESHES,
   SPEEDS,
   thresholdsOf,
 } from '../shared/options'
@@ -48,7 +49,7 @@ import type { StepperProps } from './stepper'
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-6' },
+  { shape: 'settings-7' },
 )
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
@@ -616,6 +617,10 @@ export function registerSettings(on: On): void {
           }), inner),
         ])}
         {section('behavior', 'Comportement', [
+          <Box key="refresh" columnGap={1}>
+            <Text>Rafraîchissement</Text>
+            {segments('refresh', REFRESHES, value.refresh, (current, refresh) => ({ ...current, refresh }))}
+          </Box>,
           toggle('hide-idle-five-hour', value.hideIdleFiveHour, "Masquer la jauge 5 h tant que sa fenêtre n'a pas commencé", current => ({
             ...current,
             hideIdleFiveHour: !current.hideIdleFiveHour,

@@ -128,6 +128,9 @@ export type BandSettings = {
   heatRed: number
   // The glints' and the shuttle's pace.
   speed: 'slow' | 'normal' | 'fast'
+  // How often the activity (3 s) and the band (30 s) refresh: twice as
+  // seldom, as set, or twice as often.
+  refresh: 'slow' | 'normal' | 'fast'
   // The facts of the bottom border, in their order.
   bottomOrder: BottomFact[]
   // Icons of subagents, and of background tasks, in the bottom border before

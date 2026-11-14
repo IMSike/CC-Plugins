@@ -81,6 +81,7 @@ export const DEFAULT_SETTINGS: BandSettings = {
   heatOrange: 50,
   heatRed: 75,
   speed: 'normal',
+  refresh: 'normal',
   bottomOrder: [...BOTTOM_FACTS],
   maxAgentIcons: 5,
   maxTaskIcons: 5,
@@ -127,6 +128,12 @@ export const ANIMATE_LABELS: readonly (readonly [keyof BandSettings['animate'], 
 export const SPEEDS: readonly (readonly [BandSettings['speed'], string])[] = [
   ['slow', 'Lente'],
   ['normal', 'Normale'],
+  ['fast', 'Rapide'],
+]
+
+export const REFRESHES: readonly (readonly [BandSettings['refresh'], string])[] = [
+  ['slow', 'Lent'],
+  ['normal', 'Normal'],
   ['fast', 'Rapide'],
 ]
 
@@ -243,6 +250,7 @@ export function settingsOf(stored: unknown): BandSettings {
     heatOrange,
     heatRed,
     speed: oneOf(value.speed, SPEEDS) ?? DEFAULT_SETTINGS.speed,
+    refresh: oneOf(value.refresh, REFRESHES) ?? DEFAULT_SETTINGS.refresh,
     bottomOrder: orderOf(value.bottomOrder),
     maxAgentIcons: numberOf(value.maxAgentIcons, MAX_ICONS_RANGE) ?? DEFAULT_SETTINGS.maxAgentIcons,
     maxTaskIcons: numberOf(value.maxTaskIcons, MAX_ICONS_RANGE) ?? DEFAULT_SETTINGS.maxTaskIcons,

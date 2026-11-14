@@ -575,3 +575,25 @@ test("a shell leaves the border once its output says it ended", async ($, on) =>
   expect(await after.find({ key: 'crew-b1' })).toBeUndefined()
   await after.unmount()
 })
+
+// The activity refreshes every 3 s, twice as seldom or twice as often as set.
+for (const [refresh, before, after] of [['slow', 3000, 6000], ['fast', 1000, 1500]] as const) {
+  test(`a refresh set ${refresh} finds an ended task after ${after} ms`, async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const files: Record<string, string> = { [`${TASKS}/b1.output`]: 'ready\n\n[exited with code 0]\n' }
+    engine(on, { files, stored: { settings: { refresh } } })
+    shell(on)
+    await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+    await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+    await clock.advance(before)
+    const ui = await $.ui.mount(BAND)
+    expect(await ui.find({ key: 'crew-b1' })).toBeDefined()
+    await ui.unmount()
+
+    await clock.advance(after - before)
+    const later = await $.ui.mount(BAND)
+    expect(await later.find({ key: 'crew-b1' })).toBeUndefined()
+    await later.unmount()
+  })
+}

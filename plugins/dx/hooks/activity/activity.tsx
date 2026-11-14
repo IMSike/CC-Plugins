@@ -6,6 +6,7 @@ import { heldSettings } from '../settings/settings'
 import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
 import { errorText } from '../shared/format'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
+import { everyRefresh } from '../shared/pace'
 import { pressBoard } from '../shared/presses'
 import { envValues, isWindows, powershell } from '../shared/system'
 import { cellWidth, wrappedRows } from './tab-rows'
@@ -47,6 +48,7 @@ const PANE_LINES = 200
 const LOOK_FAST_MS = 30_000
 const LOOK_SLOW_MS = 10_000
 
+// Paced as set (../shared/pace).
 const TICK_MS = 3000
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
 // When a task's process is looked for, from its start: then every last step.
@@ -311,9 +313,7 @@ export async function startActivity($: EngineInterface): Promise<void> {
   ended.clear()
   await update($, activity, () => ({ agents: [], tasks: [] }))
   await refreshAgents($)
-  $.clock.every(TICK_MS, () => {
-    tick($).catch(() => undefined)
-  })
+  await everyRefresh($, TICK_MS, async () => (await heldSettings($)).refresh, () => tick($))
   $.clock.every(PANE_MS, () => {
     refreshPane($).catch(() => undefined)
   })
