@@ -597,3 +597,31 @@ for (const [refresh, before, after] of [['slow', 3000, 6000], ['fast', 1000, 150
     await later.unmount()
   })
 }
+
+// A process list slow to come: the refreshes due meanwhile are passed over,
+// never run beside the one waiting for it.
+test('a refresh never starts while the last one runs', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  let runs = 0
+  let answer = () => {}
+  const late = new Promise<undefined>(resolve => {
+    answer = () => resolve(undefined)
+  })
+  engine(on, {
+    files: OUTPUT,
+    run: () => {
+      runs += 1
+      return late
+    },
+  })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  await clock.advance(3000)
+  const first = runs
+  expect(first).toBeGreaterThan(0)
+  await clock.advance(9000)
+  expect(runs).toBe(first)
+  answer()
+})
