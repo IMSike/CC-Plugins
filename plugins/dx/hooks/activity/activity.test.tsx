@@ -555,7 +555,7 @@ test("a shell leaves the border when its notification enters, its row drawn or n
 
 // A notification handed over mid-turn, or a shell gone before its process
 // was looked for: the line Claude Code writes last in the task's output says
-// it ended, read again only as the file grows.
+// it ended, read once the file holds still from one refresh to the next.
 test("a shell leaves the border once its output says it ended", async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const files: Record<string, string> = { ...OUTPUT }
@@ -569,15 +569,22 @@ test("a shell leaves the border once its output says it ended", async ($, on) =>
   expect(await ui.find({ key: 'crew-b1' })).toBeDefined()
   await ui.unmount()
 
+  // Still growing at the refresh: not read yet.
   files[`${TASKS}/b1.output`] += '\n[exited with code 0]\n'
+  await clock.advance(3000)
+  const growing = await $.ui.mount(BAND)
+  expect(await growing.find({ key: 'crew-b1' })).toBeDefined()
+  await growing.unmount()
+
   await clock.advance(3000)
   const after = await $.ui.mount(BAND)
   expect(await after.find({ key: 'crew-b1' })).toBeUndefined()
   await after.unmount()
 })
 
-// The activity refreshes every 3 s, twice as seldom or twice as often as set.
-for (const [refresh, before, after] of [['slow', 3000, 6000], ['fast', 1000, 1500]] as const) {
+// The activity refreshes every 3 s, twice as seldom or twice as often as set:
+// an ended task's output is read at the second refresh, its size held still.
+for (const [refresh, before, after] of [['slow', 6000, 12000], ['fast', 1500, 3000]] as const) {
   test(`a refresh set ${refresh} finds an ended task after ${after} ms`, async ($, on) => {
     const clock = mock.clock(on, { now: NOW })
     const files: Record<string, string> = { [`${TASKS}/b1.output`]: 'ready\n\n[exited with code 0]\n' }

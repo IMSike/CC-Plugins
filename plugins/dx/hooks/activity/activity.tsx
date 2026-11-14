@@ -268,13 +268,18 @@ async function checkTasks($: EngineInterface): Promise<void> {
   })
 }
 
+// Each followed task's output size at the last refresh, by its id.
+const outputSizes = new Map<string, number>()
+
 // The tasks whose output ends with the line Claude Code writes as one ends:
 // their end known though no notification said it (one handed over mid-turn,
 // a row not drawn) and their process was never found (gone before the first
-// check, its command not matched). A file is read again only once its size
-// changed.
+// check, its command not matched). A file is read once its size held still
+// from one refresh to the next, and not again until it changes: a task
+// writing all the time is not read, an ended one writes no more.
 async function checkOutputs($: EngineInterface): Promise<void> {
   const { tasks } = await read($, activity)
+  const seen = new Map<string, number>()
   const sizes = new Map<string, number>()
   const done = new Set<string>()
   await Promise.all(
@@ -282,12 +287,16 @@ async function checkOutputs($: EngineInterface): Promise<void> {
       const path = task.output ?? (task.session === undefined ? undefined : knownOutput(task.id, task.session))
       if (path === undefined) return
       const stat = await $.fs.stat(path).catch(() => undefined)
-      if (stat?.kind !== 'file' || stat.size === task.size) return
+      if (stat?.kind !== 'file') return
+      seen.set(task.id, stat.size)
+      if (stat.size !== outputSizes.get(task.id) || stat.size === task.size) return
       sizes.set(task.id, stat.size)
       const text = await $.fs.read(path).catch(() => undefined)
       if (text !== undefined && hasEndedOutput(text)) done.add(task.id)
     }),
   )
+  outputSizes.clear()
+  for (const [id, size] of seen) outputSizes.set(id, size)
   if (sizes.size === 0) return
   await update($, activity, value => ({
     ...value,
@@ -311,6 +320,7 @@ async function tick($: EngineInterface): Promise<void> {
 // the next one, never thrown at the clock.
 export async function startActivity($: EngineInterface): Promise<void> {
   ended.clear()
+  outputSizes.clear()
   await update($, activity, () => ({ agents: [], tasks: [] }))
   await refreshAgents($)
   await everyRefresh($, TICK_MS, async () => (await heldSettings($)).refresh, () => tick($))
