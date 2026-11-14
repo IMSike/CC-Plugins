@@ -23,11 +23,11 @@ import {
   NOTE_TABS,
   NOTES_ICONS,
   NOTES_OTHERS_RANGE,
+  REFRESHES,
   SETTINGS_ICONS,
   settingsOf,
   SEVEN_DAY_LABELS,
   SHOW_LABELS,
-  REFRESHES,
   SPEEDS,
   thresholdsOf,
 } from '../shared/options'

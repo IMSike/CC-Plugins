@@ -328,8 +328,8 @@ async function setView($: EngineInterface, shown: NotesView): Promise<void> {
 // What each press drawn in the pane (../shared/press.tsx) does, by its key: a
 // view to show, a retry of the load, another session's note to delete, the
 // list of other sessions to move by a number of rows, the clipboard to
-// paste into the note shown, or its selection to copy or cut. Rebuilt as the pane draws, it holds the drawn
-// ones alone. Every key starts with `notes:`, which the press hook matches.
+// paste into the note shown, or its selection to copy or cut. Rebuilt as
+// the pane draws, it holds the drawn ones alone. Every key starts with `notes:`, which the press hook matches.
 type NotesPress = { view: NotesView } | { retry: true } | { erase: string } | { scroll: number } | { paste: PasteTarget } | { copy: PasteTarget; isCut: boolean }
 let pressActions = new Map<string, NotesPress>()
 
