@@ -8,7 +8,7 @@
 export type Editor = { text: string; cursor: number; top: number; anchor?: number | undefined }
 
 // The selection, its start before its end; undefined when nothing is selected.
-export function selectionOf(editor: Editor): [number, number] | undefined {
+function selectionOf(editor: Editor): [number, number] | undefined {
   const { anchor, cursor } = editor
   if (anchor === undefined || anchor === cursor) return undefined
   return anchor < cursor ? [anchor, cursor] : [cursor, anchor]

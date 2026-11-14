@@ -5,7 +5,7 @@ import type { BandSettings } from '../../types'
 // The refreshes the settings pace (`refresh`): the activity's and the band's.
 
 // How much longer than normal each pace waits between two refreshes.
-export const REFRESH_FACTORS: Record<BandSettings['refresh'], number> = { slow: 2, normal: 1, fast: 0.5 }
+const REFRESH_FACTORS: Record<BandSettings['refresh'], number> = { slow: 2, normal: 1, fast: 0.5 }
 const FASTEST = Math.min(...Object.values(REFRESH_FACTORS))
 
 // Runs `fn` every `ms` times the factor of the pace set, read at each step,
