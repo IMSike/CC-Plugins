@@ -27,6 +27,9 @@ export type StatusSnapshot = {
   contextTokens?: number
   // The model's context window, in tokens.
   contextWindow: number
+  // The window auto-compaction measures against (the model's, or a smaller
+  // one set), in tokens; absent with auto-compaction off, or not read.
+  compactWindow?: number
   fiveHour?: Gauge
   sevenDay?: Gauge
   // When the session began (`$.session.usage()`), in `$.clock.now()` milliseconds.
@@ -52,6 +55,8 @@ export type Task = {
   agent?: CliAgent
   // The file its output is written to, once known.
   output?: string
+  // That file's size when last read for the line written as the task ends.
+  size?: number
   // The session it started in, when read: its output stays in that session's
   // folder after a `/clear`.
   session?: string
@@ -140,6 +145,9 @@ export type BandSettings = {
   notesOthers: number
   // Leave out the 5-hour row while its window has not started.
   hideIdleFiveHour: boolean
+  // The context gauge and its tokens against the auto-compaction window,
+  // not the model's.
+  contextToCompact: boolean
   // The glints and the shuttle run only while Claude works; with
   // `animateWithCrew`, also while a subagent works or a background task runs.
   animateOnlyWorking: boolean

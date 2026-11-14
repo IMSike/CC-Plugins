@@ -48,7 +48,7 @@ import type { StepperProps } from './stepper'
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-4' },
+  { shape: 'settings-5' },
 )
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
@@ -615,6 +615,10 @@ export function registerSettings(on: On): void {
           toggle('hide-idle-five-hour', value.hideIdleFiveHour, "Masquer la jauge 5 h tant que sa fenêtre n'a pas commencé", current => ({
             ...current,
             hideIdleFiveHour: !current.hideIdleFiveHour,
+          }), inner),
+          toggle('context-to-compact', value.contextToCompact, "Jauge du contexte rapportée à la fenêtre d'auto-compactage", current => ({
+            ...current,
+            contextToCompact: !current.contextToCompact,
           }), inner),
           toggle('animate-only-working', value.animateOnlyWorking, 'Animer seulement pendant que Claude travaille', current => ({
             ...current,

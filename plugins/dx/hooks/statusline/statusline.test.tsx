@@ -338,12 +338,14 @@ test('stored settings hide elements, and may keep an idle 5-hour row', async ($,
 
 // A plugin beneath dx (the builtin tier) whose usage reads are malformed but
 // the fourth: the band's refreshes fail three times, succeed, then fail again.
+// A read of the breakdown, for the auto-compaction window, is not counted.
 const FAILING_USAGE = {
   name: 'failing-usage',
   tier: 'builtin' as const,
   register: (on: On) => {
     let usageReads = 0
     on('session.usage', async (_, e, next) => {
+      if (e.breakdown !== undefined) return next(e)
       usageReads += 1
       return usageReads === 4 ? next(e) : { value: { rateLimits: null } as never }
     })
@@ -665,5 +667,29 @@ test('a model that takes no effort shows none', async ($, on) => {
   // No separator after the model: the border runs on.
   const top = (await ui.findAll({ type: 'Text', in: 'frame-top' })).map(text => text.text).join('')
   expect(top).toMatch(/^╭─ ✻ Opus 5\.5 ──/)
+  await ui.unmount()
+})
+
+// 24k tokens of an auto-compaction window of 80k: 30 %, by default; set so,
+// against the model's 200k window as before.
+test('the context gauge measures against the auto-compaction window, unless set otherwise', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { compactWindow: 80000 })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /30%/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toMatch(/24k\/80k$/)
+  await ui.unmount()
+})
+
+test('the context gauge set against the model window ignores the auto-compaction one', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { compactWindow: 80000, stored: { settings: { contextToCompact: false } } })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /12%/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toMatch(/24k\/200k$/)
   await ui.unmount()
 })

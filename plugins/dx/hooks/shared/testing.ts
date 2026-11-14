@@ -41,6 +41,9 @@ type EngineOptions = {
   listed?: string[]
   // What dx's store holds.
   stored?: Record<string, unknown>
+  // The auto-compaction window a breakdown of the context reads; none, its
+  // breakdown absent.
+  compactWindow?: number
   // false: the 5-hour window has not started.
   fiveHour?: boolean
   // Calls refused, as by a session not there yet; `store.set <key>`, the
@@ -73,6 +76,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     listed = [],
     stored = {},
     fiveHour = true,
+    compactWindow,
     refused = new Set<string>(),
     session = { id: 's1' },
     beforeStart = async () => {},
@@ -147,10 +151,17 @@ export function engine(on: On, options: EngineOptions = {}) {
     const size = kind === 'file' ? (Object.entries(files).find(([end]) => path.endsWith(end))?.[1].length ?? 0) : 0
     return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size, mtimeMs, isLink: false } }
   })
-  on('session.usage', () => ({
+  on('session.usage', (_, e) => ({
     value: {
       startedAt: session.startedAt ?? NOW - 3600_000,
-      context: { window: 200000, tokens: 24000, percent: 12 },
+      context: {
+        window: 200000,
+        tokens: 24000,
+        percent: 12,
+        ...(e.breakdown !== undefined && compactWindow !== undefined
+          ? { breakdown: { rawMaxTokens: compactWindow, isAutoCompactEnabled: true } as never }
+          : {}),
+      },
       rateLimits: rateLimits
         ? [
             ...(fiveHour ? [{ kind: 'five_hour', percentUsed: 20, resetsAt: '2026-10-25T13:24:00Z' }] : []),

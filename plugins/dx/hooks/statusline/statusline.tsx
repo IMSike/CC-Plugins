@@ -30,7 +30,7 @@ import type { HeadPaths } from './git'
 // Change the tag when StatusSnapshot's fields change: it declines what an
 // earlier version stored, which outlives a reload.
 const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
-  shape: 'statusline-3',
+  shape: 'statusline-4',
 })
 
 // What the band shows, animates and is colored with, set in ../settings/settings
@@ -38,7 +38,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-4' },
+  { shape: 'settings-5' },
 )
 
 // The main loop's last turn, and a tick each second while it runs, so its
@@ -153,6 +153,22 @@ function pathKind($: EngineInterface, path: string): Promise<'file' | 'dir' | 'o
   return $.fs.stat(path).then(stat => stat.kind, () => undefined)
 }
 
+// The window auto-compaction measures against, as /context names it: the
+// model's own, or a smaller one set (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the
+// settings); undefined with auto-compaction off, or when it cannot be read.
+// Read once per COMPACT_WINDOW_MS and model: the engine estimates the whole
+// context to answer it.
+const COMPACT_WINDOW_MS = 300_000
+let compactWindow: { model: string; readAt: number; tokens: number | undefined } | undefined
+
+async function compactWindowOf($: EngineInterface, model: string, now: number): Promise<number | undefined> {
+  if (compactWindow?.model === model && now - compactWindow.readAt < COMPACT_WINDOW_MS) return compactWindow.tokens
+  const breakdown = (await $.session.usage({ breakdown: 'summary' }).catch(() => undefined))?.context.breakdown
+  const tokens = breakdown?.isAutoCompactEnabled === true ? breakdown.rawMaxTokens : undefined
+  compactWindow = { model, readAt: now, tokens }
+  return tokens
+}
+
 async function refresh($: EngineInterface): Promise<void> {
   const read = ++choiceReads
   const [model, cwd, usage, setting, home, now] = await Promise.all([
@@ -175,6 +191,7 @@ async function refresh($: EngineInterface): Promise<void> {
     context: usage.context.percent,
     contextTokens: usage.context.tokens,
     contextWindow: usage.context.window,
+    compactWindow: await compactWindowOf($, model, now),
     fiveHour: gaugeOf(usage.rateLimits, 'five_hour'),
     sevenDay: gaugeOf(usage.rateLimits, 'seven_day'),
     startedAt: usage.startedAt,
@@ -288,6 +305,12 @@ export function registerStatusline(on: On): void {
     const speed = SPEED_FACTORS[options.speed]
     // The days of its durations, written as the 7-day gauge's label.
     const day = dayUnitOf(options.sevenDayLabel)
+    // The context gauge and its tokens: against the auto-compaction window
+    // when set so and known, else the model's.
+    const contextWindow = (options.contextToCompact ? status.compactWindow : undefined) ?? status.contextWindow
+    const contextPercent = contextWindow !== status.contextWindow && status.contextTokens !== undefined
+      ? Math.round((status.contextTokens / contextWindow) * 100)
+      : status.context
 
     // Top border: `╭─ ✻ Opus 5.5 ─ ▰▰▰▰▱ xhigh ───── ~\repo ⎇ dev ─ ✎ ⚙ ─╮`;
     // the effort set, until a request confirms it, gray and asked: `xhigh?`.
@@ -317,7 +340,7 @@ export function registerStatusline(on: On): void {
       end: !show.end || last?.endedAt === undefined ? undefined : `fin ${clockTime(last.endedAt)}`,
       total: show.total ? `total ${duration((now - status.startedAt) / 1000, day)}` : undefined,
       tokens: show.tokens && status.contextTokens !== undefined
-        ? `${compactNumber(status.contextTokens)}/${compactNumber(status.contextWindow)}`
+        ? `${compactNumber(status.contextTokens)}/${compactNumber(contextWindow)}`
         : undefined,
     }
     const facts = options.bottomOrder.flatMap(fact => factOf[fact] ?? [])
@@ -418,7 +441,7 @@ export function registerStatusline(on: On): void {
       )
     }
     const rows = [
-      ...(show.context ? [(line: number) => row(line, 'ctx', status.context)] : []),
+      ...(show.context ? [(line: number) => row(line, 'ctx', contextPercent)] : []),
       ...(fiveHourRow
         ? [(line: number) => row(line, '5h', status.fiveHour?.percent, status.fiveHour && { resetsAt: status.fiveHour.resetsAt, seconds: FIVE_HOURS })]
         : []),
