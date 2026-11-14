@@ -1016,3 +1016,51 @@ test("an empty clipboard's error, or one holding no text, pastes nothing and say
   expect(await pane.find({ type: 'Text', text: /collage impossible/ })).toBeUndefined()
   await pane.unmount()
 })
+
+// The editor holds the pointer: it selects itself, by ctrl+a or a drag. Claude
+// Code keeps ctrl+c and ctrl+x: while a selection is made, Couper and Copier
+// stand beside Coller.
+test('a note selected whole or by a drag is copied or cut by its buttons', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on)
+  const copies: string[] = []
+  on('ui.copy', (_, e) => {
+    copies.push(e.text)
+
+    return { value: { isCopied: true as const } }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  const at = { in: 'note-global-s1' }
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', ...at })
+  await pane.key({ key: 'pain', ...at })
+  await pane.key({ key: 'return', ...at })
+  await pane.key({ key: 'lait', ...at })
+  expect(await pane.find({ key: 'notes:copy' })).toBeUndefined()
+
+  // All of it selected, then copied: the note stays.
+  await pane.key({ key: 'a', ctrl: true, ...at })
+  expect((await pane.findAll({ type: 'Text', text: /^lait$/, ...at })).some(text => text.props.inverse === true)).toBe(true)
+  await click(pane, 'notes:copy')
+  expect(copies).toEqual(['pain\nlait'])
+  expect(store.get('notes.global')).toEqual({ text: 'pain\nlait', updatedAt: NOW })
+
+  // Part of it selected by a drag, then cut.
+  await pane.pointer({ type: 'down', x: 1, y: 0, button: 'left', ...at })
+  await pane.pointer({ type: 'move', x: 3, y: 0, button: 'left', ...at })
+  await pane.pointer({ type: 'up', x: 3, y: 0, button: 'left', ...at })
+  await click(pane, 'notes:cut')
+  expect(copies).toEqual(['pain\nlait', 'ai'])
+  expect(store.get('notes.global')).toEqual({ text: 'pn\nlait', updatedAt: NOW })
+  expect(await pane.find({ key: 'notes:cut' })).toBeUndefined()
+
+  // A click alone selects nothing; typing replaces a selection.
+  await pane.pointer({ type: 'down', x: 1, y: 0, button: 'left', ...at })
+  await pane.pointer({ type: 'up', x: 1, y: 0, button: 'left', ...at })
+  expect(await pane.find({ key: 'notes:copy' })).toBeUndefined()
+  await pane.key({ key: 'a', ctrl: true, ...at })
+  await pane.key({ key: 'œufs', ...at })
+  expect(store.get('notes.global')).toEqual({ text: 'œufs', updatedAt: NOW })
+  expect(await pane.find({ key: 'notes:copy' })).toBeUndefined()
+  await pane.unmount()
+})

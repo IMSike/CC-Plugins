@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cleanPaste, clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, pasted, refusalOf, rowOf, rowsOf, thousands } from './editor-model'
+import { cleanPaste, clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, pasted, pointed, refusalOf, rowOf, rowRuns, rowsOf, selectedText, thousands } from './editor-model'
 import type { Editor } from './editor-model'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
@@ -258,4 +258,62 @@ test("another session's text is shown, the cursor kept within it", () => {
 test("another session's text wins over keys under way", () => {
   const state = drawn(editor('ab', '', ['a', 'ab']), 'écrit ailleurs')
   expect(state).toMatchObject({ text: 'écrit ailleurs', sent: [] })
+})
+
+test('ctrl+a selects the whole text; a key then replaces it, a move drops it', () => {
+  const all = keyed(at('ab\ncd', 1), { key: 'a', ctrl: true }, 10, 5)
+  expect(all).toEqual({ ...at('ab\ncd'), anchor: 0 })
+  expect(selectedText(all)).toBe('ab\ncd')
+  expect(keyed(all, { key: 'x' }, 10, 5)).toEqual(at('x'))
+  expect(keyed(all, { key: 'return' }, 10, 5)).toEqual(at('\n'))
+  expect(keyed(all, { key: 'left' }, 10, 5)).toEqual(at('ab\ncd', 4))
+  // ctrl+c, as every shortcut, leaves it.
+  expect(keyed(all, { key: 'c', ctrl: true }, 10, 5)).toBe(all)
+  // Nothing to select in an empty note.
+  const empty = at('')
+  expect(keyed(empty, { key: 'a', ctrl: true }, 10, 5)).toBe(empty)
+})
+
+test('backspace and delete erase the selection, a paste replaces it', () => {
+  // 'b\nc' selected, from the end backwards.
+  const some = { ...at('ab\ncd', 1), anchor: 4 }
+  expect(selectedText(some)).toBe('b\nc')
+  for (const key of [{ key: 'backspace' }, { key: 'delete' }, { key: 'backspace', ctrl: true as const }]) {
+    expect(keyed(some, key, 10, 5)).toEqual(at('ad', 1))
+  }
+  expect(pasted(some, 'XY', 10, 5)).toEqual(at('aXYd', 3))
+  // An empty paste, Couper's, erases it; with nothing selected, nothing.
+  expect(pasted(some, '', 10, 5)).toEqual(at('ad', 1))
+  const none = at('ab', 1)
+  expect(pasted(none, '', 10, 5)).toBe(none)
+})
+
+test('a drag selects from where the button went down, a click alone nothing', () => {
+  // Rows: 'abcd' 'ef' 'gh'.
+  const text = 'abcdef\ngh'
+  const down = pointed(at(text, 0), 'down', 1, 0, 4, 5)
+  expect(down).toEqual({ ...at(text, 1), anchor: 1 })
+  expect(pointed(down, 'up', 1, 0, 4, 5)).toEqual(at(text, 1))
+  const dragged = pointed(down, 'move', 1, 2, 4, 5)
+  expect(selectedText(dragged)).toBe('bcdef\ng')
+  expect(pointed(dragged, 'up', 1, 2, 4, 5)).toBe(dragged)
+  // Past the bottom edge, two rows shown: the rows scroll.
+  expect(pointed(down, 'move', 0, 2, 4, 2).top).toBe(1)
+  // A move with no button down selects nothing.
+  expect(pointed(at(text), 'move', 0, 0, 4, 5)).toEqual(at(text))
+})
+
+test('a row draws the selection inverse, else the cursor', () => {
+  const text = 'abcd\n\nef'
+  const rows = rowsOf(text, 10)
+  const some = { ...at(text, 7), anchor: 2 }
+  expect(rows.map(row => rowRuns(some, row, false))).toEqual([
+    [{ text: 'ab' }, { text: 'cd', inverse: true }],
+    [{ text: ' ', inverse: true }],
+    [{ text: 'e', inverse: true }, { text: 'f' }],
+  ])
+  const row = rows[0] ?? { start: 0, end: 0 }
+  expect(rowRuns(at(text, 1), row, true)).toEqual([{ text: 'a' }, { text: 'b', inverse: true }, { text: 'cd' }])
+  expect(rowRuns(at(text, 1), row, false)).toEqual([{ text: 'abcd' }])
+  expect(rowRuns(at(text), rows[1] ?? row, false)).toEqual([{ text: ' ' }])
 })

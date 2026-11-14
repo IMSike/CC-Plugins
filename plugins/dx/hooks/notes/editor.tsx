@@ -1,6 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
-import { clicked, drawn, keyed, pasted, refusalOf, rowOf, rowsOf } from './editor-model'
+import { drawn, keyed, pasted, pointed, refusalOf, rowOf, rowRuns, rowsOf, selectedText } from './editor-model'
 import type { EditorState } from './editor-model'
 
 // The notes editor, drawn on the surface's own thread: a click gives it the
@@ -8,11 +8,16 @@ import type { EditorState } from './editor-model'
 // change is posted to the hooks module, which keeps it. A paste in the
 // terminal goes to the prompt: the pane's paste button reads the system
 // clipboard, whose text reaches the editor through the hooks module (`paste`).
+// The editor holds the pointer, so the terminal selects nothing there: the
+// editor selects itself, by a drag or ctrl+a, and posts what it selected
+// (`selected`) once the selection is made or dropped, for the hooks module
+// to draw Couper and Copier: Claude Code keeps ctrl+c and ctrl+x for itself.
 
 // A paste the hooks module read from the clipboard for this note: taken
 // once, its `seq` past the last one the editor took. `isTooLong`, it no
 // longer fits with the note as stored now: given without its text, it is
-// refused, and taken all the same.
+// refused, and taken all the same. An empty one, Couper's, erases the
+// selection.
 export type EditorPaste = { seq: number; text: string; isTooLong: boolean }
 
 export type EditorProps = {
@@ -44,73 +49,102 @@ function opened(text: string): EditorState {
   return { text, cursor: text.length, top: 0, active: false, given: text, sent: [], pasted: 0 }
 }
 
-// Each instance's latest props, and how a paste is taken there, for its
-// listeners and its redraws.
-const instances = new WeakMap<object, { props: EditorProps; take: (state: EditorState, paste: EditorPaste | null) => void }>()
+// Each instance's latest props, how a paste is taken there, and how a
+// selection a redraw dropped is posted, for its listeners and its redraws.
+type Instance = {
+  props: EditorProps
+  take: (state: EditorState, paste: EditorPaste | null) => void
+  announce: (state: EditorState) => void
+}
+const instances = new WeakMap<object, Instance>()
 
 const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   const { Box, Text } = surface.elements
   const width = () => Math.max(1, surface.columns || 40)
 
   if (surface.state === undefined) {
+    // The selection the hooks module was last told of; null before any post.
+    let posted: string | null = null
     // Every post names the note and the last paste taken, which the hooks
-    // module then lets go.
-    const post = (data: { text: string } | { refused: string } | Record<string, never>, pasted: number) =>
-      surface.post({ tab: latest.props.tab, session: latest.props.session, pasted, ...data })
-    // An edit from `state`, the editor's state unless it is being opened.
-    const apply = (next: EditorState, state = surface.state) => {
+    // module then lets go, and the selection when it changed since the last
+    // post: a later post in the same frame replaces an undelivered one.
+    const post = (data: { text: string } | { refused: string } | Record<string, never>, from: EditorState) => {
+      const selection = selectedText(from)
+      const selected: { selected: string } | Record<string, never> = selection === posted ? {} : { selected: selection }
+      surface.post({ tab: latest.props.tab, session: latest.props.session, pasted: from.pasted, ...selected, ...data })
+      posted = selection
+    }
+    // The selection posted, when it changed.
+    const announce = (state: EditorState) => {
+      if (selectedText(state) !== posted) post({}, state)
+    }
+    // An edit from `state`, the editor's state unless it is being opened;
+    // `isDragging`, the selection still being made: posted as the button
+    // comes up.
+    const apply = (next: EditorState, state = surface.state, isDragging = false) => {
       if (state === undefined || next === state) return
       if (next.text === state.text) {
         surface.setState(next)
         // A paste with nothing left once cleaned: taken all the same.
-        if (next.pasted !== state.pasted) post({}, next.pasted)
+        if (next.pasted !== state.pasted) post({}, next)
+        else if (!isDragging) announce(next)
         return
       }
       // Too long, or past the store's room: not applied, the hooks module
       // told, which says why. A paste refused is taken all the same.
       const refused = refusalOf(state.text, next.text, latest.props.max)
       if (refused !== undefined) {
-        if (state.active !== next.active || state.pasted !== next.pasted) surface.setState({ ...state, active: next.active, pasted: next.pasted })
-        post({ refused }, next.pasted)
+        const kept = { ...state, active: next.active, pasted: next.pasted }
+        if (state.active !== next.active || state.pasted !== next.pasted) surface.setState(kept)
+        post({ refused }, kept)
         return
       }
       surface.setState({ ...next, sent: [...next.sent, next.text].slice(-SENT_KEPT) })
-      post({ text: next.text }, next.pasted)
+      post({ text: next.text }, next)
     }
     // A paste not taken yet, at the cursor: the same limits as a key, the
     // keyboard left where it was. One too long now is refused unseen.
     const take = (state: EditorState, paste: EditorPaste | null) => {
       if (paste === null || paste.seq <= state.pasted) return
       if (paste.isTooLong) {
-        surface.setState({ ...state, pasted: paste.seq })
-        post({ refused: 'too-long' }, paste.seq)
+        const kept = { ...state, pasted: paste.seq }
+        surface.setState(kept)
+        post({ refused: 'too-long' }, kept)
         return
       }
       apply({ ...state, ...pasted(state, paste.text, width(), latest.props.rows), pasted: paste.seq }, state)
     }
-    const latest = { props, take }
+    const latest: Instance = { props, take, announce }
     instances.set(surface, latest)
     const first = opened(props.text)
     surface.setState(first)
     take(first, props.paste)
+    // Opened with nothing selected: a selection kept for this note is gone.
+    announce(first)
     surface.onKey(event => {
       const state = surface.state
       if (state === undefined) return
       const next = keyed(state, event, width(), latest.props.rows)
-      apply(next === state && state.active ? state : { ...state, ...next, active: true })
+      apply(next === state && state.active ? state : { ...state, ...next, active: true }, state)
     })
     surface.onPointer(event => {
       const state = surface.state
-      if (state === undefined || event.type !== 'down') return
-      apply({ ...state, ...clicked(state, event.x, event.y, width()), active: true })
+      if (state === undefined || event.button === 'middle' || event.button === 'right') return
+      if (event.type === 'down' || (event.type === 'move' && event.button === 'left') || event.type === 'up') {
+        const next = { ...state, ...pointed(state, event.type, event.x, event.y, width(), latest.props.rows), active: true }
+        apply(next, state, event.type !== 'up')
+      }
     })
   } else {
     const latest = instances.get(surface)
     const state = drawn(surface.state, props.text)
-    if (state !== surface.state) surface.setState(state)
+    const isRedrawn = state !== surface.state
+    if (isRedrawn) surface.setState(state)
     if (latest !== undefined) {
       latest.props = props
       latest.take(state, props.paste)
+      // Another session's text drops the selection.
+      if (isRedrawn) latest.announce(state)
     }
   }
 
@@ -130,16 +164,10 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   return (
     <Box flexDirection="column" height={props.rows}>
       {shown.map((row, index) => {
-        const line = state.text.slice(row.start, row.end)
-        if (!state.active || state.top + index !== at) return <Text>{line === '' ? ' ' : line}</Text>
-        const column = state.cursor - row.start
-        return (
-          <Text>
-            {line.slice(0, column)}
-            <Text inverse>{line.charAt(column) || ' '}</Text>
-            {line.slice(column + 1)}
-          </Text>
-        )
+        const runs = rowRuns(state, row, state.active && state.top + index === at)
+        const [only] = runs
+        if (runs.length === 1 && only !== undefined && only.inverse === undefined) return <Text>{only.text}</Text>
+        return <Text>{runs.map(run => (run.inverse ? <Text inverse>{run.text}</Text> : run.text))}</Text>
       })}
     </Box>
   )

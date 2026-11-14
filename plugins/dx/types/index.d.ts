@@ -189,6 +189,9 @@ export type NotesView = { tab: NoteTab; other?: string }
 // notes not loaded, the project's root unknown), and why.
 export type NotesUnsaved = { key: string | null; reason: string }
 
+// What a note's editor selected, by its store key: Couper and Copier copy it.
+export type NotesSelection = { key: string; text: string }
+
 // A paste read from the system clipboard for the note under `key`, given to
 // its editor: `seq` tells it from the one before, `text` is what goes in.
 export type NotesPaste = { key: string; seq: number; text: string }
@@ -239,6 +242,8 @@ declare module 'claude-code' {
       // drawn (one opened since too) until an editor posts it taken; null
       // then.
       notesPaste: Shaped<NotesPaste | null>
+      // What the note's editor selected, null once dropped.
+      notesSelection: Shaped<NotesSelection | null>
       // The first of the other sessions' notes listed, the list scrolled.
       notesOthersAt: Shaped<number>
       panel: Shaped<PanelView>

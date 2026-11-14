@@ -1,9 +1,33 @@
-// The notes editor's model: a text, a cursor in it, and the first visual row
-// shown. Lines wrap at the editor's width; the cursor moves over the visual
-// rows, as in a plain notepad. Last, how ./editor takes in the text the hooks
-// draw again.
+// The notes editor's model: a text, a cursor in it, a selection, and the
+// first visual row shown. Lines wrap at the editor's width; the cursor moves
+// over the visual rows, as in a plain notepad. Last, how ./editor takes in
+// the text the hooks draw again.
 
-export type Editor = { text: string; cursor: number; top: number }
+// `anchor`, where the selection starts, the cursor where it ends: none
+// selected while undefined or at the cursor.
+export type Editor = { text: string; cursor: number; top: number; anchor?: number | undefined }
+
+// The selection, its start before its end; undefined when nothing is selected.
+export function selectionOf(editor: Editor): [number, number] | undefined {
+  const { anchor, cursor } = editor
+  if (anchor === undefined || anchor === cursor) return undefined
+  return anchor < cursor ? [anchor, cursor] : [cursor, anchor]
+}
+
+// The text selected, empty when none is.
+export function selectedText(editor: Editor): string {
+  const range = selectionOf(editor)
+  return range === undefined ? '' : editor.text.slice(...range)
+}
+
+// The editor with the selection taken out, the cursor where it was, nothing
+// selected any more.
+function cut(editor: Editor): Editor {
+  const range = selectionOf(editor)
+  if (range === undefined) return { ...editor, anchor: undefined }
+  const { text } = editor
+  return { ...editor, text: text.slice(0, range[0]) + text.slice(range[1]), cursor: range[0], anchor: undefined }
+}
 
 // The longest note, counted as encodedLength counts it: the 100,000
 // characters a Client's props and posts may take are counted on their JSON
@@ -167,9 +191,10 @@ function scrolled(editor: Editor, width: number, height: number): Editor {
   return top === editor.top ? editor : { ...editor, top }
 }
 
+// `typed` at the cursor, in place of the selection.
 function insert(editor: Editor, typed: string): Editor {
-  const { text, cursor } = editor
-  return { ...editor, text: text.slice(0, cursor) + typed + text.slice(cursor), cursor: cursor + typed.length }
+  const { text, cursor } = cut(editor)
+  return { ...editor, text: text.slice(0, cursor) + typed + text.slice(cursor), cursor: cursor + typed.length, anchor: undefined }
 }
 
 // The cursor on row `target`, at the column it had on its own row.
@@ -181,6 +206,9 @@ function toRow(editor: Editor, rows: readonly Row[], target: number): Editor {
 }
 
 // The editor after one key; the same object when the key changes nothing.
+// ctrl+a selects the whole text; with a selection, backspace and delete
+// erase it, a character or a line break replaces it, a move drops it, a
+// shortcut leaves it.
 export function keyed(
   editor: Editor,
   event: Key,
@@ -188,6 +216,12 @@ export function keyed(
   height: number,
 ): Editor {
   const { text, cursor } = editor
+  if (event.ctrl === true && event.key === 'a') {
+    return text === '' || (editor.anchor === 0 && cursor === text.length) ? editor : scrolled({ ...editor, anchor: 0, cursor: text.length }, width, height)
+  }
+  if (selectionOf(editor) !== undefined && (event.key === 'backspace' || event.key === 'delete')) {
+    return scrolled(cut(editor), width, height)
+  }
   const rows = rowsOf(text, width)
   const row = rows[rowOf(rows, cursor)] ?? { start: 0, end: 0 }
   // A word at a time: with ctrl.
@@ -195,7 +229,7 @@ export function keyed(
   let next: Editor
   if (event.key === 'backspace' && byWord) {
     const from = wordLeft(text, cursor)
-    next = { ...editor, text: text.slice(0, from) + text.slice(cursor), cursor: from }
+    next = { ...editor, text: text.slice(0, from) + text.slice(cursor), cursor: from, anchor: undefined }
     return next.text === text ? editor : scrolled(next, width, height)
   }
   switch (event.key) {
@@ -243,8 +277,8 @@ export function keyed(
       next = insert(editor, text)
     }
   }
-  if (next.text === text && next.cursor === cursor) return editor
-  return scrolled(next, width, height)
+  if (next.text === text && next.cursor === cursor && editor.anchor === undefined) return editor
+  return scrolled({ ...next, anchor: undefined }, width, height)
 }
 
 // What a paste puts in a note: its line ends as the editor writes them
@@ -257,11 +291,13 @@ export function cleanPaste(text: string): string {
     .replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, '')
 }
 
-// The editor after a paste at its cursor, the cursor after it; the same
-// object when nothing is left of it.
+// The editor after a paste at its cursor, in place of the selection, the
+// cursor after it; an empty one (Couper's) erases the selection. The same
+// object when that changes nothing.
 export function pasted(editor: Editor, text: string, width: number, height: number): Editor {
   const clean = cleanPaste(text)
-  return clean === '' ? editor : scrolled(insert(editor, clean), width, height)
+  if (clean === '' && selectionOf(editor) === undefined) return editor
+  return scrolled(insert(editor, clean), width, height)
 }
 
 // The cursor where the person clicked, in the editor's cells.
@@ -270,6 +306,50 @@ export function clicked(editor: Editor, x: number, y: number, width: number): Ed
   const row = rows[Math.max(0, Math.min(rows.length - 1, editor.top + y))]
   if (row === undefined) return editor
   return { ...editor, cursor: Math.min(row.start + Math.max(0, x), row.end) }
+}
+
+// The editor after the pointer, in its cells: a press puts the cursor under
+// it, a selection starting there; a drag, the button held, moves the cursor,
+// the selection following, the rows scrolled past an edge; a release with
+// nothing selected leaves no selection.
+export function pointed(editor: Editor, type: 'down' | 'move' | 'up', x: number, y: number, width: number, height: number): Editor {
+  if (type === 'down') {
+    const under = clicked(editor, x, y, width)
+    return { ...under, anchor: under.cursor }
+  }
+  if (type === 'move') {
+    if (editor.anchor === undefined) return editor
+    const under = clicked(editor, x, y, width)
+    return under.cursor === editor.cursor ? editor : scrolled(under, width, height)
+  }
+  return editor.anchor !== undefined && editor.anchor === editor.cursor ? { ...editor, anchor: undefined } : editor
+}
+
+// One run of a row as drawn, inverse for the selection or the cursor.
+export type EditorRun = { text: string; inverse?: true }
+
+// A row as drawn: the part selected inverse, a selected empty line as an
+// inverse space; nothing selected, the cell under the cursor inverse when
+// `hasCursor`. An empty row is a space.
+export function rowRuns(editor: Editor, row: Row, hasCursor: boolean): EditorRun[] {
+  const line = editor.text.slice(row.start, row.end)
+  const range = selectionOf(editor)
+  let runs: EditorRun[]
+  if (range !== undefined) {
+    const from = Math.min(Math.max(range[0] - row.start, 0), line.length)
+    const to = Math.min(Math.max(range[1] - row.start, 0), line.length)
+    const isEmptySelected = line === '' && range[0] <= row.start && row.start < range[1]
+    runs = isEmptySelected
+      ? [{ text: ' ', inverse: true }]
+      : [{ text: line.slice(0, from) }, { text: line.slice(from, to), inverse: true }, { text: line.slice(to) }]
+  } else if (hasCursor) {
+    const column = editor.cursor - row.start
+    runs = [{ text: line.slice(0, column) }, { text: line.charAt(column) || ' ', inverse: true }, { text: line.slice(column + 1) }]
+  } else {
+    runs = [{ text: line }]
+  }
+  const shown = runs.filter(run => run.text !== '')
+  return shown.length === 0 ? [{ text: ' ' }] : shown
 }
 
 // The editor as its surface keeps it: whether it has the keyboard; `given`,
@@ -286,5 +366,5 @@ export function drawn(state: EditorState, text: string): EditorState {
   const echoed = state.sent.lastIndexOf(text)
   if (echoed >= 0) return { ...state, given: text, sent: state.sent.slice(echoed + 1) }
   const cursor = Math.min(state.cursor, text.length)
-  return { ...state, text, cursor, top: Math.min(state.top, text.slice(0, cursor).split('\n').length - 1), given: text, sent: [] }
+  return { ...state, text, cursor, top: Math.min(state.top, text.slice(0, cursor).split('\n').length - 1), anchor: undefined, given: text, sent: [] }
 }
