@@ -244,16 +244,19 @@ async function select($: EngineInterface, key: string, text: string): Promise<vo
 
 // Copier pressed, or Couper: the selection of the note `target` on the
 // clipboard of the surface pressed; cut, it is then erased from the note as
-// an empty paste (pasteNote). Why it could not be copied is said in a toast.
+// an empty paste (pasteNote).
 async function copySelection($: EngineInterface, target: PasteTarget, surface: RenderSurface, isCut: boolean): Promise<void> {
   const selection = await read($, notesSelection)
   if (selection === null || selection.key !== target.key) return
-  const copied = await $.ui.copy({ text: selection.text, surface }).catch((error: unknown) => ({ isCopied: false as const, reason: errorText(error) }))
-  if (!copied.isCopied) {
-    $.ui.toast(`dx : copie impossible (${copied.reason})`)
-    return
-  }
-  if (isCut) await pasteNote($, target, '')
+  if ((await copyText($, selection.text, surface)) && isCut) await pasteNote($, target, '')
+}
+
+// `text` on the clipboard of `surface`: whether it took. Why not is said in
+// a toast.
+async function copyText($: EngineInterface, text: string, surface: RenderSurface): Promise<boolean> {
+  const copied = await $.ui.copy({ text, surface }).catch((error: unknown) => ({ isCopied: false as const, reason: errorText(error) }))
+  if (!copied.isCopied) $.ui.toast(`dx : copie impossible (${copied.reason})`)
+  return copied.isCopied
 }
 
 // The paste `seq` and those before it taken by their editor: let go, their
@@ -390,9 +393,11 @@ export function registerNotes(on: On): void {
     const data = e.data as { tab?: unknown; session?: unknown; text?: unknown; refused?: unknown; pasted?: unknown; selected?: unknown }
     if (!isTab(data.tab) || typeof data.session !== 'string') return next(e)
     // What the editor selected now, its note's key known only once loaded.
+    // Copied at once too when set so, as the terminal copies its own.
     if (typeof data.selected === 'string') {
       const value = await read($, notes)
       if (value !== null) await select($, keyOf(value, data.tab, data.session), data.selected).catch(() => undefined)
+      if (data.selected !== '' && (await heldSettings($)).copyOnSelect) await copyText($, data.selected, e.surface)
     }
     // Taken, the paste is never given again (takenPaste): its clearing may
     // fail, and the text the editor posts is saved all the same.

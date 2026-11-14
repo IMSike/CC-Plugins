@@ -1022,7 +1022,8 @@ test("an empty clipboard's error, or one holding no text, pastes nothing and say
 // stand beside Coller.
 test('a note selected whole or by a drag is copied or cut by its buttons', async ($, on) => {
   mock.clock(on, { now: NOW })
-  const store = engine(on)
+  // Not copied as soon as selected: the buttons alone copy.
+  const store = engine(on, { stored: { settings: { copyOnSelect: false } } })
   const copies: string[] = []
   on('ui.copy', (_, e) => {
     copies.push(e.text)
@@ -1062,5 +1063,31 @@ test('a note selected whole or by a drag is copied or cut by its buttons', async
   await pane.key({ key: 'œufs', ...at })
   expect(store.get('notes.global')).toEqual({ text: 'œufs', updatedAt: NOW })
   expect(await pane.find({ key: 'notes:copy' })).toBeUndefined()
+  await pane.unmount()
+})
+
+// By default, a selection is copied as soon as it is made, as the terminal
+// copies its own: the button up, or ctrl+a; a click alone copies nothing.
+test("a note's selection is copied as soon as it is made", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { stored: { 'notes.global': { text: 'pain lait', updatedAt: NOW } } })
+  const copies: string[] = []
+  on('ui.copy', (_, e) => {
+    copies.push(e.text)
+
+    return { value: { isCopied: true as const } }
+  })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  const at = { in: 'note-global-s1' }
+  await pane.pointer({ type: 'down', x: 0, y: 0, button: 'left', ...at })
+  await pane.pointer({ type: 'move', x: 4, y: 0, button: 'left', ...at })
+  expect(copies).toEqual([])
+  await pane.pointer({ type: 'up', x: 4, y: 0, button: 'left', ...at })
+  expect(copies).toEqual(['pain'])
+  await pane.pointer({ type: 'down', x: 6, y: 0, button: 'left', ...at })
+  await pane.pointer({ type: 'up', x: 6, y: 0, button: 'left', ...at })
+  await pane.key({ key: 'a', ctrl: true, ...at })
+  expect(copies).toEqual(['pain', 'pain lait'])
   await pane.unmount()
 })

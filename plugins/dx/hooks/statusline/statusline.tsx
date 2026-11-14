@@ -38,7 +38,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-5' },
+  { shape: 'settings-6' },
 )
 
 // The main loop's last turn, and a tick each second while it runs, so its

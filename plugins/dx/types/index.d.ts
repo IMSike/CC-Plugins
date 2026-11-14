@@ -143,6 +143,8 @@ export type BandSettings = {
   resumeNotesTab: boolean
   // Other sessions' notes listed under the session tab.
   notesOthers: number
+  // A note's selection copied as soon as it is made: the button up, ctrl+a.
+  copyOnSelect: boolean
   // Leave out the 5-hour row while its window has not started.
   hideIdleFiveHour: boolean
   // The context gauge and its tokens against the auto-compaction window,

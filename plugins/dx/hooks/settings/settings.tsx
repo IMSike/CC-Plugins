@@ -48,7 +48,7 @@ import type { StepperProps } from './stepper'
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-5' },
+  { shape: 'settings-6' },
 )
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
@@ -610,6 +610,10 @@ export function registerSettings(on: On): void {
             resumeNotesTab: !current.resumeNotesTab,
           }), inner),
           stepper('notes-others', 'Autres sessions listées', value.notesOthers, '', NOTES_OTHERS_RANGE, 1),
+          toggle('copy-on-select', value.copyOnSelect, "Copier la sélection dès qu'elle est faite", current => ({
+            ...current,
+            copyOnSelect: !current.copyOnSelect,
+          }), inner),
         ])}
         {section('behavior', 'Comportement', [
           toggle('hide-idle-five-hour', value.hideIdleFiveHour, "Masquer la jauge 5 h tant que sa fenêtre n'a pas commencé", current => ({
