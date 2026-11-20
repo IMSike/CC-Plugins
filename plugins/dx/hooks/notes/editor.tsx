@@ -1,7 +1,8 @@
 import type { ClientModule } from 'claude-code'
 
-import { drawn, keyed, pasted, pointed, refusalOf, rowOf, rowRuns, rowsOf, selectedText } from './editor-model'
+import { drawn, keyed, pasted, pointed, refusalOf, rowRuns, selectedText } from './editor-model'
 import type { EditorState } from './editor-model'
+import { rowOf, rowsOf } from './wrap'
 
 // The notes editor, drawn on the surface's own thread: a click gives it the
 // keyboard (Escape hands it back), every key edits the text there, and each
@@ -164,7 +165,7 @@ const NoteEditor: ClientModule<EditorProps, EditorState> = (props, surface) => {
   return (
     <Box flexDirection="column" height={props.rows}>
       {shown.map((row, index) => {
-        const runs = rowRuns(state, row, state.active && state.top + index === at)
+        const runs = rowRuns(state, row, state.active && state.top + index === at, width())
         const [only] = runs
         if (runs.length === 1 && only !== undefined && only.inverse === undefined) return <Text>{only.text}</Text>
         return <Text>{runs.map(run => (run.inverse ? <Text inverse>{run.text}</Text> : run.text))}</Text>

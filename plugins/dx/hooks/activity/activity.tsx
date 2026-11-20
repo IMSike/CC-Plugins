@@ -3,13 +3,14 @@ import type { EngineInterface, On, RenderElement } from 'claude-code'
 
 import type { Activity, PanelView, Task, TaskView } from '../../types'
 import { heldSettings } from '../settings/settings'
+import { cellWidth } from '../shared/cell-width'
 import { iconGap, ROBOT, TERMINAL } from '../shared/crew'
 import { errorText } from '../shared/format'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { everyRefresh } from '../shared/pace'
 import { pressBoard } from '../shared/presses'
 import { envValues, isWindows, powershell } from '../shared/system'
-import { cellWidth, wrappedRows } from './tab-rows'
+import { wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
   ENDED,

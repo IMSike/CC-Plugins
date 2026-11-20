@@ -1,7 +1,11 @@
 // The notes editor's model: a text, a cursor in it, a selection, and the
-// first visual row shown. Lines wrap at the editor's width; the cursor moves
-// over the visual rows, as in a plain notepad. Last, how ./editor takes in
-// the text the hooks draw again.
+// first visual row shown. Lines wrap at a word, at the editor's width (see
+// ./wrap); the cursor moves over the visual rows, as in a plain notepad, a
+// character at a time (an emoji, a letter with its accent, as one). Last, how
+// ./editor takes in the text the hooks draw again.
+
+import { clusterAfter, clusterBefore, columnOf, offsetAt, rowLast, rowOf, rowsOf, shownEnd } from './wrap'
+import type { Row } from './wrap'
 
 // `anchor`, where the selection starts, the cursor where it ends: none
 // selected while undefined or at the cursor.
@@ -94,9 +98,6 @@ export function refusalOf(before: string, after: string, max: number): Refusal |
   return after.length > max && after.length > before.length ? 'store-full' : undefined
 }
 
-// A visual row: `text.slice(start, end)`, its line's newline left out.
-type Row = { start: number; end: number }
-
 // Key names the terminal gives for keys that type nothing here (the others
 // are handled below); a function key is `f1`, `f2`...
 const NAMED = new Set([
@@ -123,14 +124,28 @@ function typed(event: Key): string | undefined {
 }
 
 // What a character is to a move by words: a word's letter, digit or `_`, a
-// space, a line break, or punctuation, a word of its own.
+// space, a line break, or punctuation, a word of its own. A character is a
+// cluster (see ./wrap), a letter with its accents: its first code point
+// tells, a mark alone (\p{M}) counting as a letter.
 type CharClass = 'word' | 'space' | 'line' | 'mark'
-const WORD_CHAR = /[\p{L}\p{N}_]/u
+const WORD_CHAR = /^[\p{L}\p{N}\p{M}_]/u
 
-function classOf(char: string): CharClass {
-  if (char === '\n') return 'line'
-  if (/\s/.test(char)) return 'space'
-  return WORD_CHAR.test(char) ? 'word' : 'mark'
+function classOf(cluster: string): CharClass {
+  if (cluster === '\n') return 'line'
+  if (/^\s/.test(cluster)) return 'space'
+  return WORD_CHAR.test(cluster) ? 'word' : 'mark'
+}
+
+// The class of the character before `at`, and where it starts.
+function classBefore(text: string, at: number): [number, CharClass] {
+  const from = clusterBefore(text, at)
+  return [from, classOf(text.slice(from, at))]
+}
+
+// The class of the character after `at`, and where it ends.
+function classAfter(text: string, at: number): [number, CharClass] {
+  const to = clusterAfter(text, at)
+  return [to, classOf(text.slice(at, to))]
 }
 
 // Where ctrl+left lands from `cursor`, as in a text editor: over the spaces,
@@ -138,11 +153,20 @@ function classOf(char: string): CharClass {
 // or, right after it, at the end of the line above.
 function wordLeft(text: string, cursor: number): number {
   let at = cursor
-  while (at > 0 && classOf(text.charAt(at - 1)) === 'space') at--
+  while (at > 0) {
+    const [from, kind] = classBefore(text, at)
+    if (kind !== 'space') break
+    at = from
+  }
   if (at === 0) return 0
-  const kind = classOf(text.charAt(at - 1))
-  if (kind === 'line') return at === cursor ? at - 1 : at
-  while (at > 0 && classOf(text.charAt(at - 1)) === kind) at--
+  const [from, kind] = classBefore(text, at)
+  if (kind === 'line') return at === cursor ? from : at
+  at = from
+  while (at > 0) {
+    const [previous, previousKind] = classBefore(text, at)
+    if (previousKind !== kind) break
+    at = previous
+  }
   return at
 }
 
@@ -150,37 +174,21 @@ function wordLeft(text: string, cursor: number): number {
 // the word; a line break stops it, as for wordLeft.
 function wordRight(text: string, cursor: number): number {
   let at = cursor
-  while (at < text.length && classOf(text.charAt(at)) === 'space') at++
-  if (at === text.length) return at
-  const kind = classOf(text.charAt(at))
-  if (kind === 'line') return at === cursor ? at + 1 : at
-  while (at < text.length && classOf(text.charAt(at)) === kind) at++
-  return at
-}
-
-// The text's visual rows at `width`. A line exactly as long as a multiple of
-// the width gets an empty row after it, where its end's cursor stands.
-export function rowsOf(text: string, width: number): Row[] {
-  const cells = Math.max(1, Math.floor(width))
-  const rows: Row[] = []
-  let start = 0
-  for (const line of text.split('\n')) {
-    for (let at = 0; at < line.length; at += cells) {
-      rows.push({ start: start + at, end: start + Math.min(at + cells, line.length) })
-    }
-    if (line.length % cells === 0) rows.push({ start: start + line.length, end: start + line.length })
-    start += line.length + 1
+  while (at < text.length) {
+    const [to, kind] = classAfter(text, at)
+    if (kind !== 'space') break
+    at = to
   }
-  return rows
-}
-
-// The row the cursor stands on: the last that starts at or before it.
-export function rowOf(rows: readonly Row[], cursor: number): number {
-  let found = 0
-  rows.forEach((row, index) => {
-    if (row.start <= cursor) found = index
-  })
-  return found
+  if (at === text.length) return at
+  const [to, kind] = classAfter(text, at)
+  if (kind === 'line') return at === cursor ? to : at
+  at = to
+  while (at < text.length) {
+    const [next, nextKind] = classAfter(text, at)
+    if (nextKind !== kind) break
+    at = next
+  }
+  return at
 }
 
 // `top` moved so that the cursor's row is among the `height` rows shown.
@@ -197,12 +205,12 @@ function insert(editor: Editor, typed: string): Editor {
   return { ...editor, text: text.slice(0, cursor) + typed + text.slice(cursor), cursor: cursor + typed.length, anchor: undefined }
 }
 
-// The cursor on row `target`, at the column it had on its own row.
+// The cursor on row `target`, at the column it had on its own row, in cells.
 function toRow(editor: Editor, rows: readonly Row[], target: number): Editor {
   const from = rows[rowOf(rows, editor.cursor)]
   const to = rows[Math.max(0, Math.min(rows.length - 1, target))]
   if (from === undefined || to === undefined) return editor
-  return { ...editor, cursor: Math.min(to.start + (editor.cursor - from.start), to.end) }
+  return { ...editor, cursor: offsetAt(editor.text, to, columnOf(editor.text, from, editor.cursor)) }
 }
 
 // The editor after one key; the same object when the key changes nothing.
@@ -240,17 +248,19 @@ export function keyed(
     case 'tab':
       next = insert(editor, '  ')
       break
-    case 'backspace':
-      next = cursor === 0 ? editor : { ...editor, text: text.slice(0, cursor - 1) + text.slice(cursor), cursor: cursor - 1 }
+    case 'backspace': {
+      const from = clusterBefore(text, cursor)
+      next = cursor === 0 ? editor : { ...editor, text: text.slice(0, from) + text.slice(cursor), cursor: from }
       break
+    }
     case 'delete':
-      next = cursor === text.length ? editor : { ...editor, text: text.slice(0, cursor) + text.slice(byWord ? wordRight(text, cursor) : cursor + 1) }
+      next = cursor === text.length ? editor : { ...editor, text: text.slice(0, cursor) + text.slice(byWord ? wordRight(text, cursor) : clusterAfter(text, cursor)) }
       break
     case 'left':
-      next = { ...editor, cursor: byWord ? wordLeft(text, cursor) : Math.max(0, cursor - 1) }
+      next = { ...editor, cursor: byWord ? wordLeft(text, cursor) : clusterBefore(text, cursor) }
       break
     case 'right':
-      next = { ...editor, cursor: byWord ? wordRight(text, cursor) : Math.min(text.length, cursor + 1) }
+      next = { ...editor, cursor: byWord ? wordRight(text, cursor) : clusterAfter(text, cursor) }
       break
     case 'up':
       next = toRow(editor, rows, rowOf(rows, cursor) - 1)
@@ -268,7 +278,7 @@ export function keyed(
       next = { ...editor, cursor: row.start }
       break
     case 'end':
-      next = { ...editor, cursor: row.end }
+      next = { ...editor, cursor: rowLast(text, row) }
       break
     default: {
       // A character; a shortcut or another named key does nothing.
@@ -305,7 +315,7 @@ export function clicked(editor: Editor, x: number, y: number, width: number): Ed
   const rows = rowsOf(editor.text, width)
   const row = rows[Math.max(0, Math.min(rows.length - 1, editor.top + y))]
   if (row === undefined) return editor
-  return { ...editor, cursor: Math.min(row.start + Math.max(0, x), row.end) }
+  return { ...editor, cursor: offsetAt(editor.text, row, Math.max(0, x)) }
 }
 
 // The editor after the pointer, in its cells: a press puts the cursor under
@@ -328,11 +338,15 @@ export function pointed(editor: Editor, type: 'down' | 'move' | 'up', x: number,
 // One run of a row as drawn, inverse for the selection or the cursor.
 export type EditorRun = { text: string; inverse?: true }
 
-// A row as drawn: the part selected inverse, a selected empty line as an
-// inverse space; nothing selected, the cell under the cursor inverse when
-// `hasCursor`. An empty row is a space.
-export function rowRuns(editor: Editor, row: Row, hasCursor: boolean): EditorRun[] {
-  const line = editor.text.slice(row.start, row.end)
+// A row as drawn in `width` cells, the spaces hanging past them left out: the
+// part selected inverse, a selected empty line as an inverse space; nothing
+// selected, the character under the cursor inverse when `hasCursor`, on the
+// row's last cell when the cursor stands among the hanging spaces. An empty
+// row is a space.
+export function rowRuns(editor: Editor, row: Row, hasCursor: boolean, width: number): EditorRun[] {
+  const { text, cursor } = editor
+  const shownTo = shownEnd(text, row, width)
+  const line = text.slice(row.start, shownTo)
   const range = selectionOf(editor)
   let runs: EditorRun[]
   if (range !== undefined) {
@@ -342,9 +356,14 @@ export function rowRuns(editor: Editor, row: Row, hasCursor: boolean): EditorRun
     runs = isEmptySelected
       ? [{ text: ' ', inverse: true }]
       : [{ text: line.slice(0, from) }, { text: line.slice(from, to), inverse: true }, { text: line.slice(to) }]
+  } else if (hasCursor && cursor >= shownTo && shownTo < row.end && line !== '') {
+    const last = clusterBefore(text, shownTo) - row.start
+    runs = [{ text: line.slice(0, last) }, { text: line.slice(last), inverse: true }]
   } else if (hasCursor) {
-    const column = editor.cursor - row.start
-    runs = [{ text: line.slice(0, column) }, { text: line.charAt(column) || ' ', inverse: true }, { text: line.slice(column + 1) }]
+    // The whole character under it: an emoji, a letter with its accent.
+    const from = cursor - row.start
+    const to = Math.min(clusterAfter(text, cursor), shownTo) - row.start
+    runs = [{ text: line.slice(0, from) }, { text: line.slice(from, to) || ' ', inverse: true }, { text: line.slice(to) }]
   } else {
     runs = [{ text: line }]
   }

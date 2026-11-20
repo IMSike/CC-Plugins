@@ -1,24 +1,10 @@
 import { expect, test } from 'claude-code/testing'
 
-import { cleanPaste, clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, pasted, pointed, refusalOf, rowOf, rowRuns, rowsOf, selectedText, thousands } from './editor-model'
+import { cleanPaste, clicked, drawn, encodedLength, fitsEditor, keyed, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, pasted, pointed, refusalOf, rowRuns, selectedText, thousands } from './editor-model'
 import type { Editor } from './editor-model'
+import { rowsOf } from './wrap'
 
 const at = (text: string, cursor = text.length, top = 0): Editor => ({ text, cursor, top })
-
-test('rowsOf wraps lines at the width', () => {
-  expect(rowsOf('', 4)).toEqual([{ start: 0, end: 0 }])
-  expect(rowsOf('abcdef\ngh', 4)).toEqual([
-    { start: 0, end: 4 },
-    { start: 4, end: 6 },
-    { start: 7, end: 9 },
-  ])
-  // A line filling its row exactly leaves an empty row for its end.
-  expect(rowsOf('abcd', 4)).toEqual([
-    { start: 0, end: 4 },
-    { start: 4, end: 4 },
-  ])
-  expect(rowOf(rowsOf('abcd', 4), 4)).toBe(1)
-})
 
 test('keyed types, breaks lines and erases', () => {
   expect(keyed(at('ab', 1), { key: 'x' }, 10, 5)).toEqual(at('axb', 2))
@@ -307,13 +293,86 @@ test('a row draws the selection inverse, else the cursor', () => {
   const text = 'abcd\n\nef'
   const rows = rowsOf(text, 10)
   const some = { ...at(text, 7), anchor: 2 }
-  expect(rows.map(row => rowRuns(some, row, false))).toEqual([
+  expect(rows.map(row => rowRuns(some, row, false, 10))).toEqual([
     [{ text: 'ab' }, { text: 'cd', inverse: true }],
     [{ text: ' ', inverse: true }],
     [{ text: 'e', inverse: true }, { text: 'f' }],
   ])
   const row = rows[0] ?? { start: 0, end: 0 }
-  expect(rowRuns(at(text, 1), row, true)).toEqual([{ text: 'a' }, { text: 'b', inverse: true }, { text: 'cd' }])
-  expect(rowRuns(at(text, 1), row, false)).toEqual([{ text: 'abcd' }])
-  expect(rowRuns(at(text), rows[1] ?? row, false)).toEqual([{ text: ' ' }])
+  expect(rowRuns(at(text, 1), row, true, 10)).toEqual([{ text: 'a' }, { text: 'b', inverse: true }, { text: 'cd' }])
+  expect(rowRuns(at(text, 1), row, false, 10)).toEqual([{ text: 'abcd' }])
+  expect(rowRuns(at(text), rows[1] ?? row, false, 10)).toEqual([{ text: ' ' }])
+})
+
+test('the cursor moves over rows wrapped at a word', () => {
+  // Rows at 8: 'un deux ' 'trois'.
+  const text = 'un deux trois'
+  const key = (cursor: number, name: string) => keyed(at(text, cursor), { key: name }, 8, 5).cursor
+  // End stops before the space the row ends with; Home, at the row's start.
+  expect(key(0, 'end')).toBe(7)
+  expect(key(10, 'home')).toBe(8)
+  expect(key(10, 'end')).toBe(13)
+  // Up and down keep the column, past a shorter row's end at its end.
+  expect(key(3, 'down')).toBe(11)
+  expect(key(11, 'up')).toBe(3)
+  expect(key(6, 'down')).toBe(13)
+  // Right from the row's last stop: the next row's start.
+  expect(key(7, 'right')).toBe(8)
+  // A click past a wrapped row's text: before its last space, on that row.
+  expect(clicked(at(text, 0), 20, 0, 8).cursor).toBe(7)
+  expect(clicked(at(text, 0), 2, 1, 8).cursor).toBe(10)
+  // A drag over both rows.
+  const down = pointed(at(text, 0), 'down', 5, 0, 8, 5)
+  expect(selectedText(pointed(down, 'move', 2, 1, 8, 5))).toBe('ux tr')
+})
+
+test('the cursor steps over an emoji whole, and keeps its column in cells', () => {
+  const emoji = 'a\u{1F600}b'
+  expect(keyed(at(emoji, 1), { key: 'right' }, 10, 5).cursor).toBe(3)
+  expect(keyed(at(emoji, 3), { key: 'left' }, 10, 5).cursor).toBe(1)
+  expect(keyed(at(emoji, 3), { key: 'backspace' }, 10, 5)).toEqual(at('ab', 1))
+  expect(keyed(at(emoji, 1), { key: 'delete' }, 10, 5)).toEqual(at('ab', 1))
+  // '日本語' over six cells: below its second character, the line's fifth cell.
+  const wide = '\u{65E5}\u{672C}\u{8A9E}\nabcdef'
+  expect(keyed(at(wide, 2), { key: 'down' }, 10, 5).cursor).toBe(8)
+  expect(keyed(at(wide, 6), { key: 'up' }, 10, 5).cursor).toBe(1)
+  // The cursor drawn over the whole emoji.
+  const [row] = rowsOf(emoji, 10)
+  expect(rowRuns(at(emoji, 1), row ?? { start: 0, end: 0 }, true, 10)).toEqual([{ text: 'a' }, { text: '\u{1F600}', inverse: true }, { text: 'b' }])
+})
+
+test('a selection over wrapped rows is drawn on each of them', () => {
+  const text = 'un deux trois'
+  const some = { ...at(text, 10), anchor: 5 }
+  expect(rowsOf(text, 8).map(row => rowRuns(some, row, false, 8))).toEqual([
+    [{ text: 'un de' }, { text: 'ux ', inverse: true }],
+    [{ text: 'tr', inverse: true }, { text: 'ois' }],
+  ])
+})
+
+test('the cursor among the spaces a row hangs is drawn on its last cell', () => {
+  // Rows at 4: 'abcd ' (drawn 'abcd') | 'efgh' | ''.
+  const text = 'abcd efgh'
+  const rows = rowsOf(text, 4)
+  const [first] = rows
+  if (first === undefined) throw new Error('no row')
+  const key = (cursor: number, name: string) => keyed(at(text, cursor), { key: name }, 4, 5).cursor
+  expect(key(0, 'end')).toBe(4)
+  expect(key(4, 'right')).toBe(5)
+  expect(key(5, 'left')).toBe(4)
+  expect(key(8, 'up')).toBe(3)
+  expect(key(4, 'down')).toBe(9)
+  expect(clicked(at(text, 0), 9, 0, 4).cursor).toBe(4)
+  expect(rowRuns(at(text, 4), first, true, 4)).toEqual([{ text: 'abc' }, { text: 'd', inverse: true }])
+  expect(rowRuns(at(text, 1), first, true, 4)).toEqual([{ text: 'a' }, { text: 'b', inverse: true }, { text: 'cd' }])
+  expect(rowRuns(at(text, 0), first, false, 4)).toEqual([{ text: 'abcd' }])
+})
+
+test('a move by words takes a letter with its accents as one', () => {
+  // 'été x', its accents written as marks of their own.
+  const text = 'e\u{301}te\u{301} x'
+  expect(keyed(at(text, 0), { key: 'right', ctrl: true }, 40, 5).cursor).toBe(5)
+  expect(keyed(at(text, 5), { key: 'left', ctrl: true }, 40, 5).cursor).toBe(0)
+  expect(keyed(at(text, 5), { key: 'backspace', ctrl: true }, 40, 5)).toEqual(at(' x', 0))
+  expect(keyed(at(text, 0), { key: 'delete', ctrl: true }, 40, 5)).toEqual(at(' x', 0))
 })
