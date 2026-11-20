@@ -31,7 +31,7 @@ import type { HeadPaths } from './git'
 // Change the tag when StatusSnapshot's fields change: it declines what an
 // earlier version stored, which outlives a reload.
 const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
-  shape: 'statusline-4',
+  shape: 'statusline-5',
 })
 
 // What the band shows, animates and is colored with, set in ../settings/settings
@@ -154,19 +154,22 @@ function pathKind($: EngineInterface, path: string): Promise<'file' | 'dir' | 'o
   return $.fs.stat(path).then(stat => stat.kind, () => undefined)
 }
 
-// The window auto-compaction measures against, as /context names it: the
-// model's own, or a smaller one set (`CLAUDE_CODE_AUTO_COMPACT_WINDOW`, the
-// settings); undefined with auto-compaction off, or when it cannot be read.
-// Read once per COMPACT_WINDOW_MS and model: the engine estimates the whole
-// context to answer it.
-const COMPACT_WINDOW_MS = 300_000
-let compactWindow: { model: string; readAt: number; tokens: number | undefined } | undefined
+// The token count at which auto-compaction runs, as /context reads it: its
+// window (the model's own, or a smaller one set with
+// `CLAUDE_CODE_AUTO_COMPACT_WINDOW` or the settings) less the buffer it keeps.
+// Not that window, the model's unless one is set: the gauge would not move.
+// Undefined with auto-compaction off, no threshold above 0, or when it cannot
+// be read. Read once per COMPACT_THRESHOLD_MS and model: the engine estimates
+// the whole context to answer it.
+const COMPACT_THRESHOLD_MS = 300_000
+let compactThreshold: { model: string; readAt: number; tokens: number | undefined } | undefined
 
-async function compactWindowOf($: EngineInterface, model: string, now: number): Promise<number | undefined> {
-  if (compactWindow?.model === model && now - compactWindow.readAt < COMPACT_WINDOW_MS) return compactWindow.tokens
+async function compactThresholdOf($: EngineInterface, model: string, now: number): Promise<number | undefined> {
+  if (compactThreshold?.model === model && now - compactThreshold.readAt < COMPACT_THRESHOLD_MS) return compactThreshold.tokens
   const breakdown = (await $.session.usage({ breakdown: 'summary' }).catch(() => undefined))?.context.breakdown
-  const tokens = breakdown?.isAutoCompactEnabled === true ? breakdown.rawMaxTokens : undefined
-  compactWindow = { model, readAt: now, tokens }
+  const threshold = breakdown?.isAutoCompactEnabled === true ? breakdown.autoCompactThreshold : undefined
+  const tokens = threshold !== undefined && threshold > 0 ? threshold : undefined
+  compactThreshold = { model, readAt: now, tokens }
   return tokens
 }
 
@@ -192,7 +195,7 @@ async function refresh($: EngineInterface): Promise<void> {
     context: usage.context.percent,
     contextTokens: usage.context.tokens,
     contextWindow: usage.context.window,
-    compactWindow: await compactWindowOf($, model, now),
+    compactThreshold: await compactThresholdOf($, model, now),
     fiveHour: gaugeOf(usage.rateLimits, 'five_hour'),
     sevenDay: gaugeOf(usage.rateLimits, 'seven_day'),
     startedAt: usage.startedAt,
@@ -306,9 +309,9 @@ export function registerStatusline(on: On): void {
     const speed = SPEED_FACTORS[options.speed]
     // The days of its durations, written as the 7-day gauge's label.
     const day = dayUnitOf(options.sevenDayLabel)
-    // The context gauge and its tokens: against the auto-compaction window
-    // when set so and known, else the model's.
-    const contextWindow = (options.contextToCompact ? status.compactWindow : undefined) ?? status.contextWindow
+    // The context gauge and its tokens: against the auto-compaction threshold
+    // when set so and known, else the model's window.
+    const contextWindow = (options.contextToCompact ? status.compactThreshold : undefined) ?? status.contextWindow
     const contextPercent = contextWindow !== status.contextWindow && status.contextTokens !== undefined
       ? Math.round((status.contextTokens / contextWindow) * 100)
       : status.context

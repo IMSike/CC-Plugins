@@ -27,9 +27,10 @@ export type StatusSnapshot = {
   contextTokens?: number
   // The model's context window, in tokens.
   contextWindow: number
-  // The window auto-compaction measures against (the model's, or a smaller
-  // one set), in tokens; absent with auto-compaction off, or not read.
-  compactWindow?: number
+  // The token count at which auto-compaction runs (its window, the model's or
+  // a smaller one set, less its buffer); absent with auto-compaction off, no
+  // threshold above 0, or not read.
+  compactThreshold?: number
   fiveHour?: Gauge
   sevenDay?: Gauge
   // When the session began (`$.session.usage()`), in `$.clock.now()` milliseconds.
@@ -148,7 +149,7 @@ export type BandSettings = {
   copyOnSelect: boolean
   // Leave out the 5-hour row while its window has not started.
   hideIdleFiveHour: boolean
-  // The context gauge and its tokens against the auto-compaction window,
+  // The context gauge and its tokens against the auto-compaction threshold,
   // not the model's.
   contextToCompact: boolean
   // The glints and the shuttle run only while Claude works; with

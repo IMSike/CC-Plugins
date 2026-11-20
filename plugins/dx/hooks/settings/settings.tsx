@@ -625,7 +625,7 @@ export function registerSettings(on: On): void {
             ...current,
             hideIdleFiveHour: !current.hideIdleFiveHour,
           }), inner),
-          toggle('context-to-compact', value.contextToCompact, "Jauge du contexte rapportée à la fenêtre d'auto-compactage", current => ({
+          toggle('context-to-compact', value.contextToCompact, "Jauge du contexte rapportée au seuil d'auto-compactage", current => ({
             ...current,
             contextToCompact: !current.contextToCompact,
           }), inner),

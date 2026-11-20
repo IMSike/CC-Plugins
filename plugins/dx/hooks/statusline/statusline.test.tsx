@@ -338,7 +338,7 @@ test('stored settings hide elements, and may keep an idle 5-hour row', async ($,
 
 // A plugin beneath dx (the builtin tier) whose usage reads are malformed but
 // the fourth: the band's refreshes fail three times, succeed, then fail again.
-// A read of the breakdown, for the auto-compaction window, is not counted.
+// A read of the breakdown, for the auto-compaction threshold, is not counted.
 const FAILING_USAGE = {
   name: 'failing-usage',
   tier: 'builtin' as const,
@@ -670,11 +670,12 @@ test('a model that takes no effort shows none', async ($, on) => {
   await ui.unmount()
 })
 
-// 24k tokens of an auto-compaction window of 80k: 30 %, by default; set so,
-// against the model's 200k window as before.
-test('the context gauge measures against the auto-compaction window, unless set otherwise', async ($, on) => {
+// 24k tokens of an auto-compaction threshold of 80k: 30 %, by default, though
+// its window, none being set, is the model's; set so, against the model's 200k
+// window as before.
+test('the context gauge measures against the auto-compaction threshold, unless set otherwise', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, { compactWindow: 80000 })
+  engine(on, { compactThreshold: 80000 })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)
@@ -683,9 +684,33 @@ test('the context gauge measures against the auto-compaction window, unless set 
   await ui.unmount()
 })
 
-test('the context gauge set against the model window ignores the auto-compaction one', async ($, on) => {
+test('the context gauge set against the model window ignores the auto-compaction threshold', async ($, on) => {
   mock.clock(on, { now: NOW })
-  engine(on, { compactWindow: 80000, stored: { settings: { contextToCompact: false } } })
+  engine(on, { compactThreshold: 80000, stored: { settings: { contextToCompact: false } } })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /12%/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toMatch(/24k\/200k$/)
+  await ui.unmount()
+})
+
+// Set against the threshold, but auto-compaction off or its threshold 0: the
+// model's 200k window.
+test('the context gauge falls back to the model window with auto-compaction off', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { compactThreshold: 80000, compactEnabled: false })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const ui = await $.ui.mount(BAND)
+  expect(await ui.find({ type: 'Text', text: /12%/ })).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /total/, in: 'frame-br' }))?.text).toMatch(/24k\/200k$/)
+  await ui.unmount()
+})
+
+test('the context gauge falls back to the model window with a threshold of 0', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { compactThreshold: 0 })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
 
   const ui = await $.ui.mount(BAND)

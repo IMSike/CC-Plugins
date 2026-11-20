@@ -41,9 +41,12 @@ type EngineOptions = {
   listed?: string[]
   // What dx's store holds.
   stored?: Record<string, unknown>
-  // The auto-compaction window a breakdown of the context reads; none, its
+  // The token count at which auto-compaction runs, as a breakdown of the
+  // context reads it, its window the model's as when none is set; none, the
   // breakdown absent.
-  compactWindow?: number
+  compactThreshold?: number
+  // false: auto-compaction off, the breakdown carrying no threshold.
+  compactEnabled?: boolean
   // false: the 5-hour window has not started.
   fiveHour?: boolean
   // Calls refused, as by a session not there yet; `store.set <key>`, the
@@ -76,7 +79,8 @@ export function engine(on: On, options: EngineOptions = {}) {
     listed = [],
     stored = {},
     fiveHour = true,
-    compactWindow,
+    compactThreshold,
+    compactEnabled = true,
     refused = new Set<string>(),
     session = { id: 's1' },
     beforeStart = async () => {},
@@ -158,8 +162,15 @@ export function engine(on: On, options: EngineOptions = {}) {
         window: 200000,
         tokens: 24000,
         percent: 12,
-        ...(e.breakdown !== undefined && compactWindow !== undefined
-          ? { breakdown: { rawMaxTokens: compactWindow, isAutoCompactEnabled: true } as never }
+        ...(e.breakdown !== undefined && compactThreshold !== undefined
+          ? {
+              breakdown: {
+                rawMaxTokens: 200000,
+                autocompactSource: 'auto',
+                ...(compactEnabled ? { autoCompactThreshold: compactThreshold } : {}),
+                isAutoCompactEnabled: compactEnabled,
+              } as never,
+            }
           : {}),
       },
       rateLimits: rateLimits
