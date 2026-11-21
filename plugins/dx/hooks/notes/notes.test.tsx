@@ -867,24 +867,43 @@ async function given(pane: { find: (query: { key: string }) => Promise<{ props: 
   return (editor?.props as { props?: { paste?: EditorPaste | null } } | undefined)?.props?.paste
 }
 
+// A point the hooks module reaches, which the test waits for. A click left
+// running is delivered to the hooks module whenever the kit gets to it:
+// `clock.settle` waits for the event loop and the clock's due waits, not for
+// that, and a pane unmounted or a tab shown before then drops the press or
+// hands it the other note.
+function milestone(): { reached: Promise<void>; reach: () => void } {
+  let reach = () => {}
+  const reached = new Promise<void>(resolve => {
+    reach = resolve
+  })
+  return { reached, reach }
+}
+
 // The clipboard holding `text`, read by macOS's tool a second after it
-// starts, `ran` filled with every command run.
+// starts, `ran` filled with every command run; `reading` resolves once the
+// first read started, its wait held by the clock.
 function slowClipboard(clock: { sleep: (ms: number) => Promise<void> }, text: string, ran: string[][] = []) {
-  return async (argv: readonly string[]) => {
-    await clock.sleep(1000)
+  const started = milestone()
+  const run = async (argv: readonly string[]) => {
+    const waiting = clock.sleep(1000)
+    started.reach()
+    await waiting
     return clipboard(text, ran)(argv)
   }
+  return { run, reading: started.reached }
 }
 
 test('a second press while the clipboard is read does nothing', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const ran: string[][] = []
-  const store = engine(on, { run: slowClipboard(clock, 'pain', ran) })
+  const slow = slowClipboard(clock, 'pain', ran)
+  const store = engine(on, { run: slow.run })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
 
   const pressing = click(pane, 'notes:paste')
-  await clock.settle()
+  await slow.reading
   await click(pane, 'notes:paste')
   await clock.advance(1000)
   await pressing
@@ -896,14 +915,15 @@ test('a second press while the clipboard is read does nothing', async ($, on) =>
 
 test('a paste read while another tab is shown is taken once, as its note is shown again', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const store = engine(on, { run: slowClipboard(clock, 'pain') })
+  const slow = slowClipboard(clock, 'pain')
+  const store = engine(on, { run: slow.run })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
 
   // Pressed on the global note, read as the project's is shown: kept for the
   // global one, the project's left alone.
   const pressing = click(pane, 'notes:paste')
-  await clock.settle()
+  await slow.reading
   await click(pane, 'notes:tab-project')
   await clock.advance(1000)
   await pressing
@@ -928,12 +948,13 @@ test('a paste read while another tab is shown is taken once, as its note is show
 
 test('a paste read while the pane is closed is taken once, as it is shown again', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const store = engine(on, { run: slowClipboard(clock, 'pain') })
+  const slow = slowClipboard(clock, 'pain')
+  const store = engine(on, { run: slow.run })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
 
   const pressing = click(pane, 'notes:paste')
-  await clock.settle()
+  await slow.reading
   await pane.unmount()
   await clock.advance(1000)
   await pressing
@@ -953,12 +974,13 @@ test('a paste read while the pane is closed is taken once, as it is shown again'
 
 test('a paste the note outgrew meanwhile is refused whole, and let go', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const store = engine(on, { run: slowClipboard(clock, 'x'.repeat(60_000)) })
+  const slow = slowClipboard(clock, 'x'.repeat(60_000))
+  const store = engine(on, { run: slow.run })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
 
   const pressing = click(pane, 'notes:paste')
-  await clock.settle()
+  await slow.reading
   await click(pane, 'notes:tab-project')
   await clock.advance(1000)
   await pressing
@@ -979,10 +1001,15 @@ test('a paste the note outgrew meanwhile is refused whole, and let go', async ($
 test('a clipboard tool that times out says so, not what to install', async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
   const ran: string[][] = []
+  const stalled = milestone()
   engine(on, {
     run: async argv => {
       ran.push([...argv])
-      if (argv[0] === 'wl-paste') await clock.sleep(5000)
+      if (argv[0] === 'wl-paste') {
+        const waiting = clock.sleep(5000)
+        stalled.reach()
+        await waiting
+      }
       return undefined
     },
   })
@@ -990,7 +1017,7 @@ test('a clipboard tool that times out says so, not what to install', async ($, o
   const pane = await $.ui.mount(NOTES_PANE)
 
   const pressing = click(pane, 'notes:paste')
-  await clock.settle()
+  await stalled.reached
   await clock.advance(5000)
   await pressing
   await clock.settle()
