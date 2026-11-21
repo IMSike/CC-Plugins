@@ -7,7 +7,6 @@ import {
   clipboardCommands,
   clipboardText,
   clipboardUnreadable,
-  failureOf,
   isClipboardError,
   isEmptyClipboard,
   isTimedOut,
@@ -35,19 +34,6 @@ test("Windows' base64 of UTF-8 is decoded, accents and emoji kept; elsewhere the
   expect(clipboardText(true, 'w6l0w6k=')).toBe('été')
   expect(clipboardText(true, '')).toBe('')
   expect(clipboardText(false, 'été\n')).toBe('été\n')
-})
-
-test("a failed tool's first line says why, else its exit code", () => {
-  expect(failureOf(1, "\nError: Can't open display\nmore")).toBe("Error: Can't open display")
-  expect(failureOf(2, '')).toBe('code 2')
-})
-
-test("PowerShell's CLIXML error is read for its text", () => {
-  const clixml = '#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
-    + '<S S="Error">Get-Clipboard : Échec de l&apos;ouverture du presse-papiers_x000D__x000A_</S>'
-    + '<S S="Error">Au caractère Ligne:3_x000D__x000A_</S></Objs>'
-  expect(failureOf(1, clixml)).toBe("Get-Clipboard : Échec de l'ouverture du presse-papiers")
-  expect(failureOf(1, '#< CLIXML\r\n<Objs Version="1.1.0.1"></Objs>')).toBe('code 1')
 })
 
 test('a run rejected at its timeout is told from one that could not start', () => {

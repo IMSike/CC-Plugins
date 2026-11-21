@@ -44,3 +44,19 @@ export function encodeCommand(script: string): string {
   }
   return out
 }
+
+// The first line a failed command wrote, or its exit code. An error
+// PowerShell wrote as CLIXML (`#< CLIXML`, then XML) is read for its text.
+export function failureOf(exitCode: number, stderr: string): string {
+  const plain = stderr.includes('#< CLIXML') ? clixmlErrors(stderr) : stderr
+  return plain.split(/\r?\n/).find(line => line.trim() !== '')?.trim() ?? `code ${exitCode}`
+}
+
+// The text of a CLIXML stream's error records, its escapes undone.
+function clixmlErrors(stderr: string): string {
+  const entities: Record<string, string> = { lt: '<', gt: '>', quot: '"', apos: "'", amp: '&' }
+  return Array.from(stderr.matchAll(/<S S="Error">([\s\S]*?)<\/S>/g), match => match[1] ?? '')
+    .join('')
+    .replace(/_x([0-9A-Fa-f]{4})_/g, (_, code: string) => String.fromCharCode(parseInt(code, 16)))
+    .replace(/&(lt|gt|quot|apos|amp);/g, (_, name: string) => entities[name] ?? '')
+}

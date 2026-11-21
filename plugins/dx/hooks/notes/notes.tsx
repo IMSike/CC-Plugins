@@ -8,7 +8,7 @@ import { dayTime, errorText } from '../shared/format'
 import { NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
-import { envValues, isWindows } from '../shared/system'
+import { envValues, failureOf, isWindows } from '../shared/system'
 import {
   CLIPBOARD_NO_TOOL,
   CLIPBOARD_REMOTE,
@@ -17,7 +17,6 @@ import {
   clipboardCommands,
   clipboardText,
   clipboardUnreadable,
-  failureOf,
   isClipboardError,
   isEmptyClipboard,
   isTimedOut,
