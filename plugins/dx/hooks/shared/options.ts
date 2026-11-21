@@ -1,9 +1,9 @@
-import type { BandSettings, BottomFact, NoteTab } from '../../types'
+import type { BandSettings, BottomFact, HeldSettings, NoteTab } from '../../types'
 import { MONITOR } from './crew'
 import type { DayUnit } from './format'
 
-// The settings pane's model: defaults, choices, and the reading of what
-// `$.store` holds.
+// The settings pane's model: defaults, choices, the reading of what `$.store`
+// holds, and the atom the settings are drawn from.
 
 // The gauges' heat gradient, as a gauge color.
 export const HEAT = 'heat'
@@ -99,6 +99,15 @@ export const DEFAULT_SETTINGS: BandSettings = {
   sevenDayLabel: '7j',
   rdpClipboard: false,
 }
+
+// The settings as this session holds them, with the warnings their pane says
+// (../settings/settings), in `$.state` for the drawings: written by the
+// settings, read by them and by the band (../statusline). Each of those
+// files declares its atom (`settings`), as the engine's scan of state
+// writes reads its key in the file itself; its first value and shape are
+// these. Change the shape when HeldSettings' fields change.
+export const HELD_SETTINGS: HeldSettings = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
+export const SETTINGS_SHAPE = 'settings-13'
 
 // The settings pane's rows, in order, with their labels.
 export const SHOW_LABELS: readonly (readonly [Exclude<keyof BandSettings['show'], BottomFact>, string])[] = [

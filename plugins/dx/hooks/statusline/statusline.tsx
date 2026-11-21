@@ -1,15 +1,16 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput, TurnStepInput } from 'claude-code'
 
-import type { Activity, BottomFact, HeldSettings, StatusSnapshot, TurnTime } from '../../types'
+import type { Activity, BottomFact, StatusSnapshot, TurnTime } from '../../types'
 import { openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { seeFullscreen } from '../rdp/rdp'
 import { toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import { clockTime, errorText } from '../shared/format'
-import { dayUnitOf, DEFAULT_SETTINGS, DIM_TEXT, HEAT, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
+import { dayUnitOf, DIM_TEXT, HEAT, HELD_SETTINGS, SETTINGS_SHAPE, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
 import { everyRefresh } from '../shared/pace'
+import { homeFolder } from '../shared/system'
 import {
   compactNumber,
   countdown,
@@ -35,13 +36,10 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
   shape: 'statusline-5',
 })
 
-// What the band shows, animates and is colored with, set in ../settings/settings
-// with the warnings its pane says; the band draws the settings alone.
-const settings = atom(
-  { plugin: 'dx', key: 'settings' } as const,
-  { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-13' },
-)
+// What the band shows, animates and is colored with, set in
+// ../settings/settings with the warnings its pane says; the band draws the
+// settings alone. Its first value and shape from ../shared/options.
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, HELD_SETTINGS, { shape: SETTINGS_SHAPE })
 
 // The main loop's last turn, and a tick each second while it runs, so its
 // duration is redrawn.
@@ -183,7 +181,7 @@ async function refresh($: EngineInterface): Promise<void> {
     $.session.cwd(),
     $.session.usage(),
     $.settings.read({ key: 'effortLevel' }),
-    $.env.get('USERPROFILE').then(profile => profile ?? $.env.get('HOME')),
+    homeFolder($),
     $.clock.now(),
   ])
   followChoice(read, model, setting)

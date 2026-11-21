@@ -3,10 +3,11 @@ import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
 import type { BandSettings, HeldSettings, SettingsTab, SettingsUnreadable } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
-import { followRdp, isRdpOffered } from '../rdp/rdp'
+import { followRdp } from '../rdp/rdp'
 import { errorText } from '../shared/format'
-import { DEFAULT_SETTINGS, hexOf, settingsOf } from '../shared/options'
+import { DEFAULT_SETTINGS, HELD_SETTINGS, hexOf, SETTINGS_SHAPE, settingsOf } from '../shared/options'
 import { PANEL, panelView, showPanel, togglePanel } from '../shared/panes'
+import { hasSystemFolder } from '../shared/system'
 import { appearanceSections } from './appearance'
 import { isStepper, settingsBlocks, STEPPERS } from './blocks'
 import type { SettingsPress } from './blocks'
@@ -19,12 +20,10 @@ import { functionsSections } from './functions'
 // icon. Why they could not be read, the session having never read them: the
 // defaults shown, or those the state held as dx's code was loaded anew, or a
 // change not applied; said until a read of the store succeeds: at a change,
-// at the `⚙` icon, at a main turn's start or at a reload of dx.
-const settings = atom(
-  { plugin: 'dx', key: 'settings' } as const,
-  { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-13' },
-)
+// at the `⚙` icon, at a main turn's start or at a reload of dx. The atom
+// takes its first value and shape from ../shared/options, as the band's.
+const settings = atom({ plugin: 'dx', key: 'settings' } as const, HELD_SETTINGS, { shape: SETTINGS_SHAPE })
+
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
 // or by the reset, or the pane is shown anew or turned to its other tab, or
@@ -411,9 +410,9 @@ export function registerSettings(on: On): void {
     const { value, unsaved, unreadable } = await shownSettings($)
     const shown = await shownTab($)
     const badHex = await read($, settingsBadHex)
-    // On Windows alone, where Claude Code's copies write the clipboard twice
-    // (ADR 0008).
-    const hasRdp = await isRdpOffered($)
+    // On Windows alone, its folder known, where Claude Code's copies write
+    // the clipboard twice (ADR 0008).
+    const hasRdp = await hasSystemFolder()
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Nothing is awaited from here on: the presses drawn replace the last ones.

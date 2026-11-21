@@ -2,7 +2,7 @@ import type { EngineInterface, On, Timer } from 'claude-code'
 
 import { heldSettings } from '../settings/settings'
 import { errorText } from '../shared/format'
-import { envValues, failureOf, isWindows } from '../shared/system'
+import { failureOf, systemFolder } from '../shared/system'
 import {
   expectedInput,
   outcomeLog,
@@ -27,28 +27,10 @@ import type { Outcome } from './rewrite'
 // plugin's `$.ui.copy`. `/dx-tse` rewrites the clipboard at once, for the
 // copies dx cannot see.
 
-// The system's folder (`SystemRoot`) on Windows; undefined elsewhere, or
-// when Windows names none.
-let systemRoot: Promise<string | undefined> | undefined
-
-function systemRootOf($: EngineInterface): Promise<string | undefined> {
-  systemRoot ??= findSystemRoot($).catch(() => undefined)
-  return systemRoot
-}
-
-async function findSystemRoot($: EngineInterface): Promise<string | undefined> {
-  if (!(await isWindows($))) return undefined
-  const [root, windir] = await envValues([$.env.get('SystemRoot'), $.env.get('windir')])
-  return root ?? windir
-}
-
-// Whether the setting is offered: on Windows alone.
-export async function isRdpOffered($: EngineInterface): Promise<boolean> {
-  return (await systemRootOf($)) !== undefined
-}
-
+// Whether the setting is on, where it is offered: on Windows alone, its
+// folder known (../shared/system's systemFolder).
 async function isOn($: EngineInterface): Promise<boolean> {
-  return (await isRdpOffered($)) && (await heldSettings($)).rdpClipboard
+  return (await systemFolder($)) !== undefined && (await heldSettings($)).rdpClipboard
 }
 
 // A rewrite asked for: what asked (for the debug log), the text the copy
@@ -74,17 +56,16 @@ let isSelectionSeen = false
 let isTicking = false
 
 // Called by ../register as the session starts, as at a reload, once the
-// settings are read: Windows and its folder found anew, the command
-// registered, and the selection read if the setting is on. Elsewhere,
-// nothing.
+// settings are read: on Windows, its folder known (looked for anew at each
+// start), the command registered, and the selection read if the setting is
+// on. Elsewhere, nothing.
 export async function startRdp($: EngineInterface): Promise<void> {
-  systemRoot = undefined
   isFullscreen = undefined
   poll?.cancel()
   poll = undefined
   timer?.cancel()
   timer = undefined
-  const root = await systemRootOf($)
+  const root = await systemFolder($)
   $.ui.log(`dx : presse-papiers pour le Bureau à distance, ${root === undefined ? 'pas Windows' : `Windows, dossier système ${root}`}`, { to: 'debug' })
   if (root === undefined) return
   await $.command.register({
@@ -190,7 +171,7 @@ function rewrite($: EngineInterface, expected?: string): Promise<Outcome> {
 }
 
 async function runRewrite($: EngineInterface, expected?: string): Promise<Outcome> {
-  const root = await systemRootOf($)
+  const root = await systemFolder($)
   if (root === undefined) return { kind: 'failed', reason: 'pas sous Windows' }
   try {
     const { exitCode, stdout, stderr } = await $.process.run(rewriteCommand(root), {

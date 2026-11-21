@@ -9,7 +9,7 @@ import { errorText } from '../shared/format'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { everyRefresh } from '../shared/pace'
 import { pressBoard } from '../shared/presses'
-import { envValues, isWindows, powershell } from '../shared/system'
+import { envValues, isWindows, powershell, systemFolder, systemPath } from '../shared/system'
 import { wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
@@ -106,9 +106,8 @@ function knownOutput(id: string, session: string): string | undefined {
 // Windows' own temporary folder, `temp` in the system folder, as Node.js
 // falls back to it; undefined when neither variable naming it is set.
 async function windowsTemp($: EngineInterface): Promise<string | undefined> {
-  const [systemRoot, windir] = await envValues([$.env.get('SystemRoot'), $.env.get('windir')])
-  const system = systemRoot ?? windir
-  return system === undefined ? undefined : `${system}\\temp`
+  const folder = await systemFolder($)
+  return folder === undefined ? undefined : systemPath(folder, 'temp')
 }
 
 // A task's output file found on disk: `<id>.output` in its session's
