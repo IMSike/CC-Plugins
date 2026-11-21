@@ -277,11 +277,14 @@ export async function frameColors(ui: Mounted) {
 export const SETTINGS_PANE = { ...PANE, props: { ...PANE.props, title: 'Réglages', scroll: { offset: 0, bodyRows: 40 } } } as const
 export const NOTES_PANE = { ...PANE, props: { ...PANE.props, title: 'Notes', scroll: { offset: 0, bodyRows: 20 } } } as const
 
-// The band's settings icon pressed: the panel on the settings.
-export async function showSettings($: Engine) {
+// The band's settings icon pressed: the panel on the settings, on `tab` when
+// given, else on the tab it opens on.
+export async function showSettings($: Engine, tab?: 'appearance' | 'functions') {
   const band = await $.ui.mount(BAND)
   await click(band, 'settings')
   await band.unmount()
 
-  return $.ui.mount(SETTINGS_PANE)
+  const pane = await $.ui.mount(SETTINGS_PANE)
+  if (tab !== undefined) await click(pane, `settings:tab-${tab}`)
+  return pane
 }

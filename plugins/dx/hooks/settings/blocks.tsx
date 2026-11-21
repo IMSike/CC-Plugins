@@ -1,6 +1,6 @@
 import type { Elements, RenderChildren } from 'claude-code'
 
-import type { BandSettings } from '../../types'
+import type { BandSettings, SettingsTab } from '../../types'
 import { DIM_TEXT, HEAT, HEAT_STEP, thresholdsOf } from '../shared/options'
 import type { PressPart, PressStyle } from '../shared/press'
 import { pressBoard } from '../shared/presses'
@@ -45,7 +45,8 @@ export function isStepper(value: unknown): value is Stepper {
 
 // A press's change; a color's, also the key of its colors, whose hex field's
 // warning it ends; the reset's, applying a color to each, ends any (`isReset`).
-export type SettingsPress = { edit: Edit; colors?: string; isReset?: true }
+// A tab's, the tab it puts in front.
+export type SettingsPress = { edit: Edit; colors?: string; isReset?: true } | { tab: SettingsTab }
 
 // The elements the blocks draw with, as the pane's render resolves them.
 export type SettingsElements = Pick<Elements['terminal'], 'Box' | 'Client' | 'Input' | 'Text'>

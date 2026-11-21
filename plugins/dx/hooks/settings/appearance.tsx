@@ -24,7 +24,7 @@ import type { SettingsBlocks } from './blocks'
 import { moved } from './order'
 
 // The settings of what the band looks like: what it shows, in what order,
-// how it moves, its colors, its gauges' thresholds, its icons.
+// how and when it moves, its colors, its gauges' thresholds, its icons.
 export function appearanceSections(blocks: SettingsBlocks, value: BandSettings): RenderChildren[] {
   const { elements, inner, section, press, toggle, segments, stepper, colors, icons } = blocks
   const { Box, Text } = elements
@@ -68,6 +68,19 @@ export function appearanceSections(blocks: SettingsBlocks, value: BandSettings):
       <Box key="speed" columnGap={1}>
         <Text>Vitesse</Text>
         {segments('speed', SPEEDS, value.speed, (current, speed) => ({ ...current, speed }))}
+      </Box>,
+      toggle('animate-only-working', value.animateOnlyWorking, 'Animer seulement pendant que Claude travaille', current => ({
+        ...current,
+        animateOnlyWorking: !current.animateOnlyWorking,
+      }), inner),
+      // Of use only with the one above: drawn under it, off without it; checked
+      // then, it turns both on.
+      <Box key="animate-with-crew-row" paddingLeft={2}>
+        {toggle('animate-with-crew', value.animateWithCrew && value.animateOnlyWorking, "… ou qu'un sous-agent ou un shell est actif", current => ({
+          ...current,
+          animateWithCrew: current.animateOnlyWorking ? !current.animateWithCrew : true,
+          animateOnlyWorking: true,
+        }), inner - 2)}
       </Box>,
     ]),
     section('colors', 'Couleurs', [

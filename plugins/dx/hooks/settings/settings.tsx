@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
-import type { BandSettings, HeldSettings, SettingsUnreadable } from '../../types'
+import type { BandSettings, HeldSettings, SettingsTab, SettingsUnreadable } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
 import { followRdp, isRdpOffered } from '../rdp/rdp'
 import { errorText } from '../shared/format'
@@ -27,10 +27,29 @@ const settings = atom(
 )
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
-// or by the reset, or the pane is shown anew, or dx starts again.
+// or by the reset, or the pane is shown anew or turned to its other tab, or
+// dx starts again.
 const settingsBadHex = atom({ plugin: 'dx', key: 'settingsBadHex' } as const, null as string | null, { shape: 'settings-bad-hex-1' })
+// The pane's tab in front: the last one shown, kept in the store as the
+// notes' last tab is, so the next opening shows it again: in this session,
+// and in another from dx's next start, which reads it (`loadTab`).
+const settingsTab = atom({ plugin: 'dx', key: 'settingsTab' } as const, 'appearance' as SettingsTab, { shape: 'settings-tab-1' })
 
 const STORE_KEY = 'settings'
+const TAB_KEY = 'settingsTab'
+// The pane's tabs, in their order, with their names.
+const SETTINGS_TABS: readonly (readonly [SettingsTab, string])[] = [
+  ['appearance', 'Apparence'],
+  ['functions', 'Fonctions'],
+]
+
+// The tab in front as this session holds it: kept in the hooks module's
+// memory as in the state, which a `/clear` may empty, as `held` is.
+let tab: SettingsTab = settingsTab.initial
+
+function isSettingsTab(value: unknown): value is SettingsTab {
+  return SETTINGS_TABS.some(([known]) => known === value)
+}
 
 // Whether the settings this session holds are its own: read from the store
 // by this hooks module, the key absent included, or carrying a change of its
@@ -163,9 +182,9 @@ let changing: Promise<void> = Promise.resolve()
 // the defaults this module holds. Neither is the store's: a change is
 // refused until a read succeeds. A hex field's warning ends meanwhile: with
 // the module loaded anew, it would outlive the text it was about, which no
-// keystroke or color of this module then knows to clear. Both are waited
-// for; the clearing's failure is thrown only when the settings' start did
-// not fail.
+// keystroke or color of this module then knows to clear. The tab shown last
+// is read meanwhile (`loadTab`). All are waited for; the clearing's or the
+// tab's failure is thrown only when the settings' start did not fail.
 export async function startSettings($: EngineInterface): Promise<void> {
   const started = changing.then(async () => {
     await takeUp($)
@@ -181,15 +200,41 @@ export async function startSettings($: EngineInterface): Promise<void> {
     }
   })
   changing = started.catch(() => undefined)
-  const [loaded, cleared] = await Promise.allSettled([started, clearBadHex($)])
+  const [loaded, cleared, tabbed] = await Promise.allSettled([started, clearBadHex($), loadTab($)])
   if (loaded.status === 'rejected') throw loaded.reason
   if (cleared.status === 'rejected') throw cleared.reason
+  if (tabbed.status === 'rejected') throw tabbed.reason
+}
+
+// The tab shown last, as the store holds it, put in front. A read that fails,
+// or finds no tab, keeps the one this session holds.
+async function loadTab($: EngineInterface): Promise<void> {
+  const stored = await $.store.get(TAB_KEY).catch(() => undefined)
+  if (isSettingsTab(stored)) tab = stored
+  await update($, settingsTab, () => tab)
+}
+
+// Puts `picked` in front and keeps it as the last tab shown; a save that
+// fails leaves it in front for this session alone, unsaid, as the notes' tab.
+async function showTab($: EngineInterface, picked: SettingsTab): Promise<void> {
+  if (picked === tab) return
+  tab = picked
+  await update($, settingsTab, () => tab)
+  await $.store.set(TAB_KEY, tab).catch(() => undefined)
+}
+
+// The tab in front: what the state holds but after a `/clear` emptied it,
+// read all the same so the pane is drawn again as it changes.
+async function shownTab($: EngineInterface): Promise<SettingsTab> {
+  await read($, settingsTab)
+  return tab
 }
 
 // Called by ../register as a turn starts: the settings a `/clear` emptied from
-// the state are restored, for the band to draw them again; a subagent's turn
-// leaves them. A change under way is not waited for, its save included: what
-// it holds is written by its own `hold` or by this one, whichever runs last.
+// the state are restored, for the band to draw them again, and the pane's tab
+// in front with them; a subagent's turn leaves them. A change under way is
+// not waited for, its save included: what it holds is written by its own
+// `hold` or by this one, whichever runs last.
 // The settings never read, they are read again, at each turn until a read
 // succeeds; one that fails leaves the pane's warning as it stands. Before
 // `takeUp` decided what this session holds, nothing: the defaults this
@@ -198,6 +243,7 @@ export async function startSettings($: EngineInterface): Promise<void> {
 export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): Promise<void> {
   if (e.agentId !== undefined || !isTakenUp) return
   await hold($, {})
+  await update($, settingsTab, () => tab)
   if (settingsLoaded) return
   let stored: unknown
   try {
@@ -339,10 +385,16 @@ export function registerSettings(on: On): void {
     return {}
   })
 
-  // Each press in the pane.
+  // Each press in the pane: a tab, whose switch drops the hex fields drawn
+  // and so their warning, or a change of the settings.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^settings:/ }, async ($, e) => {
     const action = pressActions.get(e.element)
     if (action === undefined) return {}
+    if ('tab' in action) {
+      if (action.tab !== tab) await clearBadHex($)
+      await showTab($, action.tab)
+      return {}
+    }
     if (action.isReset) await clearBadHex($)
     else if (action.colors !== undefined) await markBadHex($, action.colors, false)
     await change($, action.edit)
@@ -357,6 +409,7 @@ export function registerSettings(on: On): void {
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
     const { value, unsaved, unreadable } = await shownSettings($)
+    const shown = await shownTab($)
     const badHex = await read($, settingsBadHex)
     // On Windows alone, where Claude Code's copies write the clipboard twice
     // (ADR 0008).
@@ -375,19 +428,27 @@ export function registerSettings(on: On): void {
     })
     pressActions = blocks.actions
     keepTaskTabs(paneActions)
+    // The pane's own tabs, as the notes draw theirs: the one in front inverse.
+    const settingsTabs = SETTINGS_TABS.map(([key, label]) => {
+      const isShown = key === shown
+      return blocks.board.press(`tab-${key}`, { tab: key }, [
+        { text: ` ${label} `, color: isShown ? 'claude' : 'subtle', inverse: isShown, bold: isShown },
+      ], { bold: true })
+    })
 
     return (
       <Box flexDirection="column">
         {tabs}
+        <Box key="settings-tabs" flexShrink={0} gap={1}>{settingsTabs}</Box>
         {unreadable !== null && (
           <Text key="unreadable" color="error" wrap="wrap">
             {`⚠ réglages illisibles : ${unreadable.reason} (${unreadableOutcome(unreadable)})`}
           </Text>
         )}
         {unsaved !== null && <Text key="unsaved" color="error" wrap="wrap">{`⚠ réglages non enregistrés : ${unsaved}`}</Text>}
-        {appearanceSections(blocks, value)}
-        {functionsSections(blocks, value, { hasRdp })}
+        {shown === 'appearance' ? appearanceSections(blocks, value) : functionsSections(blocks, value, { hasRdp })}
         <Box key="footer" justifyContent="flex-end" paddingX={1}>
+          {/* Every setting, those of the other tab too. */}
           {blocks.board.press('reset', { edit: () => DEFAULT_SETTINGS, isReset: true }, [{ text: '[ ↺ Réinitialiser ]' }], { color: 'claude' })}
         </Box>
       </Box>

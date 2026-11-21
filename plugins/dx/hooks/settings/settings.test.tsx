@@ -967,3 +967,122 @@ test('a reload that cannot read the store keeps the settings read before', async
   await pane.unmount()
   expect(store.get('settings')).toMatchObject({ frameColor: '#58a6ff', show: { total: false } })
 })
+
+// The pane's two tabs: the band's looks, then what dx does, one at a time.
+test('the settings pane shows its appearance tab, then its functions tab', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  for (const title of ['Affichage', 'Bordure du bas', 'Animations', 'Couleurs', 'Seuils des jauges', 'Icônes']) {
+    expect(await pane.find({ type: 'Text', text: title })).toBeDefined()
+  }
+  expect(await pane.find({ key: 'settings:animate-only-working' })).toBeDefined()
+  expect(await pane.find({ key: 'settings:animate-with-crew' })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: "Barre d'état" })).toBeUndefined()
+  expect(await pane.find({ key: 'settings:resume-notes-tab' })).toBeUndefined()
+
+  await click(pane, 'settings:tab-functions')
+  for (const title of ['Notes', "Barre d'état"]) {
+    expect(await pane.find({ type: 'Text', text: title })).toBeDefined()
+  }
+  for (const key of ['refresh-fast', 'hide-idle-five-hour', 'context-to-compact', 'resume-notes-tab']) {
+    expect(await pane.find({ key: `settings:${key}` })).toBeDefined()
+  }
+  expect(await pane.find({ type: 'Text', text: 'Comportement' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: 'Affichage' })).toBeUndefined()
+  expect(await pane.find({ key: 'settings:animate-only-working' })).toBeUndefined()
+  expect(await pane.find({ key: 'settings:reset' })).toBeDefined()
+
+  await click(pane, 'settings:tab-appearance')
+  expect(await pane.find({ type: 'Text', text: 'Affichage' })).toBeDefined()
+  await pane.unmount()
+})
+
+// The last tab shown is the one the pane opens on: closed and opened again,
+// and in a later session, from the store.
+test('the settings pane opens on the last tab shown', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($, 'functions')
+  await pane.unmount()
+  expect(store.get('settingsTab')).toBe('functions')
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await band.unmount()
+  const again = await showSettings($)
+  expect(await again.find({ key: 'settings:resume-notes-tab' })).toBeDefined()
+  await again.unmount()
+
+  // Another session put the appearance tab in front; dx loaded anew reads it.
+  store.set('settingsTab', 'appearance')
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const reloaded = await $.ui.mount(SETTINGS_PANE)
+  expect(await reloaded.find({ key: 'settings:show-total' })).toBeDefined()
+  await reloaded.unmount()
+})
+
+test('a stored tab that is none opens the pane on the appearance tab', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { stored: { settingsTab: 'colors' } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  expect(await pane.find({ key: 'settings:show-total' })).toBeDefined()
+  await pane.unmount()
+})
+
+// A `/clear` that empties the state keeps the tab in front.
+test('the settings tab outlasts a /clear that empties the state', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const session = { id: 's1' }
+  engine(on, { session })
+  shell(on)
+  // dx's tab read as absent from the `/clear` on.
+  const cleared = { value: false }
+  on('state.get', { plugin: 'dx', key: 'settingsTab' }, (_, e, next) => (cleared.value ? { value: { value: undefined, version: 0 } } : next(e)))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await showSettings($, 'functions')
+  await pane.unmount()
+
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  session.id = 's2'
+  cleared.value = true
+  const after = await $.ui.mount(SETTINGS_PANE)
+  expect(await after.find({ key: 'settings:resume-notes-tab' })).toBeDefined()
+  await after.unmount()
+})
+
+// The reset, on either tab, resets every setting, the other tab's too.
+test("the reset on the functions tab resets the appearance tab's settings too", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const store = engine(on, { stored: { settings: { frameColor: '#58a6ff', hideIdleFiveHour: false } } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($, 'functions')
+  await click(pane, 'settings:reset')
+  await pane.unmount()
+  expect(store.get('settings')).toEqual(DEFAULT_SETTINGS)
+})
+
+// Turned to its other tab, the pane drops the hex field it held, and its warning.
+test('a hex color warning goes with a switch of tab', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on)
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  const pane = await showSettings($)
+  await pane.input({ key: 'frame-color-hex', text: 'bleu' })
+  await click(pane, 'settings:tab-functions')
+  await click(pane, 'settings:tab-appearance')
+  expect(await pane.find({ type: 'Text', text: /^⚠ couleur non appliquée/ })).toBeUndefined()
+  await pane.unmount()
+})

@@ -8,8 +8,8 @@ import type { SettingsBlocks } from './blocks'
 // found it: the copies for Remote Desktop on Windows alone (ADR 0008).
 export type Offered = { hasRdp: boolean }
 
-// The settings of what dx does: the notes, the clipboard, how the band
-// behaves.
+// The settings of what dx does: the notes, the clipboard, how often the
+// band refreshes and what its gauges measure.
 export function functionsSections(blocks: SettingsBlocks, value: BandSettings, { hasRdp }: Offered): RenderChildren[] {
   const { elements, inner, section, toggle, segments, stepper } = blocks
   const { Box, Text } = elements
@@ -40,7 +40,7 @@ export function functionsSections(blocks: SettingsBlocks, value: BandSettings, {
           Réécrit le presse-papiers 1 à 2 s après chaque copie vue (sélection, /copy) ; /dx-tse le fait à la demande.
         </Text>,
       ]),
-    section('behavior', 'Comportement', [
+    section('status-bar', "Barre d'état", [
       <Box key="refresh" columnGap={1}>
         <Text>Rafraîchissement</Text>
         {segments('refresh', REFRESHES, value.refresh, (current, refresh) => ({ ...current, refresh }))}
@@ -53,19 +53,6 @@ export function functionsSections(blocks: SettingsBlocks, value: BandSettings, {
         ...current,
         contextToCompact: !current.contextToCompact,
       }), inner),
-      toggle('animate-only-working', value.animateOnlyWorking, 'Animer seulement pendant que Claude travaille', current => ({
-        ...current,
-        animateOnlyWorking: !current.animateOnlyWorking,
-      }), inner),
-      // Of use only with the one above: drawn under it, off without it; checked
-      // then, it turns both on.
-      <Box key="animate-with-crew-row" paddingLeft={2}>
-        {toggle('animate-with-crew', value.animateWithCrew && value.animateOnlyWorking, "… ou qu'un sous-agent ou un shell est actif", current => ({
-          ...current,
-          animateWithCrew: current.animateOnlyWorking ? !current.animateWithCrew : true,
-          animateOnlyWorking: true,
-        }), inner - 2)}
-      </Box>,
     ]),
   ]
 }

@@ -164,6 +164,9 @@ export type BandSettings = {
   rdpClipboard: boolean
 }
 
+// The settings pane's tab: the band's looks, or what dx does.
+export type SettingsTab = 'appearance' | 'functions'
+
 // What dx's side panel shows.
 export type PanelView = 'notes' | 'settings' | 'task'
 
@@ -232,8 +235,11 @@ declare module 'claude-code' {
       settings: Shaped<HeldSettings>
       // The hex field of the settings whose text is no color, by the key of
       // its colors, shown in their pane; null once its text changes, a color
-      // is applied for it, the pane is shown anew or dx starts again.
+      // is applied for it, the pane is shown anew or turned to its other tab,
+      // or dx starts again.
       settingsBadHex: Shaped<string | null>
+      // The settings pane's tab in front, the last one shown.
+      settingsTab: Shaped<SettingsTab>
       notes: Shaped<Notes | null>
       // Why the notes could not be loaded, shown in their pane; null once loaded.
       notesError: Shaped<string | null>
