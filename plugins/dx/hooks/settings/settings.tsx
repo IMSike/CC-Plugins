@@ -3,6 +3,7 @@ import type { EngineInterface, On, RenderChildren, TurnStartInput } from 'claude
 
 import type { BandSettings, HeldSettings, SettingsUnreadable } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
+import { followRdp, isRdpOffered } from '../rdp/rdp'
 import { errorText } from '../shared/format'
 import {
   ACCENTS,
@@ -49,7 +50,7 @@ import type { StepperProps } from './stepper'
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-7' },
+  { shape: 'settings-13' },
 )
 // The hex field whose text is no color, by the key of its colors: said in red
 // under it until its text changes, a color is applied for it, typed, picked
@@ -237,8 +238,13 @@ export async function startSettingsTurn($: EngineInterface, e: TurnStartInput): 
   } catch {
     return
   }
-  // A change that read them meanwhile holds them already, its edit applied.
-  if (!settingsLoaded) await takeStored($, stored)
+  // A change that read them meanwhile holds them already, its edit applied,
+  // and followed the copies for Remote Desktop.
+  if (settingsLoaded) return
+  await takeStored($, stored)
+  // Unread as the session started, the copies for Remote Desktop were
+  // followed as off: followed now as the store holds them.
+  await followRdp($)
 }
 
 // The settings a change starts from: as the store holds them, another
@@ -301,6 +307,8 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
     else await save($)
   }).catch(() => undefined)
   await changing
+  // Another session may have turned the copies for Remote Desktop on or off.
+  await followRdp($)
   await clearBadHex($)
   await togglePanel($, 'settings')
 }
@@ -395,6 +403,8 @@ export function registerSettings(on: On): void {
     if (action.isReset) await clearBadHex($)
     else if (action.colors !== undefined) await markBadHex($, action.colors, false)
     await change($, action.edit)
+    // The selection read for Remote Desktop's copies, or no longer.
+    await followRdp($)
 
     return {}
   })
@@ -405,6 +415,9 @@ export function registerSettings(on: On): void {
     if ((await panelView($)) !== 'settings') return next(e)
     const { value, unsaved, unreadable } = await shownSettings($)
     const badHex = await read($, settingsBadHex)
+    // On Windows alone, where Claude Code's copies write the clipboard twice
+    // (ADR 0008).
+    const hasRdp = await isRdpOffered($)
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Inside a section's border and padding.
@@ -616,6 +629,16 @@ export function registerSettings(on: On): void {
             copyOnSelect: !current.copyOnSelect,
           }), inner),
         ])}
+        {hasRdp &&
+          section('clipboard', 'Presse-papiers', [
+            toggle('rdp-clipboard', value.rdpClipboard, 'Réparer les copies pour le Bureau à distance (TSE)', current => ({
+              ...current,
+              rdpClipboard: !current.rdpClipboard,
+            }), inner),
+            <Text key="rdp-clipboard-hint" dimColor>
+              Réécrit le presse-papiers 1 à 2 s après chaque copie vue (sélection, /copy) ; /dx-tse le fait à la demande.
+            </Text>,
+          ])}
         {section('behavior', 'Comportement', [
           <Box key="refresh" columnGap={1}>
             <Text>Rafraîchissement</Text>

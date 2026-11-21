@@ -4,6 +4,7 @@ import type { EngineInterface, On, TurnStartInput, TurnStepInput } from 'claude-
 import type { Activity, BottomFact, HeldSettings, StatusSnapshot, TurnTime } from '../../types'
 import { openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
+import { seeFullscreen } from '../rdp/rdp'
 import { toggleSettings } from '../settings/settings'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import { clockTime, errorText } from '../shared/format'
@@ -39,7 +40,7 @@ const snapshot = atom({ plugin: 'dx', key: 'statusline' } as const, null, {
 const settings = atom(
   { plugin: 'dx', key: 'settings' } as const,
   { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null } as HeldSettings,
-  { shape: 'settings-7' },
+  { shape: 'settings-13' },
 )
 
 // The main loop's last turn, and a tick each second while it runs, so its
@@ -283,6 +284,8 @@ export function registerStatusline(on: On): void {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    // Whether a selection can be made, for the copies made for Remote Desktop.
+    seeFullscreen(e.viewport?.isFullscreen)
     const status = await read($, snapshot)
     if (e.props.hasSurvey || status === null) return next(e)
     // The band is only raised there, and only there do gauges animate.

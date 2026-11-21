@@ -1,6 +1,6 @@
 import { mock } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
-import type { On, ProcessRunResult } from 'claude-code'
+import type { On, ProcessRunInit, ProcessRunResult } from 'claude-code'
 
 // What dx's integration tests share: the engine beneath the plugin, the
 // drawings they mount and the acts they repeat. Imported by the *.test.tsx
@@ -66,8 +66,8 @@ type EngineOptions = {
   env?: Record<string, string>
   // The system's programs: what one run exits with, or undefined for one that
   // cannot start; a promise for one that answers late, as on `mock.clock`'s
-  // `sleep`. None start by default.
-  run?: (argv: readonly string[]) => ProcessRunResult | undefined | Promise<ProcessRunResult | undefined>
+  // `sleep`. None start by default. `init`: the options it was run with.
+  run?: (argv: readonly string[], init?: ProcessRunInit) => ProcessRunResult | undefined | Promise<ProcessRunResult | undefined>
 }
 
 export function engine(on: On, options: EngineOptions = {}) {
@@ -191,7 +191,7 @@ export function engine(on: On, options: EngineOptions = {}) {
   // The system's programs, as `run` answers: none start by default, so
   // tasks are followed from the engine's signals alone.
   on('process.run', async (_, e) => {
-    const ran = await run(e.argv)
+    const ran = await run(e.argv, e.init)
 
     return ran === undefined ? { deny: 'no process in tests' } : { value: ran }
   })

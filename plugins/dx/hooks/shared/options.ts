@@ -97,6 +97,7 @@ export const DEFAULT_SETTINGS: BandSettings = {
   animateOnlyWorking: false,
   animateWithCrew: true,
   sevenDayLabel: '7j',
+  rdpClipboard: false,
 }
 
 // The settings pane's rows, in order, with their labels.
@@ -266,5 +267,6 @@ export function settingsOf(stored: unknown): BandSettings {
     animateOnlyWorking: boolOf(value.animateOnlyWorking) ?? DEFAULT_SETTINGS.animateOnlyWorking,
     animateWithCrew: boolOf(value.animateWithCrew) ?? DEFAULT_SETTINGS.animateWithCrew,
     sevenDayLabel: oneOf(value.sevenDayLabel, SEVEN_DAY_LABELS) ?? DEFAULT_SETTINGS.sevenDayLabel,
+    rdpClipboard: boolOf(value.rdpClipboard) ?? DEFAULT_SETTINGS.rdpClipboard,
   }
 }

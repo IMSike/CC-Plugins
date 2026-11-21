@@ -159,6 +159,9 @@ export type BandSettings = {
   // The 7-day gauge's label: `7j` (jours, the default) or `7d` (days). It sets
   // the letter of days in the band's durations too: `1j15h` or `1d15h`.
   sevenDayLabel: '7j' | '7d'
+  // The clipboard written again after each copy dx sees, for a paste into a
+  // Remote Desktop session (on Windows; ADR 0008).
+  rdpClipboard: boolean
 }
 
 // What dx's side panel shows.

@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { registerActivity, startActivity } from './activity/activity'
 import { registerNotes, startNotes, startNotesTurn } from './notes/notes'
+import { registerRdp, startRdp } from './rdp/rdp'
 import { registerSettings, startSettings, startSettingsTurn } from './settings/settings'
 import { errorText } from './shared/format'
 import { registerStatusline, startStatusline, startStatuslineTurn } from './statusline/statusline'
@@ -21,6 +22,7 @@ export const register: Register = on => {
   registerActivity(on)
   registerSettings(on)
   registerNotes(on)
+  registerRdp(on)
 
   on('session.start', async ($, e, next) => {
     // Started even when the start beneath dx fails: otherwise the band, the
@@ -31,9 +33,13 @@ export const register: Register = on => {
       // The notes after the settings: they read the tab a pane opens on. The
       // activity and the band read no settings to start, drawing them from the
       // state as they change: they start meanwhile, never waiting on a settings
-      // save under way, which the settings' start waits for at a reload.
+      // save under way, which the settings' start waits for at a reload. The
+      // clipboard's rewrite for Remote Desktop starts once the settings are
+      // read, as it reads the selection only while its setting is on.
       await Promise.all([
-        started($, 'réglages', startSettings($)).then(() => started($, 'notes', startNotes($))),
+        started($, 'réglages', startSettings($)).then(() =>
+          Promise.all([started($, 'notes', startNotes($)), started($, 'presse-papiers TSE', startRdp($))]),
+        ),
         started($, 'activité', startActivity($)),
         started($, 'bandeau', startStatusline($)),
       ])

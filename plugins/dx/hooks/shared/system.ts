@@ -1,7 +1,8 @@
 import type { EngineInterface } from 'claude-code'
 
-// What the features that run a tool the system ships (ADR 0003, ADR 0006)
-// share: which system it is, its environment, PowerShell's launch line.
+// What the features that run a tool the system ships (ADR 0003, ADR 0006,
+// ADR 0008) share: which system it is, its environment, PowerShell's launch
+// line.
 
 // Whether the system is Windows, as its `OS` variable says. A refused read
 // rejects: each caller says what it then takes the system for.
@@ -18,8 +19,15 @@ export async function envValues(reads: readonly Promise<string | undefined>[]): 
 }
 
 // The command line running a PowerShell script: no profile, no prompt.
-export function powershell(script: string): string[] {
-  return ['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(script)]
+// `executable`: PowerShell by its full path, else as the `PATH` finds it.
+export function powershell(script: string, executable = 'powershell'): string[] {
+  return [executable, '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(script)]
+}
+
+// Windows PowerShell 5.1 under the system's folder (`SystemRoot`): the one
+// Windows ships, whatever the `PATH` or the working directory hold.
+export function windowsPowershell(systemRoot: string): string {
+  return `${systemRoot.replace(/[\\/]+$/, '')}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe`
 }
 
 const BASE64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
