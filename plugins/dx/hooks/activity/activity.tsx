@@ -9,7 +9,7 @@ import { errorText } from '../shared/format'
 import { closePanel, isShowing, PANEL, panelView, showPanel, TITLES } from '../shared/panes'
 import { everyRefresh } from '../shared/pace'
 import { pressBoard } from '../shared/presses'
-import { envValues, isWindows, powershell, systemFolder, systemPath } from '../shared/system'
+import { envValues, isWindows, powershell, systemFolder, systemPath, windowsPowershell } from '../shared/system'
 import { wrappedRows } from './tab-rows'
 import {
   cliAgentUnder,
@@ -70,9 +70,15 @@ let tasksDir: { session: string; dir: string } | undefined
 // as a task is shown.
 let looked: { since: number; last: number } | undefined
 
+// The process list, by the system's own means: on Windows, Windows
+// PowerShell under the system's folder, run from it, so that no
+// `powershell.exe` of the session's folder or the `PATH` runs instead (its
+// folder unknown, the read fails).
 async function processTree($: EngineInterface): Promise<ProcessTree> {
   if (await isWindows($)) {
-    const ran = await $.process.run(powershell(WINDOWS_TREE))
+    const folder = await systemFolder($)
+    if (folder === undefined) throw new Error('dossier système de Windows inconnu')
+    const ran = await $.process.run(powershell(WINDOWS_TREE, windowsPowershell(folder)), { cwd: folder })
     return parseWindowsTree(ran.stdout)
   }
   const ran = await $.process.run(['sh', '-c', POSIX_TREE])

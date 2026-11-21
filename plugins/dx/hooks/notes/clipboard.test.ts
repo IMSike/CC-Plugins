@@ -14,9 +14,11 @@ import {
 } from './clipboard'
 
 test('the clipboard is read with PowerShell on Windows, the tools each system ships elsewhere', () => {
-  const [windows, ...others] = clipboardCommands(true)
+  const [windows, ...others] = clipboardCommands(true, 'C:\\Windows\\')
   expect(others).toEqual([])
-  expect(windows?.slice(0, 4)).toEqual(['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand'])
+  expect(windows?.slice(0, 4)).toEqual(['C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', '-NoProfile', '-NonInteractive', '-EncodedCommand'])
+  // Never PowerShell as the `PATH` finds it: none without the system's folder.
+  expect(clipboardCommands(true)).toEqual([])
   expect(clipboardCommands(false).map(argv => argv[0])).toEqual(['pbpaste', 'wl-paste', 'xclip', 'xsel'])
   // Text alone from Wayland, never an image's bytes.
   expect(clipboardCommands(false)[1]).toEqual(['wl-paste', '--no-newline', '--type', 'text'])

@@ -693,7 +693,7 @@ function clipboard(text: string, ran: string[][] = [], tools: readonly string[] 
   return (argv: readonly string[]): ProcessRunResult | undefined => {
     ran.push([...argv])
     const [program = ''] = argv
-    if (program === 'powershell') return { exitCode: 0, stdout: base64(text), stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+    if (program.endsWith('powershell.exe')) return { exitCode: 0, stdout: base64(text), stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
     if (!tools.includes(program)) return undefined
     return { exitCode: 0, stdout: text, stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
   }
@@ -757,16 +757,38 @@ test('a paste whose clearing cannot be written is saved all the same', async ($,
   await again.unmount()
 })
 
-test('on Windows the clipboard is read with PowerShell, its accents kept', async ($, on) => {
+test('on Windows the clipboard is read with Windows PowerShell, by its full path from the system folder, its accents kept', async ($, on) => {
   mock.clock(on, { now: NOW })
   const ran: string[][] = []
-  const store = engine(on, { env: { OS: 'Windows_NT' }, run: clipboard('café\r\nété\tà 2 €', ran) })
+  const cwds: (string | undefined)[] = []
+  const read = clipboard('café\r\nété\tà 2 €', ran)
+  const store = engine(on, {
+    env: { OS: 'Windows_NT', SystemRoot: String.raw`C:\Windows` },
+    run: (argv, init) => {
+      cwds.push(init?.cwd)
+      return read(argv)
+    },
+  })
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   const pane = await $.ui.mount(NOTES_PANE)
 
   await click(pane, 'notes:paste')
-  expect(ran.map(argv => argv.slice(0, 4))).toEqual([['powershell', '-NoProfile', '-NonInteractive', '-EncodedCommand']])
+  expect(ran.map(argv => argv.slice(0, 4))).toEqual([[String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, '-NoProfile', '-NonInteractive', '-EncodedCommand']])
+  expect(cwds).toEqual([String.raw`C:\Windows`])
   expect(store.get('notes.global')).toEqual({ text: 'café\nété  à 2 €', updatedAt: NOW })
+  await pane.unmount()
+})
+
+test("on Windows with no system folder known, the clipboard is not read, and the pane says why", async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const ran: string[][] = []
+  engine(on, { env: { OS: 'Windows_NT' }, run: clipboard('pain', ran) })
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+
+  await click(pane, 'notes:paste')
+  expect(ran).toEqual([])
+  expect(await pane.find({ type: 'Text', text: /dossier système de Windows inconnu/ })).toBeDefined()
   await pane.unmount()
 })
 

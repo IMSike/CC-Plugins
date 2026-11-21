@@ -8,7 +8,7 @@ import { dayTime, errorText } from '../shared/format'
 import { NOTE_TABS } from '../shared/options'
 import { closePanel, isShowing, PANEL, panelView, showPanel } from '../shared/panes'
 import { pressBoard } from '../shared/presses'
-import { envValues, failureOf, isWindows } from '../shared/system'
+import { envValues, failureOf, isWindows, systemFolder } from '../shared/system'
 import {
   CLIPBOARD_NO_TOOL,
   CLIPBOARD_REMOTE,
@@ -184,15 +184,19 @@ async function readClipboard($: EngineInterface): Promise<{ text: string } | { e
   if (remote.some(value => value !== undefined)) return { error: CLIPBOARD_REMOTE }
   // The system unread: taken for another than Windows.
   const windows = await isWindows($).catch(() => false)
+  // On Windows, PowerShell under the system's folder, run from it, so that
+  // no `powershell.exe` of the session's folder or the `PATH` runs instead.
+  const systemRoot = windows ? await systemFolder($) : undefined
+  if (windows && systemRoot === undefined) return { error: clipboardUnreadable('dossier système de Windows inconnu') }
   // Why the first tool that started failed, timed out or exited in error: it
   // says more than the tools tried past it, as not installed, for they
   // could not start. Windows has one tool: why it could not start is said.
   let failure: string | undefined
   let unstarted: string | undefined
-  for (const argv of clipboardCommands(windows)) {
+  for (const argv of clipboardCommands(windows, systemRoot)) {
     const startedAt = await $.clock.now()
     try {
-      const ran = await $.process.run(argv, { timeoutMs: CLIPBOARD_TIMEOUT_MS })
+      const ran = await $.process.run(argv, { timeoutMs: CLIPBOARD_TIMEOUT_MS, ...(systemRoot === undefined ? {} : { cwd: systemRoot }) })
       if (ran.exitCode === 0) return { text: clipboardText(windows, ran.stdout) }
       if (isEmptyClipboard(argv, ran.stderr)) return { text: '' }
       failure ??= failureOf(ran.exitCode, ran.stderr)

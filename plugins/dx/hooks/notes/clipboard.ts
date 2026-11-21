@@ -1,4 +1,4 @@
-import { powershell } from '../shared/system'
+import { powershell, windowsPowershell } from '../shared/system'
 
 // The system clipboard, read for the notes' paste button through the tools
 // the system ships (ADR 0006): the API writes the clipboard but cannot read
@@ -25,10 +25,12 @@ try {
 }`
 
 // The commands that read the clipboard, tried in turn until one reads it: on
-// Windows, PowerShell; elsewhere macOS's own, then Wayland's and X11's.
-// `wl-paste` is asked for text alone, never an image's bytes.
-export function clipboardCommands(isWindows: boolean): string[][] {
-  if (isWindows) return [powershell(WINDOWS_CLIPBOARD)]
+// Windows, Windows PowerShell under the system's folder `systemRoot` (run
+// from it), whatever the `PATH` holds; elsewhere macOS's own, then Wayland's
+// and X11's. `wl-paste` is asked for text alone, never an image's bytes.
+// None on Windows when its folder is unknown.
+export function clipboardCommands(isWindows: boolean, systemRoot?: string): string[][] {
+  if (isWindows) return systemRoot === undefined ? [] : [powershell(WINDOWS_CLIPBOARD, windowsPowershell(systemRoot))]
   return [
     ['pbpaste'],
     ['wl-paste', '--no-newline', '--type', 'text'],

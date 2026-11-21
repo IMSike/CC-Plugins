@@ -62,8 +62,9 @@ export async function homeFolder($: EngineInterface): Promise<string | undefined
 }
 
 // The command line running a PowerShell script: no profile, no prompt.
-// `executable`: PowerShell by its full path, else as the `PATH` finds it.
-export function powershell(script: string, executable = 'powershell'): string[] {
+// `executable`: PowerShell by its full path (`windowsPowershell`), never as
+// the `PATH` or the working directory would find it.
+export function powershell(script: string, executable: string): string[] {
   return [executable, '-NoProfile', '-NonInteractive', '-EncodedCommand', encodeCommand(script)]
 }
 

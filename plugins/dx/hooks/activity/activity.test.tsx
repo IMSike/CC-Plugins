@@ -632,3 +632,22 @@ test('a refresh never starts while the last one runs', async ($, on) => {
   expect(runs).toBe(first)
   answer()
 })
+
+test("on Windows the process list is read by Windows PowerShell, by its full path from the system folder", async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const ran: { program?: string; cwd?: string }[] = []
+  engine(on, {
+    files: OUTPUT,
+    env: { OS: 'Windows_NT', SystemRoot: String.raw`C:\Windows` },
+    run: (argv, init) => {
+      ran.push({ program: argv[0], cwd: init?.cwd })
+      return undefined
+    },
+  })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  await clock.advance(3000)
+  expect(ran[0]).toEqual({ program: String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`, cwd: String.raw`C:\Windows` })
+})
