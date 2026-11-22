@@ -157,8 +157,9 @@ function pathKind($: EngineInterface, path: string): Promise<'file' | 'dir' | 'o
 // window (the model's own, or a smaller one set with
 // `CLAUDE_CODE_AUTO_COMPACT_WINDOW` or the settings) less the buffer it keeps.
 // Not that window, the model's unless one is set: the gauge would not move.
-// The engine field ignores `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, which the real
-// trigger applies: with it set, compaction runs before this threshold.
+// As observed in Claude Code 2.1.330, not documented: the buffer, and the
+// engine field ignoring `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE`, which the real
+// trigger applies, so that with it set compaction runs before this threshold.
 // Undefined with auto-compaction off, no threshold above 0, or when it cannot
 // be read. Read once per COMPACT_THRESHOLD_MS and model: the engine estimates
 // the whole context to answer it.
