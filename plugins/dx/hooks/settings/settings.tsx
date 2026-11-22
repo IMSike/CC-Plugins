@@ -460,15 +460,17 @@ export function registerSettings(on: On): void {
     // Input and Client are drawn there alone.
     if (e.surface !== 'terminal' && e.surface !== 'desktop') return next(e)
     if ((await panelView($)) !== 'settings') return next(e)
-    const { value, unsaved, unreadable } = await shownSettings($)
-    const shown = await shownTab($)
-    const badHex = await read($, settingsBadHex)
-    const openFailure = await read($, settingsOpenFailure)
-    // On Windows alone, its folder known: Claude Code's copies write the
-    // clipboard twice there (ADR 0008), and the File Explorer opens the
-    // configuration folder, looked for there alone.
-    const onWindows = await hasSystemFolder()
-    const folder = onWindows ? await userConfigFolder($).catch(() => undefined) : undefined
+    // Read together, none depending on another. On Windows alone, its folder
+    // known (`onWindows`): Claude Code's copies write the clipboard twice
+    // there (ADR 0008), and the File Explorer opens the configuration folder
+    // (ADR 0007), looked for there alone.
+    const [{ value, unsaved, unreadable }, shown, badHex, openFailure, [onWindows, folder]] = await Promise.all([
+      shownSettings($),
+      shownTab($),
+      read($, settingsBadHex),
+      read($, settingsOpenFailure),
+      hasSystemFolder().then(async found => [found, found ? await userConfigFolder($).catch(() => undefined) : undefined] as const),
+    ])
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Nothing is awaited from here on: the presses drawn replace the last ones.
