@@ -6,7 +6,7 @@
 
 | Page | Contents |
 |---|---|
-| [dx](plugins/dx.md) | Status band: model, effort, directory, context and usage-limit gauges; subagents and background tasks; notes and settings panes |
+| [dx](plugins/dx.md) | Status band: model, effort, directory, context and usage-limit gauges; subagents and background tasks; notes and settings panes; on Windows, a clipboard repair for Remote Desktop |
 
 ## Contributing
 

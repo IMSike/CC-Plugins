@@ -10,7 +10,7 @@ Une marketplace de plugins [Claude Code](https://code.claude.com) : les plugins 
 
 | Plugin | Contenu |
 |---|---|
-| [`dx`](docs/fr/plugins/dx.md) | Confort de développement : un bandeau d'état au-dessus du prompt avec le modèle, l'effort, le répertoire courant, et des jauges pour le contexte et les limites d'utilisation sur 5 heures et 7 jours, colorées selon leur niveau ; une icône par sous-agent et par tâche en arrière-plan, à un clic de sa conversation ou de sa sortie ; la durée du tour ; des panneaux de notes personnelles et de réglages |
+| [`dx`](docs/fr/plugins/dx.md) | Confort de développement : un bandeau d'état au-dessus du prompt avec le modèle, l'effort, le répertoire courant, et des jauges pour le contexte et les limites d'utilisation sur 5 heures et 7 jours, colorées selon leur niveau ; une icône par sous-agent et par tâche en arrière-plan, à un clic de sa conversation ou de sa sortie ; la durée du tour ; des panneaux de notes personnelles et de réglages ; sous Windows, une réparation du presse-papiers pour coller dans le Bureau à distance |
 
 ## Installation
 
@@ -36,7 +36,7 @@ Mises à jour : `/plugin marketplace update cc-plugins`, ou activer la mise à j
 |---|---|
 | [Plugins](docs/fr/README.md) | Ce que chaque plugin affiche ou fait, implications, comment le désactiver |
 | [Ajouter un plugin](docs/fr/adding-plugins.md) | Arborescence, manifeste, module de hooks, tests |
-| [Décisions d'architecture](docs/fr/adr/) | Pourquoi des mods, pourquoi pas de version de plugin, pourquoi lire la liste des processus, pourquoi garder réglages et notes dans le store du plugin, pourquoi les éléments cliquables du panneau sont dessinés par un Client, pourquoi une note colle le presse-papiers du système avec un bouton |
+| [Décisions d'architecture](docs/fr/adr/) | Pourquoi des mods, pourquoi pas de version de plugin, pourquoi lire la liste des processus, pourquoi garder réglages et notes dans le store du plugin, pourquoi les éléments cliquables du panneau sont dessinés par un Client, pourquoi une note colle le presse-papiers du système avec un bouton, pourquoi le panneau des réglages ouvre le dossier de configuration de Claude Code dans l'Explorateur de fichiers, pourquoi le presse-papiers est réécrit après une copie pour le Bureau à distance |
 
 ## Contribuer
 

@@ -6,7 +6,7 @@
 
 | Page | Contenu |
 |---|---|
-| [dx](plugins/dx.md) | Bandeau d'état : modèle, effort, répertoire, jauges de contexte et de limites d'utilisation ; sous-agents et tâches en arrière-plan ; panneaux de notes et de réglages |
+| [dx](plugins/dx.md) | Bandeau d'état : modèle, effort, répertoire, jauges de contexte et de limites d'utilisation ; sous-agents et tâches en arrière-plan ; panneaux de notes et de réglages ; sous Windows, réparation du presse-papiers pour le Bureau à distance |
 
 ## Contribuer
 
