@@ -5,7 +5,7 @@ import { registerNotes, startNotes, startNotesTurn } from './notes/notes'
 import { registerRdp, startRdp } from './rdp/rdp'
 import { registerSettings, startSettings, startSettingsTurn } from './settings/settings'
 import { errorText } from './shared/format'
-import { forgetSystemFolder } from './shared/system'
+import { forgetSystemFolder, systemFolder } from './shared/system'
 import { registerStatusline, startStatusline, startStatuslineTurn } from './statusline/statusline'
 
 // Waits for one feature's start: one that fails never keeps another from
@@ -37,8 +37,12 @@ export const register: Register = on => {
       // save under way, which the settings' start waits for at a reload. The
       // clipboard's rewrite for Remote Desktop starts once the settings are
       // read, as it reads the selection only while its setting is on. The
-      // system's folder, which several of them use, is looked for anew first.
+      // system's folder, which several of them use, is looked for anew first,
+      // and at once: the settings pane offers what needs it (the copies for
+      // Remote Desktop, the configuration folder button) only once it is
+      // found, and would otherwise leave them out until a feature asks for it.
       forgetSystemFolder()
+      void systemFolder($)
       await Promise.all([
         started($, 'réglages', startSettings($)).then(() =>
           Promise.all([started($, 'notes', startNotes($)), started($, 'presse-papiers TSE', startRdp($))]),
