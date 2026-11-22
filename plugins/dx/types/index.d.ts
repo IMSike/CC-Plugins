@@ -238,6 +238,9 @@ declare module 'claude-code' {
       // is applied for it, the pane is shown anew or turned to its other tab,
       // or dx starts again.
       settingsBadHex: Shaped<string | null>
+      // Why Claude Code's configuration folder did not open, said in the settings
+      // pane; null once it opens, the pane is shown anew or dx starts again.
+      settingsOpenFailure: Shaped<string | null>
       // The settings pane's tab in front, the last one shown.
       settingsTab: Shaped<SettingsTab>
       notes: Shaped<Notes | null>

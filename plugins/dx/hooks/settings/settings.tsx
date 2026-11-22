@@ -7,11 +7,13 @@ import { followRdp } from '../rdp/rdp'
 import { errorText } from '../shared/format'
 import { DEFAULT_SETTINGS, HELD_SETTINGS, hexOf, SETTINGS_SHAPE, settingsOf } from '../shared/options'
 import { PANEL, panelView, showPanel, togglePanel } from '../shared/panes'
-import { hasSystemFolder } from '../shared/system'
+import { envValues, hasSystemFolder, homeFolder } from '../shared/system'
 import { appearanceSections } from './appearance'
 import { isStepper, settingsBlocks, STEPPERS } from './blocks'
 import type { SettingsPress } from './blocks'
+import { configFolder, folderName } from './config-folder'
 import { functionsSections } from './functions'
+import { openFolder } from './open-folder'
 
 // The settings pane: what the band shows, animates and is colored with, kept
 // in `$.store` across sessions and read into `$.state` for the drawings, one
@@ -33,6 +35,9 @@ const settingsBadHex = atom({ plugin: 'dx', key: 'settingsBadHex' } as const, nu
 // notes' last tab is, so the next opening shows it again: in this session,
 // and in another from dx's next start, which reads it (`loadTab`).
 const settingsTab = atom({ plugin: 'dx', key: 'settingsTab' } as const, 'appearance' as SettingsTab, { shape: 'settings-tab-1' })
+// Why Claude Code's configuration folder did not open, as the pane says it:
+// null once it opens, the pane is shown anew or dx starts again.
+const settingsOpenFailure = atom({ plugin: 'dx', key: 'settingsOpenFailure' } as const, null as string | null, { shape: 'settings-open-failure-1' })
 
 const STORE_KEY = 'settings'
 const TAB_KEY = 'settingsTab'
@@ -199,7 +204,7 @@ export async function startSettings($: EngineInterface): Promise<void> {
     }
   })
   changing = started.catch(() => undefined)
-  const [loaded, cleared, tabbed] = await Promise.allSettled([started, clearBadHex($), loadTab($)])
+  const [loaded, cleared, tabbed] = await Promise.allSettled([started, clearPaneWarnings($), loadTab($)])
   if (loaded.status === 'rejected') throw loaded.reason
   if (cleared.status === 'rejected') throw cleared.reason
   if (tabbed.status === 'rejected') throw tabbed.reason
@@ -321,7 +326,7 @@ export async function toggleSettings($: EngineInterface): Promise<void> {
   await changing
   // Another session may have turned the copies for Remote Desktop on or off.
   await followRdp($)
-  await clearBadHex($)
+  await clearPaneWarnings($)
   await togglePanel($, 'settings')
 }
 
@@ -348,6 +353,49 @@ async function markBadHex($: EngineInterface, key: string, isBad: boolean): Prom
   if (!isBad && badHex !== key) return
   badHex = isBad ? key : null
   await update($, settingsBadHex, () => badHex)
+}
+
+// Each clearing of the pane's warnings counts one more: an open that started
+// before the last one says nothing, its outcome about a pane since shown
+// anew. And whether an open is under way: a press meanwhile does nothing, as
+// Windows PowerShell may take up to 15 s to open it (./open-folder).
+let openRound = 0
+let isOpening = false
+
+// The pane shown anew, or dx started again: neither a hex field's warning nor
+// a failure to open the configuration folder stays.
+async function clearPaneWarnings($: EngineInterface): Promise<void> {
+  openRound += 1
+  await Promise.all([clearBadHex($), update($, settingsOpenFailure, () => null)])
+}
+
+// Claude Code's configuration folder (./config-folder), from the
+// environment; none when it cannot be placed.
+async function userConfigFolder($: EngineInterface): Promise<string | undefined> {
+  const [[configDir], home, cwd] = await Promise.all([
+    envValues([$.env.get('CLAUDE_CONFIG_DIR')]),
+    homeFolder($),
+    $.session.cwd().catch(() => ''),
+  ])
+  return configFolder(configDir, home, cwd)
+}
+
+// Opens Claude Code's configuration folder in the File Explorer
+// (./open-folder), never its `settings.json`, which Claude Code refuses a
+// plugin to name to a program. dx never writes in it. The pane says why it
+// did not open, until it opens or the pane is shown anew.
+async function openConfigFolder($: EngineInterface): Promise<void> {
+  if (isOpening) return
+  isOpening = true
+  const round = openRound
+  try {
+    const folder = await userConfigFolder($)
+    const failed = folder === undefined ? { isMissing: false, reason: 'dossier de configuration inconnu' } : await openFolder($, folder)
+    const said = failed === undefined ? null : failed.isMissing ? `⚠ dossier introuvable : ${folder}` : `⚠ dossier non ouvert : ${failed.reason}`
+    if (round === openRound) await update($, settingsOpenFailure, () => said)
+  } finally {
+    isOpening = false
+  }
 }
 
 // What followed the settings unreadable, as the pane says it after the reason.
@@ -378,20 +426,25 @@ export function registerSettings(on: On): void {
   // does nothing.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: 'pane-settings' }, async $ => {
     if ((await panelView($)) === 'settings') return {}
-    await clearBadHex($)
+    await clearPaneWarnings($)
     await showPanel($, 'settings')
 
     return {}
   })
 
   // Each press in the pane: a tab, whose switch drops the hex fields drawn
-  // and so their warning, or a change of the settings.
+  // and so their warning; Claude Code's configuration folder to open; or a
+  // change of the settings.
   on('ui.message', { module: /press\.tsx$/, requestId: PANEL, element: /^settings:/ }, async ($, e) => {
     const action = pressActions.get(e.element)
     if (action === undefined) return {}
     if ('tab' in action) {
       if (action.tab !== tab) await clearBadHex($)
       await showTab($, action.tab)
+      return {}
+    }
+    if ('openConfigFolder' in action) {
+      await openConfigFolder($)
       return {}
     }
     if (action.isReset) await clearBadHex($)
@@ -410,9 +463,12 @@ export function registerSettings(on: On): void {
     const { value, unsaved, unreadable } = await shownSettings($)
     const shown = await shownTab($)
     const badHex = await read($, settingsBadHex)
-    // On Windows alone, its folder known, where Claude Code's copies write
-    // the clipboard twice (ADR 0008).
-    const hasRdp = await hasSystemFolder()
+    const openFailure = await read($, settingsOpenFailure)
+    // On Windows alone, its folder known: Claude Code's copies write the
+    // clipboard twice there (ADR 0008), and the File Explorer opens the
+    // configuration folder, looked for there alone.
+    const onWindows = await hasSystemFolder()
+    const folder = onWindows ? await userConfigFolder($).catch(() => undefined) : undefined
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
     // Nothing is awaited from here on: the presses drawn replace the last ones.
@@ -445,8 +501,10 @@ export function registerSettings(on: On): void {
           </Text>
         )}
         {unsaved !== null && <Text key="unsaved" color="error" wrap="wrap">{`⚠ réglages non enregistrés : ${unsaved}`}</Text>}
-        {shown === 'appearance' ? appearanceSections(blocks, value) : functionsSections(blocks, value, { hasRdp })}
-        <Box key="footer" justifyContent="flex-end" paddingX={1}>
+        {shown === 'appearance' ? appearanceSections(blocks, value) : functionsSections(blocks, value, { hasRdp: onWindows })}
+        {openFailure !== null && <Text key="open-failure" color="error" wrap="wrap">{openFailure}</Text>}
+        <Box key="footer" justifyContent="flex-end" paddingX={1} columnGap={3}>
+          {onWindows && blocks.board.press('open-config-folder', { openConfigFolder: true }, [{ text: `[ 📁 dossier ${folderName(folder ?? '.claude')} ]` }], { color: 'claude' })}
           {/* Every setting, those of the other tab too. */}
           {blocks.board.press('reset', { edit: () => DEFAULT_SETTINGS, isReset: true }, [{ text: '[ ↺ Réinitialiser ]' }], { color: 'claude' })}
         </Box>

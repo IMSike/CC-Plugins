@@ -70,6 +70,20 @@ type EngineOptions = {
   run?: (argv: readonly string[], init?: ProcessRunInit) => ProcessRunResult | undefined | Promise<ProcessRunResult | undefined>
 }
 
+// The engine's rule, as observed: an argument matching `settings.json` or
+// `settings.local.json`, then, slashes folded and lowercased, a settings file
+// under `.claude/`, the words `claude_config_dir`, or one under
+// `CLAUDE_CONFIG_DIR`.
+function namesSettingsFile(arg: string, configDir: string | undefined): boolean {
+  if (!/settings(\.local)?\.json/i.test(arg)) return false
+  const fold = (text: string) => text.replace(/[/\\]+/g, '/').toLowerCase()
+  const folded = fold(arg)
+  if (/\.claude\/(settings|settings\.local|cowork_settings)\.json/.test(folded) || folded.includes('claude_config_dir')) return true
+  // Set empty, it is unset, as Claude Code reads it.
+  if (configDir === undefined || configDir === '') return false
+  return folded.includes(fold(`${configDir}/settings.json`)) || folded.includes(fold(`${configDir}/cowork_settings.json`))
+}
+
 export function engine(on: On, options: EngineOptions = {}) {
   const {
     rateLimits = true,
@@ -190,7 +204,14 @@ export function engine(on: On, options: EngineOptions = {}) {
   on('agent.list', () => ({ value: agents as never }))
   // The system's programs, as `run` answers: none start by default, so
   // tasks are followed from the engine's signals alone.
+  // Claude Code refuses a plugin's run whose argument names one of its
+  // settings files, as its built-in `cc-plugin-sec-default` mod does
+  // (observed in Claude Code 2.1.330), whatever `run` answers: written here
+  // on its own, not taken from dx's code, so that dx naming one is caught.
   on('process.run', async (_, e) => {
+    if (e.argv.some(arg => namesSettingsFile(arg, env.CLAUDE_CONFIG_DIR))) {
+      return { deny: 'a Claude Code settings file is not for plugins outside policy to write; read settings with $.settings.read' }
+    }
     const ran = await run(e.argv, e.init)
 
     return ran === undefined ? { deny: 'no process in tests' } : { value: ran }

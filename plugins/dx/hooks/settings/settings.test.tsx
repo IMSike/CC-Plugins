@@ -1,8 +1,11 @@
 import { expect, mock, test } from 'claude-code/testing'
-import type { On, StateRead } from 'claude-code'
+import type { On, ProcessRunResult, StateRead } from 'claude-code'
+import type { Engine } from 'claude-code/testing'
 
 import { DEFAULT_SETTINGS } from '../shared/options'
+import { encodeCommand } from '../shared/system'
 import { BAND, click, engine, frameColors, NOTES_PANE, NOW, SETTINGS_PANE, shell, showSettings } from '../shared/testing'
+import { WINDOWS_OPEN_FOLDER } from './open-folder'
 
 test('a setting changed in its pane is kept and redraws the band', async ($, on) => {
   mock.clock(on, { now: NOW })
@@ -1085,4 +1088,208 @@ test('a hex color warning goes with a switch of tab', async ($, on) => {
   await click(pane, 'settings:tab-appearance')
   expect(await pane.find({ type: 'Text', text: /^⚠ couleur non appliquée/ })).toBeUndefined()
   await pane.unmount()
+})
+
+// Claude Code's configuration folder, opened from the pane's footer: on
+// Windows (`windows`), the folder there unless `missing`, holding
+// `settings.json`, in `configDir` when set; Windows PowerShell failing to
+// open it while `openFails` holds and, when `slow` is given, answering once
+// it resolves, `started` called as it starts. What ran, the folders opened in
+// a window shown (`opened`) or hidden (`hidden`), and the files written.
+type ConfigFolderOptions = {
+  windows?: boolean
+  missing?: boolean
+  configDir?: string
+  openFails?: { value: boolean }
+  slow?: Promise<void>
+  started?: () => void
+}
+const SYSTEM_ROOT = String.raw`C:\Windows`
+const FILE_EXPLORER = String.raw`C:\Windows\explorer.exe`
+const POWERSHELL = String.raw`C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe`
+const OPEN_COMMAND = encodeCommand(WINDOWS_OPEN_FOLDER)
+const CONFIG_FOLDER = String.raw`C:\Users\dev\.claude`
+const DONE: ProcessRunResult = { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false }
+
+async function startConfigFolder($: Engine, on: On, options: ConfigFolderOptions = {}) {
+  const { windows = true, missing = false, configDir, openFails = { value: false }, slow, started } = options
+  mock.clock(on, { now: NOW })
+  const ran: { argv: string[]; cwd?: string }[] = []
+  const opened: string[] = []
+  const hidden: string[] = []
+  const writes: string[] = []
+  on('fs.write', (_, e, next) => {
+    writes.push(e.path)
+    return next(e)
+  })
+  const folder = configDir === undefined || configDir === '' ? 'Users/dev/.claude' : configDir.split(/[\\/]/).filter(Boolean).pop()
+  engine(on, {
+    files: missing ? {} : { [`${folder}/settings.json`]: '{}' },
+    env: {
+      ...(windows ? { OS: 'Windows_NT', SystemRoot: SYSTEM_ROOT } : {}),
+      ...(configDir === undefined ? {} : { CLAUDE_CONFIG_DIR: configDir }),
+    },
+    run: async (argv, init) => {
+      ran.push({ argv: [...argv], ...(init?.cwd === undefined ? {} : { cwd: init.cwd }) })
+      // Claude Code starts a plugin's programs with their window hidden: the
+      // File Explorer run directly opens the folder in a hidden window, and
+      // exits with 1 on success too.
+      if (argv[0] === FILE_EXPLORER) {
+        hidden.push(...argv.slice(1))
+        return { ...DONE, exitCode: 1 }
+      }
+      if (argv[0] !== POWERSHELL || argv.at(-1) !== OPEN_COMMAND) return DONE
+      started?.()
+      await slow
+      if (openFails.value) return { ...DONE, exitCode: 1, stderr: 'Invoke-Item : Accès refusé\r\n' }
+      opened.push(init?.env?.DX_OPEN_FOLDER ?? '')
+      return DONE
+    },
+  })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  return { ran, opened, hidden, writes }
+}
+
+// The folder alone is named, never its settings.json, which Claude Code
+// refuses a run to name (its rule, in ../shared/testing).
+test("the configuration folder button opens Claude Code's folder in the File Explorer, never naming its settings.json", async ($, on) => {
+  const { ran, opened, writes } = await startConfigFolder($, on)
+  const pane = await showSettings($)
+  expect(await pane.find({ type: 'Text', text: '[ 📁 dossier .claude ]', in: 'settings:open-config-folder' })).toBeDefined()
+  await click(pane, 'settings:open-config-folder')
+  expect(ran).toEqual([{ argv: [POWERSHELL, '-NoProfile', '-NonInteractive', '-EncodedCommand', OPEN_COMMAND], cwd: SYSTEM_ROOT }])
+  expect(opened).toEqual([CONFIG_FOLDER])
+  expect(writes).toEqual([])
+  expect(await pane.find({ type: 'Text', text: /dossier (introuvable|non ouvert)/ })).toBeUndefined()
+  // On the other tab too.
+  await click(pane, 'settings:tab-functions')
+  expect(await pane.find({ key: 'settings:open-config-folder' })).toBeDefined()
+  await pane.unmount()
+})
+
+test('the button opens the folder of CLAUDE_CONFIG_DIR when set, named by it', async ($, on) => {
+  const { opened } = await startConfigFolder($, on, { configDir: String.raw`D:\claude-config` })
+  const pane = await showSettings($)
+  expect(await pane.find({ type: 'Text', text: '[ 📁 dossier claude-config ]', in: 'settings:open-config-folder' })).toBeDefined()
+  await click(pane, 'settings:open-config-folder')
+  expect(opened).toEqual([String.raw`D:\claude-config`])
+  await pane.unmount()
+})
+
+test('a CLAUDE_CONFIG_DIR written with slashes opens its folder all the same', async ($, on) => {
+  const { opened } = await startConfigFolder($, on, { configDir: 'C:/claude-config/' })
+  const pane = await showSettings($)
+  await click(pane, 'settings:open-config-folder')
+  expect(opened).toEqual([String.raw`C:\claude-config`])
+  expect(await pane.find({ type: 'Text', text: /dossier (introuvable|non ouvert)/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// Set empty, it is unset, as Claude Code reads it.
+test('an empty CLAUDE_CONFIG_DIR opens .claude in the home folder', async ($, on) => {
+  const { opened } = await startConfigFolder($, on, { configDir: '' })
+  const pane = await showSettings($)
+  await click(pane, 'settings:open-config-folder')
+  expect(opened).toEqual([CONFIG_FOLDER])
+  await pane.unmount()
+})
+
+test('a configuration folder that is not there says so in the pane, until the pane is shown anew', async ($, on) => {
+  const { ran } = await startConfigFolder($, on, { missing: true })
+  const pane = await showSettings($)
+  await click(pane, 'settings:open-config-folder')
+  expect(ran).toEqual([])
+  const warning = await pane.find({ type: 'Text', text: `⚠ dossier introuvable : ${CONFIG_FOLDER}` })
+  expect(warning?.props.color).toBe('error')
+  await pane.unmount()
+
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await click(band, 'settings')
+  await band.unmount()
+  const again = await $.ui.mount(SETTINGS_PANE)
+  expect(await again.find({ type: 'Text', text: /dossier introuvable/ })).toBeUndefined()
+  await again.unmount()
+})
+
+test('a configuration folder Windows cannot open says why in the pane, until it opens', async ($, on) => {
+  const openFails = { value: true }
+  await startConfigFolder($, on, { openFails })
+  const pane = await showSettings($)
+  await click(pane, 'settings:open-config-folder')
+  expect((await pane.find({ type: 'Text', text: '⚠ dossier non ouvert : Invoke-Item : Accès refusé' }))?.props.color).toBe('error')
+  openFails.value = false
+  await click(pane, 'settings:open-config-folder')
+  expect(await pane.find({ type: 'Text', text: /dossier non ouvert/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// Run directly, the File Explorer would open it in a hidden window: nothing
+// seen, nothing said.
+test('the configuration folder opens in a window shown, never by the File Explorer run directly, whose window Claude Code hides', async ($, on) => {
+  const { ran, opened, hidden } = await startConfigFolder($, on)
+  const pane = await showSettings($)
+  await click(pane, 'settings:open-config-folder')
+  expect(hidden).toEqual([])
+  expect(ran.map(item => item.argv[0])).not.toContain(FILE_EXPLORER)
+  expect(opened).toEqual([CONFIG_FOLDER])
+  await pane.unmount()
+})
+
+// Handed over by the environment, the folder needs no quoting: a comma or a
+// semicolon in it, at which the File Explorer's command line is split,
+// changes nothing.
+test('a configuration folder holding a comma or a semicolon opens all the same', async ($, on) => {
+  const { opened } = await startConfigFolder($, on, { configDir: String.raw`D:\claude,config;x` })
+  const pane = await showSettings($)
+  await click(pane, 'settings:open-config-folder')
+  expect(opened).toEqual([String.raw`D:\claude,config;x`])
+  expect(await pane.find({ type: 'Text', text: /dossier (introuvable|non ouvert)/ })).toBeUndefined()
+  await pane.unmount()
+})
+
+// Nor does it look for the folder: `CLAUDE_CONFIG_DIR` is never read.
+test('off Windows, the settings pane draws no configuration folder button', async ($, on) => {
+  const reads = { count: 0 }
+  on('env.get', { name: 'CLAUDE_CONFIG_DIR' }, (_, e, next) => {
+    reads.count++
+    return next(e)
+  })
+  await startConfigFolder($, on, { windows: false })
+  const pane = await showSettings($)
+  expect(await pane.find({ key: 'settings:open-config-folder' })).toBeUndefined()
+  expect(await pane.find({ key: 'settings:reset' })).toBeDefined()
+  await pane.unmount()
+  expect(reads.count).toBe(0)
+})
+
+// An open that fails once the pane was shown anew says nothing there; a press
+// while one is under way runs nothing more.
+test('a slow configuration folder open neither runs twice nor says its failure after the pane is shown anew', async ($, on) => {
+  let finish = () => {}
+  const slow = new Promise<void>(resolve => {
+    finish = resolve
+  })
+  let started = () => {}
+  const isStarted = new Promise<void>(resolve => {
+    started = resolve
+  })
+  const { ran } = await startConfigFolder($, on, { slow, started, openFails: { value: true } })
+  const pane = await showSettings($)
+  const opening = click(pane, 'settings:open-config-folder')
+  await isStarted
+  await click(pane, 'settings:open-config-folder')
+  await pane.unmount()
+
+  const band = await $.ui.mount(BAND)
+  await click(band, 'settings')
+  await click(band, 'settings')
+  await band.unmount()
+  finish()
+  await opening
+  expect(ran).toHaveLength(1)
+  const again = await $.ui.mount(SETTINGS_PANE)
+  expect(await again.find({ type: 'Text', text: /dossier non ouvert/ })).toBeUndefined()
+  await again.unmount()
 })
