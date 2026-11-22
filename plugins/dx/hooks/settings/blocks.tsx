@@ -186,5 +186,5 @@ export function settingsBlocks(elements: SettingsElements, columns: number, hex:
     </Box>,
   ]
 
-  return { elements, inner, half, board, actions: board.actions, section, press, toggle, segments, stepper, colors, icons }
+  return { elements, inner, board, actions: board.actions, section, press, toggle, segments, stepper, colors, icons }
 }
