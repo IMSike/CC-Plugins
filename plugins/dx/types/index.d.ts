@@ -162,7 +162,18 @@ export type BandSettings = {
   // The clipboard written again after each copy dx sees, for a paste into a
   // Remote Desktop session (on Windows; ADR 0008).
   rdpClipboard: boolean
+  // The paths of Claude's replies made links herdr's `imsike.links` plugin
+  // opens on a ctrl+click (inside herdr, on Windows; ADR 0009).
+  clickablePaths: boolean
 }
+
+// What the clickable paths need, as the session found it inside herdr
+// (ADR 0009): herdr's `imsike.links` plugin, looked for as the session
+// starts (`checking` until known, `failed` when herdr did not answer twice,
+// `unchecked` when the system's folder herdr is run from is not known),
+// whether Claude Code draws links as hyperlinks (`FORCE_HYPERLINK=1`),
+// and whether `FORCE_HYPERLINK` itself turns them off (`0`, `false`…).
+export type PathsFound = { plugin: 'checking' | 'listed' | 'missing' | 'failed' | 'unchecked'; hyperlinks: boolean; isForcedOff: boolean }
 
 // The settings pane's tab: the band's looks, or what dx does.
 export type SettingsTab = 'appearance' | 'functions'
@@ -263,6 +274,9 @@ declare module 'claude-code' {
       // The first of the other sessions' notes listed, the list scrolled.
       notesOthersAt: Shaped<number>
       panel: Shaped<PanelView>
+      // What the clickable paths need, said in the settings pane; null outside
+      // herdr or off Windows.
+      paths: Shaped<PathsFound | null>
     }
   }
 }

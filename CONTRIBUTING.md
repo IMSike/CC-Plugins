@@ -20,7 +20,7 @@ A session started with `--plugin-dir` reloads the plugin each time a file is sav
 
 ## Principles
 
-- **No runtime dependency**: a plugin needs Claude Code and nothing else (no Node, no `jq`, no shell script); it reaches the session, the settings and the environment through `$`. Only a tool the system itself ships may be run, through `$.process.run`, when the API offers no other way and an ADR says why ([ADR 0003](docs/en/adr/0003-system-process-list.md)).
+- **No runtime dependency**: a plugin needs Claude Code and nothing else (no Node, no `jq`, no shell script); it reaches the session, the settings and the environment through `$`. Only a tool the system itself ships may be run, through `$.process.run`, when the API offers no other way and an ADR says why ([ADR 0003](docs/en/adr/0003-system-process-list.md)), or, likewise, an optional third-party tool detected at run time, whose absence changes nothing, only queried read-only ([ADR 0009](docs/en/adr/0009-clickable-paths.md)).
 - **Quiet by default**: a plugin never blocks or slows the session; a failing hook is skipped by the engine, and a hook passes (`next(e)`) whenever it has nothing to add.
 - **No secrets, no personal data, no machine-specific paths** in the repository.
 - **Documented**: each feature explained (what it shows or does, implications, how to turn it off), in both languages.

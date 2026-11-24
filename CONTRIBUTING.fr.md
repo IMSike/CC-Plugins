@@ -20,7 +20,7 @@ Une session lancée avec `--plugin-dir` recharge le plugin à chaque enregistrem
 
 ## Principes
 
-- **Aucune dépendance à l'exécution** : un plugin n'a besoin que de Claude Code (ni Node, ni `jq`, ni script shell) ; il atteint la session, les réglages et l'environnement par `$`. Seul un outil fourni par le système lui-même peut être lancé, par `$.process.run`, quand l'API n'offre pas d'autre moyen et qu'un ADR dit pourquoi ([ADR 0003](docs/fr/adr/0003-system-process-list.md)).
+- **Aucune dépendance à l'exécution** : un plugin n'a besoin que de Claude Code (ni Node, ni `jq`, ni script shell) ; il atteint la session, les réglages et l'environnement par `$`. Seul un outil fourni par le système lui-même peut être lancé, par `$.process.run`, quand l'API n'offre pas d'autre moyen et qu'un ADR dit pourquoi ([ADR 0003](docs/fr/adr/0003-system-process-list.md)), ou, de même, un outil tiers facultatif détecté à l'exécution, dont l'absence ne change rien, seulement interrogé en lecture seule ([ADR 0009](docs/fr/adr/0009-clickable-paths.md)).
 - **Discret par défaut** : un plugin ne bloque ni ne ralentit jamais la session ; un hook en échec est ignoré par le moteur, et un hook passe la main (`next(e)`) dès qu'il n'a rien à ajouter.
 - **Aucun secret, aucune donnée personnelle, aucun chemin propre à une machine** dans le dépôt.
 - **Documenté** : chaque fonctionnalité est expliquée (ce qu'elle affiche ou fait, implications, comment la désactiver), dans les deux langues.

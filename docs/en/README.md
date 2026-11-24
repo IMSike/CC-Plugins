@@ -6,13 +6,13 @@
 
 | Page | Contents |
 |---|---|
-| [dx](plugins/dx.md) | Status band: model, effort, directory, context and usage-limit gauges; subagents and background tasks; notes and settings panes; on Windows, a clipboard repair for Remote Desktop |
+| [dx](plugins/dx.md) | Status band: model, effort, directory, context and usage-limit gauges; subagents and background tasks; notes and settings panes; on Windows, a clipboard repair for Remote Desktop and, inside herdr, clickable paths |
 
 ## Contributing
 
 | Page | Contents |
 |---|---|
 | [Adding a plugin](adding-plugins.md) | Layout, manifest, hooks module, state, tests, marketplace entry |
-| [Architecture decisions](adr/) | [0001](adr/0001-function-hook-mods.md) plugins as function-hook mods · [0002](adr/0002-plugin-versions.md) plugin versions · [0003](adr/0003-system-process-list.md) background tasks and the process list · [0004](adr/0004-settings-and-notes.md) settings and notes · [0005](adr/0005-panel-presses.md) presses in the side panel · [0006](adr/0006-system-clipboard.md) pasting into a note from the system clipboard · [0007](adr/0007-configuration-folder.md) opening Claude Code's configuration folder · [0008](adr/0008-remote-desktop-clipboard.md) copies for Remote Desktop |
+| [Architecture decisions](adr/) | [0001](adr/0001-function-hook-mods.md) plugins as function-hook mods · [0002](adr/0002-plugin-versions.md) plugin versions · [0003](adr/0003-system-process-list.md) background tasks and the process list · [0004](adr/0004-settings-and-notes.md) settings and notes · [0005](adr/0005-panel-presses.md) presses in the side panel · [0006](adr/0006-system-clipboard.md) pasting into a note from the system clipboard · [0007](adr/0007-configuration-folder.md) opening Claude Code's configuration folder · [0008](adr/0008-remote-desktop-clipboard.md) copies for Remote Desktop · [0009](adr/0009-clickable-paths.md) clickable paths in herdr |
 
 See also the [contribution guide](../../CONTRIBUTING.md).

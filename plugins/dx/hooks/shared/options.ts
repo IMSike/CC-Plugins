@@ -98,6 +98,7 @@ export const DEFAULT_SETTINGS: BandSettings = {
   animateWithCrew: true,
   sevenDayLabel: '7j',
   rdpClipboard: false,
+  clickablePaths: true,
 }
 
 // The settings as this session holds them, with the warnings their pane says
@@ -107,7 +108,7 @@ export const DEFAULT_SETTINGS: BandSettings = {
 // writes reads its key in the file itself; its first value and shape are
 // these. Change the shape when HeldSettings' fields change.
 export const HELD_SETTINGS: HeldSettings = { value: DEFAULT_SETTINGS, unsaved: null, unreadable: null }
-export const SETTINGS_SHAPE = 'settings-13'
+export const SETTINGS_SHAPE = 'settings-14'
 
 // The settings pane's rows, in order, with their labels.
 export const SHOW_LABELS: readonly (readonly [Exclude<keyof BandSettings['show'], BottomFact>, string])[] = [
@@ -277,5 +278,6 @@ export function settingsOf(stored: unknown): BandSettings {
     animateWithCrew: boolOf(value.animateWithCrew) ?? DEFAULT_SETTINGS.animateWithCrew,
     sevenDayLabel: oneOf(value.sevenDayLabel, SEVEN_DAY_LABELS) ?? DEFAULT_SETTINGS.sevenDayLabel,
     rdpClipboard: boolOf(value.rdpClipboard) ?? DEFAULT_SETTINGS.rdpClipboard,
+    clickablePaths: boolOf(value.clickablePaths) ?? DEFAULT_SETTINGS.clickablePaths,
   }
 }

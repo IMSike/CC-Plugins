@@ -2,6 +2,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import { registerActivity, startActivity } from './activity/activity'
 import { registerNotes, startNotes, startNotesTurn } from './notes/notes'
+import { registerPaths, startPaths, startPathsTurn } from './paths/paths'
 import { registerRdp, startRdp } from './rdp/rdp'
 import { registerSettings, startSettings, startSettingsTurn } from './settings/settings'
 import { errorText } from './shared/format'
@@ -24,6 +25,7 @@ export const register: Register = on => {
   registerSettings(on)
   registerNotes(on)
   registerRdp(on)
+  registerPaths(on)
 
   on('session.start', async ($, e, next) => {
     // Started even when the start beneath dx fails: otherwise the band, the
@@ -41,6 +43,9 @@ export const register: Register = on => {
       // and at once: the settings pane offers what needs it (the copies for
       // Remote Desktop, the configuration folder button) only once it is
       // found, and would otherwise leave them out until a feature asks for it.
+      // The clickable paths read the environment alone to start, their
+      // setting read as a reply is drawn, and look for herdr's plugin without
+      // the start waiting for it.
       forgetSystemFolder()
       void systemFolder($)
       await Promise.all([
@@ -49,18 +54,20 @@ export const register: Register = on => {
         ),
         started($, 'activité', startActivity($)),
         started($, 'bandeau', startStatusline($)),
+        started($, 'chemins', startPaths($)),
       ])
     }
   })
 
   on('turn.start', async ($, e, next) => {
     const result = await next(e)
-    // The band times the turn, the settings and the notes follow a `/clear`:
-    // none reads what another writes.
+    // The band times the turn; the settings, the notes and the paths follow
+    // a `/clear`: none reads what another writes.
     await Promise.all([
       started($, 'bandeau, tour', startStatuslineTurn($, e)),
       started($, 'réglages, tour', startSettingsTurn($, e)),
       started($, 'notes, tour', startNotesTurn($, e)),
+      started($, 'chemins, tour', startPathsTurn($, e)),
     ])
 
     return result

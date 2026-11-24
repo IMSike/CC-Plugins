@@ -767,7 +767,7 @@ function leaveState(on: On, left: Record<string, unknown>): void {
 
 // What dx's state holds of the settings: as this session holds them.
 function leftSettings(value: Record<string, unknown>, warnings: Record<string, unknown> = {}) {
-  return { shape: 'settings-13', value: { value: { ...DEFAULT_SETTINGS, ...value }, unsaved: null, unreadable: null, ...warnings } }
+  return { shape: 'settings-14', value: { value: { ...DEFAULT_SETTINGS, ...value }, unsaved: null, unreadable: null, ...warnings } }
 }
 
 // dx's code loaded anew, after an update that changed the settings' shape: an

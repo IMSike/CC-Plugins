@@ -3,6 +3,7 @@ import type { EngineInterface, On, TurnStartInput } from 'claude-code'
 
 import type { BandSettings, HeldSettings, SettingsTab, SettingsUnreadable } from '../../types'
 import { keepTaskTabs, paneTabs } from '../activity/activity'
+import { clickablePathsFound } from '../paths/paths'
 import { followRdp } from '../rdp/rdp'
 import { errorText } from '../shared/format'
 import { DEFAULT_SETTINGS, HELD_SETTINGS, hexOf, SETTINGS_SHAPE, settingsOf } from '../shared/options'
@@ -371,7 +372,7 @@ async function clearPaneWarnings($: EngineInterface): Promise<void> {
 
 // Claude Code's configuration folder (./config-folder), from the
 // environment; none when it cannot be placed.
-async function userConfigFolder($: EngineInterface): Promise<string | undefined> {
+export async function userConfigFolder($: EngineInterface): Promise<string | undefined> {
   const [[configDir], home, cwd] = await Promise.all([
     envValues([$.env.get('CLAUDE_CONFIG_DIR')]),
     homeFolder($),
@@ -464,12 +465,14 @@ export function registerSettings(on: On): void {
     // known (`onWindows`): Claude Code's copies write the clipboard twice
     // there (ADR 0008), and the File Explorer opens the configuration folder
     // (ADR 0007), looked for there alone.
-    const [{ value, unsaved, unreadable }, shown, badHex, openFailure, [onWindows, folder]] = await Promise.all([
+    // The clickable paths inside herdr alone (ADR 0009).
+    const [{ value, unsaved, unreadable }, shown, badHex, openFailure, [onWindows, folder], paths] = await Promise.all([
       shownSettings($),
       shownTab($),
       read($, settingsBadHex),
       read($, settingsOpenFailure),
       hasSystemFolder().then(async found => [found, found ? await userConfigFolder($).catch(() => undefined) : undefined] as const),
+      clickablePathsFound($),
     ])
     const { Box, Client, Input, Text } = $.ui.resolve(e)
     const { tabs, actions: paneActions } = await paneTabs($, e, 'settings', e.props.bodyColumns)
@@ -503,7 +506,7 @@ export function registerSettings(on: On): void {
           </Text>
         )}
         {unsaved !== null && <Text key="unsaved" color="error" wrap="wrap">{`⚠ réglages non enregistrés : ${unsaved}`}</Text>}
-        {shown === 'appearance' ? appearanceSections(blocks, value) : functionsSections(blocks, value, { hasRdp: onWindows })}
+        {shown === 'appearance' ? appearanceSections(blocks, value) : functionsSections(blocks, value, { hasRdp: onWindows, paths })}
         {openFailure !== null && <Text key="open-failure" color="error" wrap="wrap">{openFailure}</Text>}
         <Box key="footer" justifyContent="flex-end" paddingX={1} columnGap={3}>
           {onWindows && blocks.board.press('open-config-folder', { openConfigFolder: true }, [{ text: `[ 📁 dossier ${folderName(folder ?? '.claude')} ]` }], { color: 'claude' })}

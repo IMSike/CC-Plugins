@@ -167,7 +167,9 @@ export function engine(on: On, options: EngineOptions = {}) {
     const kind = folders(path).length > 0 ? 'dir' : Object.keys(files).some(end => path.endsWith(end)) ? 'file' : undefined
     const mtimeMs = Object.entries(mtimes).find(([end]) => path.endsWith(end))?.[1] ?? 0
     const size = kind === 'file' ? (Object.entries(files).find(([end]) => path.endsWith(end))?.[1].length ?? 0) : 0
-    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size, mtimeMs, isLink: false } }
+    // Where the path lands, when asked: the path itself, no link being simulated.
+    const realPath = e.resolve ? { realPath: e.path } : {}
+    return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size, mtimeMs, isLink: false, ...realPath } }
   })
   on('session.usage', (_, e) => ({
     value: {

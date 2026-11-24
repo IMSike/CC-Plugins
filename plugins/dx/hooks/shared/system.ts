@@ -1,8 +1,8 @@
 import type { EngineInterface } from 'claude-code'
 
 // What the features that run a tool the system ships (ADR 0003, ADR 0006,
-// ADR 0007, ADR 0008) share: which system it is, its folder, its
-// environment, the home folder, PowerShell's launch line.
+// ADR 0007, ADR 0008), or herdr (ADR 0009), share: which system it is, its
+// folder, its environment, the home folder, PowerShell's launch line.
 
 // Whether the system is Windows, as its `OS` variable says. A refused read
 // rejects: each caller says what it then takes the system for.
