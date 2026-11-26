@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine, MockClock } from 'claude-code/testing'
 import type { On, ProcessRunInit, ProcessRunResult } from 'claude-code'
 
-import { click, engine, NOW, SETTINGS_PANE, showSettings } from '../shared/testing'
+import { click, engine, NOW, SETTINGS_PANE, showSettings, windowsPath } from '../shared/testing'
 
 // The working directory is `C:\Users\dev\repo\app` (../shared/testing): files
 // and folders in it, among them Claude Code's settings files.
@@ -135,7 +135,7 @@ test('a path with spaces is linked in quotes or code, never in plain text; an ac
 function statsAsked(on: On, path: RegExp): string[] {
   const asked: string[] = []
   on('fs.stat', { path }, (_, e, next) => {
-    asked.push(e.path)
+    asked.push(windowsPath(e.path))
     return next(e)
   })
   return asked

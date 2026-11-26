@@ -2,7 +2,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On, ProcessRunResult } from 'claude-code'
 
-import { engine, NOW } from '../shared/testing'
+import { engine, NOW, windowsPath } from '../shared/testing'
 
 // Oracle for dx's "never a link to the wrong file" rule.
 //
@@ -192,8 +192,8 @@ async function start($: Engine, on: On, files: Map<string, 'file' | 'dir'>) {
   on('ui.log', () => ({ value: undefined }))
   // The disk: exactly the files and folders drawn, compared as Windows does.
   on('fs.stat', { path: /[\s\S]/ }, (_, e) => {
-    const kind = files.get(e.path.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase())
-    const realPath = e.resolve ? { realPath: e.path } : {}
+    const kind = files.get(windowsPath(e.path).replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase())
+    const realPath = e.resolve ? { realPath: windowsPath(e.path) } : {}
     return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size: 0, mtimeMs: 0, isLink: false, ...realPath } }
   })
   engine(on, {

@@ -8,6 +8,12 @@ import type { On, ProcessRunInit, ProcessRunResult } from 'claude-code'
 
 export const NOW = Date.parse('2026-10-25T10:00:00Z')
 
+// A Windows path a hook is handed, from its drive on: off Windows, the
+// engine resolves it against its own directory first.
+export function windowsPath(path: string): string {
+  return path.slice(Math.max(0, path.search(/[A-Za-z]:[\\/]/)))
+}
+
 export const BAND = {
   plugin: 'dx',
   component: 'AbovePrompt',
@@ -168,7 +174,7 @@ export function engine(on: On, options: EngineOptions = {}) {
     const mtimeMs = Object.entries(mtimes).find(([end]) => path.endsWith(end))?.[1] ?? 0
     const size = kind === 'file' ? (Object.entries(files).find(([end]) => path.endsWith(end))?.[1].length ?? 0) : 0
     // Where the path lands, when asked: the path itself, no link being simulated.
-    const realPath = e.resolve ? { realPath: e.path } : {}
+    const realPath = e.resolve ? { realPath: windowsPath(e.path) } : {}
     return kind === undefined ? { deny: 'ENOENT' } : { value: { kind, size, mtimeMs, isLink: false, ...realPath } }
   })
   on('session.usage', (_, e) => ({
