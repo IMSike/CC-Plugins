@@ -4,7 +4,7 @@
 
 A [Claude Code](https://code.claude.com) plugin marketplace: the plugins [OS-Setup](https://github.com/IMSike/OS-Setup) offers to install, usable on their own too.
 
-> **Status: early stage.** The plugins are function-hook mods, an early-access Claude Code API: they need Claude Code 2.1.310 or later. Displayed text is in French for now.
+> **Status: early stage.** The plugins are function-hook mods, an early-access Claude Code API: they need Claude Code 2.1.330 or later. Displayed text is in French for now.
 
 ## Plugins
 

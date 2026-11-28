@@ -4,7 +4,7 @@
 
 ## Getting started
 
-Requirements: Git and [Claude Code](https://code.claude.com) (a version with function hooks: 2.1.310 or later).
+Requirements: Git and [Claude Code](https://code.claude.com) (a version with function hooks: 2.1.330 or later).
 
 ```sh
 git clone https://github.com/IMSike/CC-Plugins.git
