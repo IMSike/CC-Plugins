@@ -1,4 +1,5 @@
 import type { Activity } from '../../types'
+import { cellWidth } from './cell-width'
 
 // The icons of the band's bottom border: one per subagent and per background
 // task, up to a number of a kind (a setting), then a count.
@@ -80,5 +81,5 @@ export function crewLabel(glyph: string, item: CrewItem): string {
 
 // Columns the icons take, one space apart.
 export function crewWidth(items: readonly CrewItem[]): number {
-  return items.reduce((sum, item, index) => sum + Array.from(crewLabel(item.glyph, item)).length + (index === 0 ? 0 : 1), 0)
+  return items.reduce((sum, item, index) => sum + cellWidth(crewLabel(item.glyph, item)) + (index === 0 ? 0 : 1), 0)
 }

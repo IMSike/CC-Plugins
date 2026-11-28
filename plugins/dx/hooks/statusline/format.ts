@@ -5,6 +5,7 @@
 import type { SessionRateLimit } from 'claude-code'
 
 import type { Gauge } from '../../types'
+import { cellWidth } from '../shared/cell-width'
 import type { DayUnit } from '../shared/format'
 
 // Where a steady consumption would stand in a window `windowSeconds` long
@@ -117,9 +118,13 @@ export function shortenPath(cwd: string, home: string | undefined): string {
   return cwd
 }
 
-// `path` cut from the left to `width` characters, an ellipsis in front.
+// `path` cut from the left to `width` cells, an ellipsis in front, never
+// inside a character.
 export function truncateStart(path: string, width: number): string {
-  if (path.length <= width) return path
+  if (cellWidth(path) <= width) return path
   if (width <= 1) return '…'.slice(0, Math.max(0, width))
-  return `…${path.slice(path.length - width + 1)}`
+  const chars = Array.from(path)
+  let start = chars.length
+  for (let room = width - 1; start > 0 && cellWidth(chars[start - 1] ?? '') <= room; start--) room -= cellWidth(chars[start - 1] ?? '')
+  return `…${chars.slice(start).join('')}`
 }

@@ -6,6 +6,7 @@ import { ACTIVITY_SHAPE, openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { seeFullscreen } from '../rdp/rdp'
 import { toggleSettings } from '../settings/settings'
+import { cellWidth } from '../shared/cell-width'
 import { crewItems, crewLabel, crewWidth, isWorking, SPIN_MS, SPINNER } from '../shared/crew'
 import { clockTime, errorText } from '../shared/format'
 import { dayUnitOf, DIM_TEXT, HEAT, HELD_SETTINGS, SETTINGS_SHAPE, SPEED_FACTORS, THEME_FRAME, THEME_FRAME_HEX, thresholdsOf } from '../shared/options'
@@ -335,10 +336,10 @@ export function registerStatusline(on: On): void {
     const left = `╭─ ✻ ${model}${separator ? ' ─ ' : ''}${meter}${effortText} `
     const branch = !show.branch || status.branch === undefined ? '' : ` ⎇ ${status.branch}`
     const ending = ` ─ ${options.notesIcon}  ${options.settingsIcon}  ─╮`
-    const pathRoom = show.cwd ? Math.max(0, width - left.length - branch.length - ending.length - 2) : 0
+    const pathRoom = show.cwd ? Math.max(0, width - cellWidth(left) - cellWidth(branch) - cellWidth(ending) - 2) : 0
     const path = truncateStart(status.cwd, pathRoom)
     const right = `${path === '' ? '' : ' '}${path}${branch}${ending}`
-    const topFill = '─'.repeat(Math.max(1, width - left.length - right.length))
+    const topFill = '─'.repeat(Math.max(1, width - cellWidth(left) - cellWidth(right)))
 
     // Bottom border: `╰──── durée 1m04 · fin 14:32 · total 1h12 · 24k/200k ─╯`,
     // its facts in the order set.
@@ -384,7 +385,7 @@ export function registerStatusline(on: On): void {
     // spinner turns only while its subagent works anyway.
     const crewWorks = crew.agents.some(agent => isWorking(agent.status)) || crew.tasks.length > 0
     const animating = !options.animateOnlyWorking || e.props.isWorking || (options.animateWithCrew && crewWorks)
-    const bottomFill = '─'.repeat(Math.max(1, width - 1 - info.length - 3 - crewRoom))
+    const bottomFill = '─'.repeat(Math.max(1, width - 1 - cellWidth(info) - 3 - crewRoom))
 
     // The rows: the 5-hour one, while its window has not started, left out or
     // drawn empty (a setting).
@@ -400,7 +401,7 @@ export function registerStatusline(on: On): void {
     const bottomAt = (column: number) => width - 1 + height - 1 + (width - 1 - column)
     const piece = (key: string, runs: FrameRun[], start: number, step: 1 | -1) => {
       const props: FrameProps = { runs, start, step, perimeter, hex: frameHex, glints: options.animate.glints && animating, speed }
-      const columns = runs.reduce((sum, run) => sum + Array.from(run.text).length, 0)
+      const columns = runs.reduce((sum, run) => sum + cellWidth(run.text), 0)
       return <Client key={key} module="./frame.tsx" props={props} width={columns} />
     }
 

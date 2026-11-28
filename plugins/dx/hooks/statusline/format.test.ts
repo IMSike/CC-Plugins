@@ -110,4 +110,10 @@ test('a long path is cut from the left', () => {
   expect(truncateStart('~/repo/app', 6)).toBe('…o/app')
   expect(truncateStart('~/repo/app', 1)).toBe('…')
   expect(truncateStart('~/repo/app', 0)).toBe('')
+  // Wide characters count two cells; none is cut in two.
+  expect(truncateStart('~/文書/app', 10)).toBe('~/文書/app')
+  expect(truncateStart('~/文書/app', 9)).toBe('…文書/app')
+  expect(truncateStart('~/文書/app', 7)).toBe('…書/app')
+  expect(truncateStart('~/文書/app', 6)).toBe('…/app')
+  expect(truncateStart('~/😀x', 3)).toBe('…x')
 })

@@ -1,5 +1,6 @@
-// The cells a text takes in the terminal: the panel's tabs (../activity's
-// tab-rows) and the notes' rows (../notes/wrap) count with it.
+// The cells a text takes in the terminal: the band (../statusline) and its
+// icons (./crew), the panel's tabs (../activity's tab-rows) and the notes'
+// rows (../notes/wrap) count with it.
 
 // Code points a terminal draws over two cells: East Asian Wide and Fullwidth
 // (Hangul, CJK, kana, fullwidth forms), the main blocks alone, and emoji drawn

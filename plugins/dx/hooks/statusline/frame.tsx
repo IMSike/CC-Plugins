@@ -1,5 +1,6 @@
 import type { ClientModule } from 'claude-code'
 
+import { cellWidth } from '../shared/cell-width'
 import { lighten, merged } from './gauge-model'
 
 // One piece of the band's frame, two slow glints going round it, half a
@@ -55,9 +56,12 @@ function lightsOf(props: FrameProps): number[] {
   if (!props.glints) return []
   const head = headAt(props.perimeter, props.speed)
   const lights: number[] = []
+  // One light per character, at the cell it starts on.
+  let cell = 0
   for (const run of props.runs) {
     for (const char of Array.from(run.text)) {
-      lights.push(run.frame && char !== ' ' ? lightAt(props.start + props.step * lights.length, head, props.perimeter) : 0)
+      lights.push(run.frame && char !== ' ' ? lightAt(props.start + props.step * cell, head, props.perimeter) : 0)
+      cell += cellWidth(char)
     }
   }
   return lights
