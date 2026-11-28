@@ -295,7 +295,9 @@ async function notesTick($: EngineInterface): Promise<void> {
 // shown again. A load that fails is tried again as the pane is shown.
 export async function startNotes($: EngineInterface): Promise<void> {
   await loadNotes($).catch(() => undefined)
-  $.clock.every(NOTES_POLL_MS, () => notesTick($))
+  $.clock.every(NOTES_POLL_MS, () => {
+    notesTick($).catch(() => undefined)
+  })
 }
 
 // Called by ../register as a turn starts: the main loop's first prompt after a

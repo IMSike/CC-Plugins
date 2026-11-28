@@ -227,8 +227,12 @@ async function refreshOrLog($: EngineInterface): Promise<void> {
 // its first snapshot. A first snapshot that fails is left to the next refresh,
 // the clocks already running.
 export async function startStatusline($: EngineInterface): Promise<void> {
-  $.clock.every(TICK_MS, () => turnTick($))
-  $.clock.every(SPIN_MS, () => spinTick($))
+  $.clock.every(TICK_MS, () => {
+    turnTick($).catch(() => undefined)
+  })
+  $.clock.every(SPIN_MS, () => {
+    spinTick($).catch(() => undefined)
+  })
   await everyRefresh($, REFRESH_MS, async () => (await read($, settings)).value.refresh, () => refreshOrLog($))
   await refreshOrLog($)
 }

@@ -89,7 +89,9 @@ export async function followRdp($: EngineInterface): Promise<void> {
   }
   if (poll !== undefined) return
   isSelectionSeen = false
-  poll = $.clock.every(SELECTION_POLL_MS, () => void selectionTick($))
+  poll = $.clock.every(SELECTION_POLL_MS, () => {
+    selectionTick($).catch(() => undefined)
+  })
 }
 
 // Whether Claude Code draws in fullscreen, told by the band (../statusline)
@@ -137,7 +139,7 @@ function schedule($: EngineInterface, request: Request, delay = REPAIR_DELAY_MS)
   timer?.cancel()
   const due = $.clock.after(delay, () => {
     if (timer === due) timer = undefined
-    void repairLater($, request)
+    repairLater($, request).catch(() => undefined)
   })
   timer = due
 }
