@@ -44,6 +44,9 @@ const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], 
 const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-3' })
 const PANE_MS = 1000
 const PANE_LINES = 200
+// How much of its output's end is read: room for PANE_LINES lines of a few
+// hundred characters, never the whole of a file that keeps growing.
+const PANE_BYTES = 64 * 1024
 // Its output file not found, it is looked for on disk at every refresh for
 // LOOK_FAST_MS after the task is shown, then every LOOK_SLOW_MS.
 const LOOK_FAST_MS = 30_000
@@ -54,6 +57,9 @@ const TICK_MS = 3000
 const LIVE = new Set(['pending', 'running', 'waiting', 'idle'])
 // When a task's process is looked for, from its start: then every last step.
 const CHECKS_MS = [2_000, 10_000, 60_000, 300_000, 900_000]
+// How much of an output's end is read for the line written as its task
+// ends: more than the 200 characters hasEndedOutput looks at.
+const END_BYTES = 1024
 
 // Ids of tasks a notification row reported ended: a drawing may not write the
 // state, so the next tick does.
@@ -165,11 +171,18 @@ async function isLookDue($: EngineInterface): Promise<boolean> {
   return true
 }
 
-// The last lines of the file at `path`; null when it is not there (yet); any
-// other failure, its reason.
+// The last lines of the file at `path`, read from PANE_BYTES before its end
+// (the line cut there left out, unless it is the only one); null when it is
+// not there (yet); any other failure, its reason.
 async function outputLines($: EngineInterface, path: string): Promise<string[] | null> {
-  return $.fs.read(path).then(
-    text => (text === '' ? [] : text.replace(/\r/g, '').split('\n').slice(-PANE_LINES)),
+  const size = (await $.fs.stat(path).catch(() => undefined))?.size ?? 0
+  const offset = Math.max(0, size - PANE_BYTES)
+  return $.fs.read(path, { offset }).then(
+    text => {
+      if (text === '') return []
+      const lines = text.replace(/\r/g, '').split('\n')
+      return (offset > 0 && lines.length > 1 ? lines.slice(1) : lines).slice(-PANE_LINES)
+    },
     async (error: unknown) => ((await $.fs.exists(path).catch(() => true)) ? [`(sortie illisible : ${errorText(error)})`] : null),
   )
 }
@@ -297,7 +310,7 @@ async function checkOutputs($: EngineInterface): Promise<void> {
       seen.set(task.id, stat.size)
       if (stat.size !== outputSizes.get(task.id) || stat.size === task.size) return
       sizes.set(task.id, stat.size)
-      const text = await $.fs.read(path).catch(() => undefined)
+      const text = await $.fs.read(path, { offset: Math.max(0, stat.size - END_BYTES) }).catch(() => undefined)
       if (text !== undefined && hasEndedOutput(text)) done.add(task.id)
     }),
   )

@@ -141,9 +141,10 @@ export function engine(on: On, options: EngineOptions = {}) {
     const path = e.path.replace(/\\/g, '/')
     if (path.endsWith('C:/Users/dev/repo/app/.git/HEAD')) return { value: 'ref: refs/heads/dev\n' }
     const file = Object.keys(files).find(end => path.endsWith(end))
-    if (file !== undefined && refused.has('fs.read')) return { deny: 'file over 4 MiB' }
-
-    return file === undefined ? { deny: 'ENOENT' } : { value: files[file] ?? '' }
+    if (file !== undefined && refused.has('fs.read')) return { deny: 'EACCES' }
+    // The range asked, a character standing for a byte.
+    const start = e.offset ?? 0
+    return file === undefined ? { deny: 'ENOENT' } : { value: (files[file] ?? '').slice(start, e.length === undefined ? undefined : start + e.length) }
   })
   // The repository's `.git`, and the files above.
   on('fs.exists', (_, e) => {

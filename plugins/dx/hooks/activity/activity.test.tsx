@@ -408,7 +408,7 @@ test('an output file not found is looked for less often after 30 s', async ($, o
   expect(await looks(10_000)).toBe(1)
 })
 
-// An output over 4 MiB, which the engine will not read: the reason shown.
+// An output the engine refuses to read: the reason shown.
 test('an output file that cannot be read shows why', async ($, on) => {
   mock.clock(on, { now: NOW })
   engine(on, { files: OUTPUT, refused: new Set(['fs.read']) })
@@ -420,7 +420,46 @@ test('an output file that cannot be read shows why', async ($, on) => {
   await click(ui, 'crew-b1')
   await ui.unmount()
   const pane = await $.ui.mount(PANE)
-  expect(await pane.find({ type: 'Text', text: /^\(sortie illisible : .*file over 4 MiB\)$/ })).toBeDefined()
+  expect(await pane.find({ type: 'Text', text: /^\(sortie illisible : .*EACCES\)$/ })).toBeDefined()
+  await pane.unmount()
+})
+
+test('a long output is read from near its end only, its last line shown', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const offsets: (number | undefined)[] = []
+  on('fs.read', { path: /b1\.output$/ }, (_, e, next) => {
+    offsets.push(e.offset)
+    return next(e)
+  })
+  const lines = Array.from({ length: 20_000 }, (_, i) => `ligne ${i + 1}`)
+  engine(on, { files: { [`${TASKS}/b1.output`]: `${lines.join('\n')}\n` } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: /^ligne 20000$/ })).toBeDefined()
+  await pane.unmount()
+  expect(offsets.length).toBeGreaterThan(0)
+  expect(offsets.every(offset => offset !== undefined && offset > 0)).toBe(true)
+})
+
+test('a long output of one line, a progress bar redrawn in place, still shows', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  engine(on, { files: { [`${TASKS}/b1.output`]: 'x'.repeat(70_000) } })
+  shell(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true })
+
+  const ui = await $.ui.mount(BAND)
+  await click(ui, 'crew-b1')
+  await ui.unmount()
+  const pane = await $.ui.mount(PANE)
+  expect(await pane.find({ type: 'Text', text: 'Pas encore de sortie.' })).toBeUndefined()
+  expect(await pane.find({ type: 'Text', text: /^x+$/ })).toBeDefined()
   await pane.unmount()
 })
 
@@ -558,7 +597,8 @@ test("a shell leaves the border when its notification enters, its row drawn or n
 // it ended, read once the file holds still from one refresh to the next.
 test("a shell leaves the border once its output says it ended", async ($, on) => {
   const clock = mock.clock(on, { now: NOW })
-  const files: Record<string, string> = { ...OUTPUT }
+  // Longer than what is read of its end.
+  const files: Record<string, string> = { [`${TASKS}/b1.output`]: `${'x'.repeat(5000)}\nready\n` }
   engine(on, { files })
   shell(on)
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
