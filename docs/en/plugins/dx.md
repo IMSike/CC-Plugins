@@ -2,7 +2,7 @@
 
 **English** · [Français](../../fr/plugins/dx.md)
 
-Install: `/plugin install dx@cc-plugins` (after `/plugin marketplace add IMSike/CC-Plugins`). Requires Claude Code 2.1.310 or later.
+Install: `/plugin install dx@cc-plugins` (after `/plugin marketplace add IMSike/CC-Plugins`). Requires Claude Code 2.1.330 or later.
 
 If one of dx's parts (settings, notes, activity, band, copies for Remote Desktop, clickable paths) fails to start, at the session's start or a turn's, the others start all the same, and the debug log (`claude --debug-file <file>`) has a `dx : démarrage échoué, … (…)` line naming it (`réglages`, `notes`, `activité`, `bandeau`, `presse-papiers TSE`, `chemins`; followed by `, tour` at a turn's start), with the reason in parentheses.
 
