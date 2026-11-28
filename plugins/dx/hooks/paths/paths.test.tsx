@@ -107,12 +107,12 @@ test('inside herdr, with its links plugin and hyperlinks, each path that exists 
   )
 })
 
-test("herdr's list is read once, by herdr's name, from the system's folder, within 3 s", async ($, on) => {
+test("herdr's list is read once, by herdr's name, from the system's folder, within 10 s", async ($, on) => {
   const drawn = engineDrawn(on)
   const ran = await start($, on)
   await drawnText($, drawn, 'Voir src/app.ts.')
   await drawnText($, drawn, 'Voir docs/guide.md.')
-  expect(ran).toEqual([{ argv: ['herdr', 'plugin', 'list', '--plugin', 'imsike.links', '--json'], init: { cwd: SYSTEM_ROOT, timeoutMs: 3000 } }])
+  expect(ran).toEqual([{ argv: ['herdr', 'plugin', 'list', '--plugin', 'imsike.links', '--json'], init: { cwd: SYSTEM_ROOT, timeoutMs: 10_000 } }])
 })
 
 test('a path with spaces is linked in quotes or code, never in plain text; an accent, parentheses, a range, a Git Bash drive, emphasis', async ($, on) => {
@@ -339,25 +339,56 @@ test('after a /clear empties the state, the turn writes back what the paths need
   await pane.unmount()
 })
 
-test("herdr failing is asked once more; failing again, the settings say herdr does not answer", async ($, on) => {
-  const ran = await start($, on, { listing: 'fails' })
-  expect(ran.map(item => item.argv[0])).toEqual(['herdr', 'herdr'])
+test('herdr failing is asked again after pauses of 5 s, 30 s, 1 min and 2 min, each within 10 % either way; failing every time, the settings say herdr does not answer', { timeoutMs: 30_000 }, async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const ran = await start($, on, { clock, listing: 'fails' })
+  await clock.settle()
+  expect(ran).toHaveLength(1)
+  // Each attempt comes after the pauses before it, all at their shortest,
+  // and before them all at their longest.
+  let shortest = 0
+  let longest = 0
+  for (const pause of [5000, 30_000, 60_000, 120_000]) {
+    const asked = ran.length
+    shortest += pause * 0.9
+    longest += pause * 1.1
+    await clock.set(NOW + shortest - 1)
+    expect(ran).toHaveLength(asked)
+    await clock.set(NOW + longest + 1)
+    expect(ran).toHaveLength(asked + 1)
+  }
+  expect(ran.map(item => item.argv[0])).toEqual(['herdr', 'herdr', 'herdr', 'herdr', 'herdr'])
   const pane = await showSettings($, 'functions')
   expect(await pane.find({ type: 'Text', text: 'herdr ne répond pas : plugin imsike.links non vérifié (à la prochaine session)' })).toBeDefined()
   await pane.unmount()
 })
 
 test('herdr failing once, then listing the plugin, the paths are linked', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
   const drawn = engineDrawn(on)
   let calls = 0
   const ran = await start($, on, {
+    clock,
     listing: async () => {
       calls += 1
       return calls === 1 ? { ...OK, exitCode: 1 } : { ...OK, stdout: LISTED }
     },
   })
+  await clock.advance(5500)
   expect(ran).toHaveLength(2)
   expect(await drawnText($, drawn, 'Voir src/app.ts.')).toBe(`Voir [src/app.ts](${APP}).`)
+})
+
+test("a later session start ends the look herdr's failures left waiting", async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  const ran = await start($, on, { clock, listing: 'fails' })
+  await clock.settle()
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.settle()
+  expect(ran).toHaveLength(2)
+  // Both looks wake from their first pause: the first one's ended.
+  await clock.advance(5500)
+  expect(ran).toHaveLength(3)
 })
 
 test("a symbolic link landing on one of Claude Code's settings files is not linked; one landing elsewhere is", async ($, on) => {

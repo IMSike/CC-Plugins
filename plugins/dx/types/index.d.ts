@@ -169,7 +169,7 @@ export type BandSettings = {
 
 // What the clickable paths need, as the session found it inside herdr
 // (ADR 0009): herdr's `imsike.links` plugin, looked for as the session
-// starts (`checking` until known, `failed` when herdr did not answer twice,
+// starts (`checking` until known, `failed` when herdr answered none of its attempts,
 // `unchecked` when the system's folder herdr is run from is not known),
 // whether Claude Code draws links as hyperlinks (`FORCE_HYPERLINK=1`),
 // and whether `FORCE_HYPERLINK` itself turns them off (`0`, `false`…).

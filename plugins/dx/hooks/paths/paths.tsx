@@ -57,15 +57,21 @@ const OUTSIDE: System = { inHerdr: false }
 let system: Promise<System> | undefined
 
 // Whether herdr's plugin was found: looked for as the session starts (asked
-// a second time when herdr fails), never waited for by it.
+// again, after longer and longer pauses, while herdr fails), never waited for
+// by it.
 let plugin: PathsFound['plugin'] = 'checking'
-// The session's start the look for it belongs to: a later start runs another.
-let generation = 0
+// The look for it under way, ended by a later session start, which runs
+// another: a pause waiting to ask herdr again ends at once.
+let looking: AbortController | undefined
 
 // How long herdr's list of its plugins may take before it is given up, each
-// time it is asked, and how many times it is asked, at most.
-const LIST_TIMEOUT_MS = 3000
-const LIST_ATTEMPTS = 2
+// time it is asked, and the pauses before it is asked again: one per further
+// attempt, each drawn within LIST_JITTER of its length either way, so that
+// sessions herdr restores together do not ask together. A herdr restoring
+// many sessions may keep the machine busy for minutes.
+const LIST_TIMEOUT_MS = 10_000
+const LIST_PAUSES_MS = [5000, 30_000, 60_000, 120_000]
+const LIST_JITTER = 0.1
 
 // What each absolute path leads to, a file or a folder, nothing (`absent`),
 // or none dx may link (`none`), as last asked, and when. A path that leads
@@ -110,15 +116,16 @@ function pathsIn(text: string): Found[] {
 // Called by ../register as the session starts: reads the environment, then,
 // inside herdr, looks for herdr's plugin without waiting for it.
 export async function startPaths($: EngineInterface): Promise<void> {
-  generation += 1
-  const started = generation
+  looking?.abort()
+  const look = new AbortController()
+  looking = look
   plugin = 'checking'
   system = findSystem($).catch(() => OUTSIDE)
   const found = await system
   await showFound($).catch(() => undefined)
   if (!found.inHerdr) return
   $.ui.log(`dx : chemins cliquables, hyperliens ${found.hyperlinks ? 'oui' : found.isForcedOff ? 'non (FORCE_HYPERLINK les désactive)' : 'non (FORCE_HYPERLINK=1 les active)'}`, { to: 'debug' })
-  void lookForPlugin($, found, started)
+  void lookForPlugin($, found, look.signal).catch(() => undefined)
 }
 
 // Called by ../register as a turn starts: a `/clear` empties dx's state with
@@ -219,20 +226,24 @@ function realFolder($: EngineInterface, folder: string): Promise<string | undefi
 // the system's folder, by the path herdr gives its panes (`HERDR_BIN_PATH`,
 // absolute) or else by its name, so that no `herdr.exe` of the session's
 // working directory runs in its place. A list herdr fails to give (missing,
-// an exit in error, late) is asked once more; failing again, the plugin is
-// not known (`failed`), told from a list that does not hold it (`missing`).
+// an exit in error, late) is asked again after each of LIST_PAUSES_MS; failing
+// every time, the plugin is not known (`failed`), told from a list that does
+// not hold it (`missing`). A later session start ends the look (`ended`).
 // Without the system's folder, herdr is not run (`unchecked`).
-async function lookForPlugin($: EngineInterface, found: Herdr, started: number): Promise<void> {
+async function lookForPlugin($: EngineInterface, found: Herdr, ended: AbortSignal): Promise<void> {
   let result: PathsFound['plugin'] = 'failed'
   if (found.systemRoot === undefined) {
     $.ui.log('dx : dossier du système inconnu (SystemRoot, windir), liste des plugins herdr non lue', { to: 'debug' })
     result = 'unchecked'
   } else {
-    for (let attempt = 1; attempt <= LIST_ATTEMPTS && result === 'failed'; attempt++) {
+    for (let attempt = 1; ; attempt++) {
       result = await listPlugin($, found.systemRoot, found.herdrBin, attempt)
+      const pause = LIST_PAUSES_MS[attempt - 1]
+      if (result !== 'failed' || pause === undefined) break
+      await $.clock.sleep(pause * (1 + LIST_JITTER * (2 * Math.random() - 1)), { signal: ended })
     }
   }
-  if (started !== generation) return
+  if (ended.aborted) return
   plugin = result
   await showFound($).catch(() => undefined)
 }
