@@ -36,7 +36,7 @@ Updates: `/plugin marketplace update cc-plugins`, or turn on auto-update for the
 |---|---|
 | [Plugins](docs/en/README.md) | What each plugin shows or does, implications, how to turn it off |
 | [Adding a plugin](docs/en/adding-plugins.md) | Layout, manifest, hooks module, tests |
-| [Architecture decisions](docs/en/adr/) | Why mods, why no plugin version, why read the process list, why keep settings and notes in the plugin's store, why the panel's presses are drawn by a Client, why a note pastes from the system clipboard with a button, why the settings pane opens Claude Code's configuration folder in the File Explorer, why the clipboard is written again after a copy for Remote Desktop |
+| [Architecture decisions](docs/en/adr/) | Why mods, why no plugin version, why read the process list, why keep settings and notes in the plugin's store, why the panel's presses are drawn by a Client, why a note pastes from the system clipboard with a button, why the settings pane opens Claude Code's configuration folder in the File Explorer, why the clipboard is written again after a copy for Remote Desktop, why clickable paths are made by dx and opened by a herdr plugin |
 
 ## Contributing
 
