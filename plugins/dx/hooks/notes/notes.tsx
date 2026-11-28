@@ -23,7 +23,7 @@ import {
 } from './clipboard'
 import type { EditorPaste, EditorProps } from './editor'
 import { cleanPaste, encodedLength, fitsEditor, NOTE_MAX_CHARS, NOTE_MAX_SHOWN, thousands } from './editor-model'
-import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, readNotes, shownNote, tryNotes } from './notes-load'
+import { clearedView, ensureNotes, forgetClear, forgetLinks, keyOf, knownKey, needsLoad, noteClear, noteOf, NOTES_ERROR_SHAPE, NOTES_SHAPE, NOTES_VIEW_SHAPE, readNotes, shownNote, tryNotes } from './notes-load'
 import { isTab, unsavedFor } from './notes-model'
 import { firstLine, othersOf, othersStart } from './others'
 import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
@@ -32,9 +32,9 @@ import { fitsStore, noteMax, storeRoom, storeWritten } from './store-size'
 // for the project, one for this session, kept in `$.store` across sessions.
 // The model never sees a pane, so the notes stay out of its context.
 // The notes are loaded by ./notes-load, which keeps why its last load failed.
-const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-2' })
-const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
-const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
+const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: NOTES_SHAPE })
+const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: NOTES_ERROR_SHAPE })
+const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: NOTES_VIEW_SHAPE })
 // The note shown, as the store last held it, and the longest it may grow to:
 // drawn again when either changes there.
 const notesSeen = atom({ plugin: 'dx', key: 'notesSeen' } as const, null as string | null, { shape: 'notes-seen-1' })

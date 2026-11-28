@@ -35,10 +35,11 @@ import type { ProcessTree } from './tasks'
 // it starts (to tell an agent CLI in it), then further and further apart
 // (ADR 0003).
 
-// The agents and the tasks followed, drawn on the band's bottom border.
-const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
-  shape: 'activity-3',
-})
+// The agents and the tasks followed, drawn on the band's bottom border. The
+// band (../statusline) declares its own atom, as the engine's scan of state
+// writes reads its key in the file itself, with this shape.
+export const ACTIVITY_SHAPE = 'activity-3'
+const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, { shape: ACTIVITY_SHAPE })
 
 // The task shown in the terminal pane, its output read every PANE_MS.
 const taskView = atom({ plugin: 'dx', key: 'taskView' } as const, null as TaskView | null, { shape: 'task-view-3' })

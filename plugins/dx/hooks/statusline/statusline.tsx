@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, On, TurnStartInput, TurnStepInput } from 'claude-code'
 
 import type { Activity, BottomFact, StatusSnapshot, TurnTime } from '../../types'
-import { openAgent, showTask } from '../activity/activity'
+import { ACTIVITY_SHAPE, openAgent, showTask } from '../activity/activity'
 import { toggleNotes } from '../notes/notes'
 import { seeFullscreen } from '../rdp/rdp'
 import { toggleSettings } from '../settings/settings'
@@ -53,9 +53,7 @@ async function turnTick($: EngineInterface): Promise<void> {
 }
 
 // What runs beside the main loop, followed by ../activity/activity.
-const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, {
-  shape: 'activity-3',
-})
+const activity = atom({ plugin: 'dx', key: 'activity' } as const, { agents: [], tasks: [] } as Activity, { shape: ACTIVITY_SHAPE })
 
 // The spinner's frame, advanced while a subagent works.
 const spin = atom({ plugin: 'dx', key: 'spin' } as const, 0, { shape: 'spin-1' })

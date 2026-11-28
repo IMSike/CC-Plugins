@@ -5,16 +5,22 @@ import type { Note, Notes, NoteTab, NotesView } from '../../types'
 import { errorText } from '../shared/format'
 import { forgetStoreSize, storeWritten } from './store-size'
 
+// The shapes of the atoms below, which ./notes declares too, as the engine's
+// scan of state writes reads their keys in the file itself.
+export const NOTES_SHAPE = 'notes-2'
+export const NOTES_ERROR_SHAPE = 'notes-error-1'
+export const NOTES_VIEW_SHAPE = 'notes-view-1'
+
 // The notes as ./notes draws them, loaded from `$.store` when the session
 // starts, and again when their pane is shown, a tab chosen, a note written or
 // a prompt sent while they are not loaded, or loaded for another session id:
 // a `/clear` may empty dx's state, and goes on under a new id with no
 // `session.start`.
-const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: 'notes-2' })
+const notes = atom({ plugin: 'dx', key: 'notes' } as const, null as Notes | null, { shape: NOTES_SHAPE })
 // Why the last load failed, shown in the pane in place of the notes.
-const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: 'notes-error-1' })
+const notesError = atom({ plugin: 'dx', key: 'notesError' } as const, null as string | null, { shape: NOTES_ERROR_SHAPE })
 // The tab shown, which a `/clear` empties too: shown again after it.
-const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: 'notes-view-1' })
+const notesView = atom({ plugin: 'dx', key: 'notesView' } as const, { tab: 'global' } as NotesView, { shape: NOTES_VIEW_SHAPE })
 
 const GLOBAL_KEY = 'notes.global'
 const PROJECT_PREFIX = 'notes.project.'
