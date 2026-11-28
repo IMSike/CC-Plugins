@@ -328,6 +328,34 @@ test('a note keeps the last change posted, an earlier save slower', async ($, on
   await pane.unmount()
 })
 
+// Changes posted while a save waits on the store: the ones a later change
+// overtook are not written, the last one is.
+test('a note written faster than the store skips the texts already overtaken', async ($, on) => {
+  mock.clock(on, { now: NOW })
+  const written: unknown[] = []
+  let release = () => {}
+  let hold: Promise<void> | undefined = new Promise(resolve => {
+    release = resolve
+  })
+  on('store.set', { key: 'notes.global' }, async (_, e, next) => {
+    written.push(e.value)
+    const held = hold
+    hold = undefined
+    if (held !== undefined) await held
+    return next(e)
+  })
+  const store = engine(on)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  const pane = await $.ui.mount(NOTES_PANE)
+  for (const text of ['p', 'pa', 'pai', 'pain']) await pane.post({ tab: 'global', session: 's1', text }, { in: 'note-global-s1' })
+  release()
+  const { setTimeout } = globalThis as unknown as { setTimeout: (done: () => void, ms: number) => void }
+  await new Promise<void>(resolve => setTimeout(resolve, 100))
+  expect(written).toEqual([{ text: 'p', updatedAt: NOW }, { text: 'pain', updatedAt: NOW }])
+  expect(store.get('notes.global')).toEqual({ text: 'pain', updatedAt: NOW })
+  await pane.unmount()
+})
+
 // Two `/clear`s in a row, nothing loading the notes between them: the note
 // goes on from the first session still.
 test('two /clears in a row keep the session note', async ($, on) => {

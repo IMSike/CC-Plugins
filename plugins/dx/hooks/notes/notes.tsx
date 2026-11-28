@@ -78,9 +78,22 @@ function queued(job: () => Promise<void>): Promise<void> {
   return run
 }
 
+// The last save asked of each note, by its tab and session: a save another
+// one of the same note overtook while it waited is dropped, the later one
+// writing the text as it now reads.
+const latestSaves = new Map<string, number>()
+let saves = 0
+
 // Keeps a note as it now reads, once the saves before it are done.
 function save($: EngineInterface, tab: NoteTab, session: string, text: string): Promise<void> {
-  return queued(() => write($, tab, session, text))
+  const note = `${tab} ${session}`
+  const id = ++saves
+  latestSaves.set(note, id)
+  return queued(async () => {
+    if (latestSaves.get(note) !== id) return
+    latestSaves.delete(note)
+    await write($, tab, session, text)
+  })
 }
 
 // Why a note was not saved, as the pane says it. Its length is counted as
